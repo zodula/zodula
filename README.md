@@ -2,8 +2,8 @@
 
 _The Modular Fullstack Framework Powered by Bun._
 
-![Zodul Admin](/assets/zodula-admin-mock.png)
-![Code Usage](/assets/code-usage.png)
+![Zodul Admin](/apps/zodula/assets/zodula-admin-mock.png)
+![Code Usage](/apps/zodula/assets/code-usage.png)
 
 ## ✨ Features
 
