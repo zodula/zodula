@@ -1,0 +1,14 @@
+[
+  {
+    "id": "en",
+    "name": "English",
+    "abbr": "en",
+    "flag_emoji": "🇺🇸"
+  },
+  {
+    "id": "th",
+    "name": "Thai",
+    "abbr": "th",
+    "flag_emoji": "🇹🇭"
+  }
+]

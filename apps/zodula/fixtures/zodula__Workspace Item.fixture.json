@@ -1,0 +1,32 @@
+[
+  {
+    "id": "01998b7c-8f1a-7000-a87f-b22dd4be41aa",
+    "type": "Link - Doctype",
+    "label": null,
+    "value": "zodula__User",
+    "options": null,
+    "workspaceId": "0199819b-1964-7000-98e2-0a1a6e4a540d",
+    "owner": "01998b6f-e73f-7000-8b18-6a46facaaef4",
+    "created_at": "2025-09-27 21:03:40",
+    "updated_at": "2025-09-27 21:03:40",
+    "created_by": "01998b6f-e73f-7000-8b18-6a46facaaef4",
+    "updated_by": "01998b6f-e73f-7000-8b18-6a46facaaef4",
+    "doc_status": 0,
+    "idx": 0
+  },
+  {
+    "id": "01998b7c-8f26-7000-ac42-95d95a938990",
+    "type": "Link - Doctype",
+    "label": null,
+    "value": "zodula__Doctype Permission",
+    "options": null,
+    "workspaceId": "0199819b-1964-7000-98e2-0a1a6e4a540d",
+    "owner": "01998b6f-e73f-7000-8b18-6a46facaaef4",
+    "created_at": "2025-09-27 21:03:40",
+    "updated_at": "2025-09-27 21:03:40",
+    "created_by": "01998b6f-e73f-7000-8b18-6a46facaaef4",
+    "updated_by": "01998b6f-e73f-7000-8b18-6a46facaaef4",
+    "doc_status": 0,
+    "idx": 0
+  }
+]

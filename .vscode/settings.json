@@ -1,0 +1,10 @@
+{
+  "json.schemas": [
+    {
+      "fileMatch": [
+        "**/*.doctype.json"
+      ],
+      "url": "./apps/zodula/src/json/doctype.schema.json"
+    }
+  ]
+}
