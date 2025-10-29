@@ -2,6 +2,8 @@ import { zodula } from "@/zodula/client/zodula";
 import { useCallback, useEffect } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { useDocList } from "./use-doc-list";
+import { useDoc } from "./use-doc";
 
 // Language store - persisted in localStorage
 export interface LanguageStore {
@@ -78,55 +80,55 @@ export const useTranslation = (lang?: string) => {
     // Use provided language or current language from store
     const activeLanguage = lang || currentLanguage;
 
-    const fetchWebsiteSetting = async () => {
-        try {
-            const websiteSetting = await zodula.doc.get_doc("zodula__Global Setting");
-            if (websiteSetting?.default_language) {
-                setDefaultLanguage(websiteSetting.default_language);
-                // Only set language from Global Setting if no language preference is persisted
-                // Check if this is the initial load (no persisted language preference)
-                const persistedLanguage = localStorage.getItem("zodula-language-storage");
-                if (!persistedLanguage && currentLanguage === "en" && !lang) {
-                    setLanguage(websiteSetting.default_language);
-                }
-            }
-        } catch (error) {
-            console.warn("Failed to fetch Global Setting:", error);
-            // Keep the fallback to "en" if Global Setting is not available
-        }
-    };
+    // Use useDocList for fully-loaded doctypes (will use cache)
+    // Note: For fully-loaded doctypes, all fields are fetched regardless of limit/sort params
+    // The limit/sort params here are for client-side filtering after fetch
+    const { docs: languageDocs } = useDocList({
+        doctype: "zodula__Language",
+        limit: 1000,
+        sort: "name",
+        order: "asc"
+    });
 
-    const fetchTranslations = async () => {
-        const translations = await zodula.doc.select_docs("zodula__Translation", {
-            fields: ["key", "translation", "language"],
-            limit: 1000000,
-            sort: "key",
-            order: "asc"
-        })
-        setTranslations(translations.docs)
-    }
+    const { docs: translationDocs } = useDocList({
+        doctype: "zodula__Translation",
+        limit: 1000000,
+        sort: "key",
+        order: "asc"
+    });
 
-    const fetchLanguages = async () => {
-        const languages = await zodula.doc.select_docs("zodula__Language", {
-            fields: ["name", "abbr", "flag_emoji"],
-            limit: 1000,
-            sort: "name",
-            order: "asc"
-        })
-        setLanguages(languages.docs)
-    }
+    // Use useDoc for Global Setting (single doctype)
+    const { doc: websiteSetting } = useDoc({
+        doctype: "zodula__Global Setting"
+    });
+
+    // Update languages when fetched
     useEffect(() => {
-        // Fetch Global Setting to get default language
-        fetchWebsiteSetting();
-        
-        // Fetch languages and translations
-        fetchLanguages();
-        
-        // Only fetch translations if not already loaded in this session
-        if (!isLoaded) {
-            fetchTranslations()
+        if (languageDocs && languageDocs.length > 0) {
+            setLanguages(languageDocs as Zodula.SelectDoctype<"zodula__Language">[]);
         }
-    }, [isLoaded])
+    }, [languageDocs, setLanguages]);
+
+    // Update translations when fetched (only once per session)
+    useEffect(() => {
+        if (translationDocs && translationDocs.length > 0 && !isLoaded) {
+            setTranslations(translationDocs as Zodula.SelectDoctype<"zodula__Translation">[]);
+        }
+    }, [translationDocs, setTranslations, isLoaded]);
+
+    // Update default language from Global Setting
+    useEffect(() => {
+        const defaultLang = (websiteSetting as any)?.default_language;
+        if (defaultLang) {
+            setDefaultLanguage(defaultLang);
+            // Only set language from Global Setting if no language preference is persisted
+            // Check if this is the initial load (no persisted language preference)
+            const persistedLanguage = localStorage.getItem("zodula-language-storage");
+            if (!persistedLanguage && currentLanguage === "en" && !lang) {
+                setLanguage(defaultLang);
+            }
+        }
+    }, [websiteSetting, setDefaultLanguage, setLanguage, currentLanguage, lang]);
 
     // Helper function to replace template variables in translation strings
     const replaceTemplateVariables = (template: string, variables: TranslationVariables = {}): string => {
@@ -233,6 +235,17 @@ export const useTranslation = (lang?: string) => {
         translationCache.set(cacheKey, translationText);
         return translationText;
     }, [activeLanguage, translations, translationCache, patternCache])
+    // Legacy fetch functions kept for backward compatibility (but they do nothing now)
+    const fetchTranslations = useCallback(async () => {
+        // No-op: translations are now fetched via useDocList
+        console.warn("fetchTranslations is deprecated. Translations are automatically fetched via useDocList.");
+    }, []);
+
+    const fetchLanguages = useCallback(async () => {
+        // No-op: languages are now fetched via useDocList
+        console.warn("fetchLanguages is deprecated. Languages are automatically fetched via useDocList.");
+    }, []);
+
     return {
         t: translate,
         translations,

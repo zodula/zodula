@@ -145,7 +145,7 @@ export class ZodulaDoctypeSelector<
         : ["id"];
 
       const searchConditions = searchFields.map(
-        (field: string) => `"${field}" LIKE "%${q}%"`
+        (field: string) => `"${field}" LIKE '%${q}%'`
       );
 
       if (searchConditions.length > 0) {
@@ -298,7 +298,6 @@ export class ZodulaDoctypeSelector<
         limitClause,
       ].filter(Boolean);
       const stmt = queryParts.join(" ");
-      console.log(stmt);
 
       // Execute query
       const result = (await db.all(
