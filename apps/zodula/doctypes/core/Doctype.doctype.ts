@@ -8,8 +8,7 @@ export default $doctype({
     name: $f.Text({
         label: "Name",
         required: 1,
-        unique: 1,
-        group: "group1"
+        unique: 1
     }),
     label: $f.Text({
         label: "Label",

@@ -6,5 +6,6 @@
       ],
       "url": "./apps/zodula/src/json/doctype.schema.json"
     }
-  ]
+  ],
+  "postman.settings.dotenv-detection-notification-visibility": false
 }

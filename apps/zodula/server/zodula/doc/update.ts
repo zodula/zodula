@@ -4,7 +4,7 @@ import { loader } from "@/zodula/server/loader";
 import { naming } from "../naming";
 import { ZodulaDoctypeHelper } from "./helper";
 import { zodula } from "..";
-import type { BunQL } from "bunql";
+import type { Bunely } from "bunely";
 import path from "path";
 import fs from "fs/promises";
 import { ErrorWithCode } from "@/zodula/error";
@@ -65,6 +65,15 @@ export class ZodulaDoctypeUpdate<
 
     // Prepare the document data
     let prepared = await this.prepareDocumentData(old, user, doctype);
+
+    // Validate unique constraints (exclude current document)
+    await ZodulaDoctypeHelper.validateUniqueFields(
+      this.doctypeName,
+      prepared,
+      doctype.schema,
+      this.options.bypass,
+      this.input.id // Exclude current document from uniqueness check
+    );
     await this.applyFileUpdate(prepared, this.doctypeName, doctype.schema);
     // Check permissions
     const roles = await zodula.session.roles();
@@ -476,7 +485,7 @@ export class ZodulaDoctypeUpdate<
   }
 
   private async updateMainDocument(
-    db: BunQL,
+    db: Bunely,
     doctype: any,
     prepared: Zodula.SelectDoctype<TN>
   ) {
@@ -514,7 +523,7 @@ export class ZodulaDoctypeUpdate<
   }
 
   private async updateRelationships(
-    db: BunQL,
+    db: Bunely,
     doctype: any,
     result: Zodula.SelectDoctype<TN>,
     relationshipData: RelationshipData
@@ -534,7 +543,7 @@ export class ZodulaDoctypeUpdate<
   }
 
   private async updateExtendRelationships(
-    db: BunQL,
+    db: Bunely,
     doctype: any,
     result: Zodula.SelectDoctype<TN>,
     extendsList: Record<string, any>
@@ -583,7 +592,7 @@ export class ZodulaDoctypeUpdate<
   }
 
   private async updateRefTableRelationships(
-    db: BunQL,
+    db: Bunely,
     doctype: any,
     result: Zodula.SelectDoctype<TN>,
     refTableList: Record<string, any[]>

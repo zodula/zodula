@@ -37,6 +37,7 @@
     "@types/signale": "^1.4.7",
     "axios": "^1.11.0",
     "bun-plugin-tailwind": "^0.0.15",
+    "bunely": "^0.0.6",
     "bunmq": "^0.0.3-dev.2",
     "bunql": "link:bunql",
     "bxo": "^0.0.10-dev.9",

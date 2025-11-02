@@ -1,7 +1,7 @@
 import { loader } from "../../server/loader";
 import path from "path";
 import { $ } from "bun";
-import type { BunQL } from "bunql";
+import type { Bunely } from "bunely";
 import { logger } from "../../server/logger";
 import type {
   DoctypeMetadata,
@@ -72,7 +72,7 @@ function createBasePayload(): {
 
 // Field processing functions
 async function upsertFieldsBatch(
-  trx: BunQL,
+  trx: Bunely,
   doctypeName: string,
   fields: Record<string, Zodula.Field>,
   startIdx: number
@@ -88,7 +88,7 @@ async function upsertFieldsBatch(
   for (const [fieldName, fieldSchema] of Object.entries(fields)) {
     const id = `${doctypeName}--${fieldName}`;
     fieldIds.push(id);
-    
+
     const fieldPayload = {
       id,
       type: fieldSchema.type,
@@ -132,7 +132,7 @@ async function upsertFieldsBatch(
       only_db: fieldSchema.only_db ? 1 : 0,
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Field">>;
-    
+
     fieldPayloads.push(fieldPayload);
   }
 
@@ -149,11 +149,13 @@ async function upsertFieldsBatch(
       .where("id", "IN", fieldIds)
       .execute();
 
-    const existingIds = new Set(existingFields.map(f => f.id));
+    const existingIds = new Set(existingFields.map((f) => f.id));
 
     // Separate payloads for insert vs update
-    const insertPayloads: Required<Zodula.SelectDoctype<"zodula__Field">>[] = [];
-    const updatePayloads: Required<Zodula.SelectDoctype<"zodula__Field">>[] = [];
+    const insertPayloads: Required<Zodula.SelectDoctype<"zodula__Field">>[] =
+      [];
+    const updatePayloads: Required<Zodula.SelectDoctype<"zodula__Field">>[] =
+      [];
 
     for (const payload of fieldPayloads) {
       if (existingIds.has(payload.id)) {
@@ -188,7 +190,7 @@ async function upsertFieldsBatch(
 }
 
 async function processFields(
-  trx: BunQL,
+  trx: Bunely,
   doctype: DoctypeMetadata,
   startIdx: number
 ): Promise<{ processedFieldIds: string[] }> {
@@ -202,7 +204,7 @@ async function processFields(
 
 // Relative processing functions
 async function upsertRelativesBatch(
-  trx: BunQL,
+  trx: Bunely,
   relatives: DoctypeRelative[],
   startIdx: number
 ): Promise<{ processedRelativeIds: string[] }> {
@@ -211,13 +213,15 @@ async function upsertRelativesBatch(
   let relativeIdx = startIdx;
 
   // Prepare all relative payloads
-  const relativePayloads: Required<Zodula.SelectDoctype<"zodula__Doctype Relative">>[] = [];
+  const relativePayloads: Required<
+    Zodula.SelectDoctype<"zodula__Doctype Relative">
+  >[] = [];
   const relativeIds: string[] = [];
 
   for (const relativeItem of relatives) {
     const newId = `${relativeItem.parentDoctype}--${relativeItem.childDoctype}--${relativeItem.childFieldName}`;
     relativeIds.push(newId);
-    
+
     const relativePayload = {
       id: newId,
       parent_doctype: relativeItem.parentDoctype,
@@ -231,7 +235,7 @@ async function upsertRelativesBatch(
       vector: "[]",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype Relative">>;
-    
+
     relativePayloads.push(relativePayload);
   }
 
@@ -248,11 +252,15 @@ async function upsertRelativesBatch(
       .where("id", "IN", relativeIds)
       .execute();
 
-    const existingIds = new Set(existingRelatives.map(r => r.id));
+    const existingIds = new Set(existingRelatives.map((r) => r.id));
 
     // Separate payloads for insert vs update
-    const insertPayloads: Required<Zodula.SelectDoctype<"zodula__Doctype Relative">>[] = [];
-    const updatePayloads: Required<Zodula.SelectDoctype<"zodula__Doctype Relative">>[] = [];
+    const insertPayloads: Required<
+      Zodula.SelectDoctype<"zodula__Doctype Relative">
+    >[] = [];
+    const updatePayloads: Required<
+      Zodula.SelectDoctype<"zodula__Doctype Relative">
+    >[] = [];
 
     for (const payload of relativePayloads) {
       if (existingIds.has(payload.id)) {
@@ -264,7 +272,10 @@ async function upsertRelativesBatch(
 
     // Batch insert new relatives
     if (insertPayloads.length > 0) {
-      await trx.insert("zodula__Doctype Relative").values(insertPayloads).execute();
+      await trx
+        .insert("zodula__Doctype Relative")
+        .values(insertPayloads)
+        .execute();
     }
 
     // Batch update existing relatives
@@ -287,20 +298,16 @@ async function upsertRelativesBatch(
 }
 
 async function processRelatives(
-  trx: BunQL,
+  trx: Bunely,
   doctype: DoctypeMetadata,
   startIdx: number
 ): Promise<{ processedRelativeIds: string[] }> {
-  return await upsertRelativesBatch(
-    trx,
-    doctype.relatives,
-    startIdx
-  );
+  return await upsertRelativesBatch(trx, doctype.relatives, startIdx);
 }
 
 // App processing functions
 async function upsertApp(
-  trx: BunQL,
+  trx: Bunely,
   app: AppInfo,
   idx: number
 ): Promise<UpsertResult> {
@@ -343,7 +350,7 @@ async function upsertApp(
 }
 
 async function processApps(
-  trx: BunQL
+  trx: Bunely
 ): Promise<{ processedAppNames: string[] }> {
   const apps = loader.from("app").list();
   const processedAppNames: string[] = [];
@@ -364,7 +371,7 @@ async function processApps(
 
 // Cleanup functions
 async function cleanupOrphanedEntities(
-  trx: BunQL,
+  trx: Bunely,
   processedEntities: ProcessedEntities
 ): Promise<void> {
   try {
@@ -407,7 +414,7 @@ async function cleanupOrphanedEntities(
 
 // Doctype processing functions
 async function upsertDoctype(
-  trx: BunQL,
+  trx: Bunely,
   doctype: DoctypeMetadata,
   idx: number
 ): Promise<UpsertResult> {
@@ -476,7 +483,6 @@ export const applyPredefine = async (): Promise<void> => {
     // Process all doctypes
     for (const doctype of doctypes) {
       try {
-        
         // Process doctype
         const doctypeResult = await upsertDoctype(trx, doctype, doctypeIdx);
         if (!doctypeResult.success) {
@@ -492,12 +498,12 @@ export const applyPredefine = async (): Promise<void> => {
         // Process fields and relatives in parallel for this doctype
         const [fieldResults, relativeResults] = await Promise.all([
           processFields(trx, doctype, fieldIdx),
-          processRelatives(trx, doctype, relativeIdx)
+          processRelatives(trx, doctype, relativeIdx),
         ]);
-        
+
         processedEntities.fields.push(...fieldResults.processedFieldIds);
         fieldIdx += fieldResults.processedFieldIds.length;
-        
+
         processedEntities.relatives.push(
           ...relativeResults.processedRelativeIds
         );

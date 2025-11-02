@@ -3,7 +3,7 @@ import { ZodulaSession } from "../session";
 import { loader } from "@/zodula/server/loader";
 import { ZodulaDoctypeHelper } from "./helper";
 import { zodula } from "..";
-import type { BunQL } from "bunql";
+import type { Bunely } from "bunely";
 import { ErrorWithCode } from "@/zodula/error";
 
 interface CancelOptions {
@@ -137,7 +137,7 @@ export class ZodulaDoctypeCancel<
   }
 
   private async executeCancel(
-    db: BunQL,
+    db: Bunely,
     doctype: any,
     old: Zodula.SelectDoctype<TN>,
     prepared: Zodula.SelectDoctype<TN>
@@ -170,7 +170,7 @@ export class ZodulaDoctypeCancel<
   }
 
   private async updateMainDocument(
-    db: BunQL,
+    db: Bunely,
     doctype: any,
     prepared: Zodula.SelectDoctype<TN>
   ) {
@@ -190,8 +190,9 @@ export class ZodulaDoctypeCancel<
     const query = `UPDATE "${doctype?.name}" SET ${setClause} WHERE id = "${this.id}"`;
     await db.run(query);
 
-    const returned = db.get(
-      `SELECT ${returnFields} FROM "${doctype?.name}" WHERE id = "${this.id}"`
+    const returned = await db.get(
+      `SELECT ${returnFields} FROM "${doctype?.name}" WHERE id = ?`,
+      [this.id]
     ) as any;
     return returned;
   }

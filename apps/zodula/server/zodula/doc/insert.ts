@@ -4,7 +4,7 @@ import { naming } from "../naming"
 import { ZodulaDoctypeHelper } from "./helper"
 import { zodula } from ".."
 import { Database } from "../../database"
-import type { BunQL } from "bunql"
+import type { Bunely } from "bunely"
 import path from "path"
 import fs from "fs/promises"
 import { ErrorWithCode } from "@/zodula/error"
@@ -51,6 +51,14 @@ export class ZodulaDoctypeInsert<TN extends Zodula.DoctypeName = Zodula.DoctypeN
 
             // Prepare the document data
             const prepared = await this.prepareDocumentData(user, doctype)
+
+            // Validate unique constraints
+            await ZodulaDoctypeHelper.validateUniqueFields(
+                this.doctypeName,
+                prepared,
+                doctype.schema,
+                this.options.bypass
+            )
             await this.applyFileInsert(prepared, this.doctypeName, doctype.schema)
 
             // Check permissions
@@ -207,7 +215,7 @@ export class ZodulaDoctypeInsert<TN extends Zodula.DoctypeName = Zodula.DoctypeN
         return { extendsList, refTableList }
     }
 
-    private async insertMainDocument(db: BunQL, doctype: any, prepared: Zodula.SelectDoctype<TN>) {
+    private async insertMainDocument(db: Bunely, doctype: any, prepared: Zodula.SelectDoctype<TN>) {
         const returnFields = this.options.fields.length > 0
             ? this.options.fields.map((field: any) => `"${field}"`)
             : "*"
@@ -222,7 +230,7 @@ export class ZodulaDoctypeInsert<TN extends Zodula.DoctypeName = Zodula.DoctypeN
     }
 
     private async insertRelationships(
-        db: BunQL,
+        db: Bunely,
         doctype: any,
         result: Zodula.SelectDoctype<TN>,
         relationshipData: RelationshipData

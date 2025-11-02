@@ -3,7 +3,7 @@ import { ZodulaSession } from "../session"
 import { loader } from "@/zodula/server/loader"
 import { ZodulaDoctypeHelper } from "./helper"
 import { zodula } from ".."
-import type { BunQL } from "bunql"
+import type { Bunely } from "bunely"
 import { ErrorWithCode } from "@/zodula/error"
 
 interface SubmitOptions {
@@ -106,7 +106,7 @@ export class ZodulaDoctypeSubmit<TN extends Zodula.DoctypeName = Zodula.DoctypeN
     }
 
     private async executeSubmit(
-        db: BunQL,
+        db: Bunely,
         doctype: any,
         old: Zodula.SelectDoctype<TN>,
         prepared: Zodula.SelectDoctype<TN>
@@ -136,7 +136,7 @@ export class ZodulaDoctypeSubmit<TN extends Zodula.DoctypeName = Zodula.DoctypeN
         return ZodulaDoctypeHelper.formatDocResult<TN>(result, doctype.schema)
     }
 
-    private async updateMainDocument(db: BunQL, doctype: any, prepared: Zodula.SelectDoctype<TN>) {
+    private async updateMainDocument(db: Bunely, doctype: any, prepared: Zodula.SelectDoctype<TN>) {
         const returnFields = this.options.fields.length > 0
             ? this.options.fields.map((field: any) => `"${field}"`)
             : "*"

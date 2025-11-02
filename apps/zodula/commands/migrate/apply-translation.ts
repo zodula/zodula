@@ -1,7 +1,7 @@
 import { loader } from "../../server/loader";
 import path from "path";
 import { $ } from "bun";
-import type { BunQL } from "bunql";
+import type { Bunely } from "bunely";
 import { logger } from "../../server/logger";
 import fs from "fs";
 import { Database } from "@/zodula/server/database";
@@ -127,7 +127,7 @@ async function loadTranslationFiles(): Promise<ProcessedTranslations[]> {
 
 // Upsert translation
 async function upsertTranslation(
-  trx: BunQL,
+  trx: Bunely,
   language: string,
   app: string,
   domain: string,
@@ -179,7 +179,7 @@ async function upsertTranslation(
 
 // Process translations for a specific language and app
 async function processTranslations(
-  trx: BunQL,
+  trx: Bunely,
   processedTranslation: ProcessedTranslations
 ): Promise<{ processedTranslationIds: string[] }> {
   const processedTranslationIds: string[] = [];
@@ -209,7 +209,7 @@ async function processTranslations(
 
 // Cleanup orphaned translations
 async function cleanupOrphanedTranslations(
-  trx: BunQL,
+  trx: Bunely,
   processedTranslationIds: string[]
 ): Promise<void> {
   try {

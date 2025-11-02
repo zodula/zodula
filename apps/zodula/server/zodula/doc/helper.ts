@@ -377,6 +377,110 @@ export class ZodulaDoctypeHelper {
         }
     }
 
+    /**
+     * Validate unique constraints for fields
+     */
+    static async validateUniqueFields<TN extends Zodula.DoctypeName>(
+        doctypeName: TN,
+        input: Zodula.InsertDoctype<TN> | Zodula.UpdateDoctype<TN>,
+        doctype: Zodula.DoctypeSchema,
+        bypass: boolean = false,
+        currentId?: string // For updates, the current document ID to exclude from uniqueness check
+    ): Promise<void> {
+        if (bypass) return
+
+        const db = Database("main")
+        const fields = doctype.fields
+
+        // Process unique fields, supporting group parameter for composite unique constraints
+        const uniqueGroups = new Map<string, string[]>()
+        const individualUniqueFields: string[] = []
+
+        // Group fields by their group parameter for unique constraints
+        for (const [fieldName, fieldDef] of Object.entries(fields)) {
+            const fieldConfig = fieldDef as any
+            if (fieldConfig.unique) {
+                if (fieldConfig.group) {
+                    // Add to group
+                    if (!uniqueGroups.has(fieldConfig.group)) {
+                        uniqueGroups.set(fieldConfig.group, [])
+                    }
+                    uniqueGroups.get(fieldConfig.group)!.push(fieldName)
+                } else {
+                    // Individual unique field
+                    individualUniqueFields.push(fieldName)
+                }
+            }
+        }
+
+        // Validate individual unique fields
+        for (const fieldName of individualUniqueFields) {
+            const value = input[fieldName as keyof typeof input]
+            if (value === undefined || value === null || value === "") {
+                continue // Skip empty values (they won't violate uniqueness)
+            }
+
+            // Check if another document with the same value exists
+            let query = `SELECT id FROM "${doctypeName}" WHERE "${fieldName}" = ?`
+            const params: any[] = [value]
+
+            // For updates, exclude the current document
+            if (currentId) {
+                query += ` AND id != ?`
+                params.push(currentId)
+            }
+
+            const existing = await db.get(query, params) as any
+            if (existing) {
+                throw new ErrorWithCode(
+                    `Field ${fieldName} must be unique. Value "${value}" already exists.`,
+                    { status: 400 }
+                )
+            }
+        }
+
+        // Validate grouped unique constraints
+        for (const [groupName, fieldNames] of uniqueGroups) {
+            // Check if all fields in the group have values
+            const groupValues: Record<string, any> = {}
+            let hasAllValues = true
+
+            for (const fieldName of fieldNames) {
+                const value = input[fieldName as keyof typeof input]
+                if (value === undefined || value === null || value === "") {
+                    hasAllValues = false
+                    break
+                }
+                groupValues[fieldName] = value
+            }
+
+            // Only validate if all fields in the group have values
+            if (!hasAllValues) {
+                continue
+            }
+
+            // Build query to check for existing combination
+            const whereConditions = fieldNames.map(fn => `"${fn}" = ?`).join(" AND ")
+            let query = `SELECT id FROM "${doctypeName}" WHERE ${whereConditions}`
+            const params: any[] = fieldNames.map(fn => groupValues[fn])
+
+            // For updates, exclude the current document
+            if (currentId) {
+                query += ` AND id != ?`
+                params.push(currentId)
+            }
+
+            const existing = await db.get(query, params) as any
+            if (existing) {
+                const valuesStr = fieldNames.map(fn => `${fn}="${groupValues[fn]}"`).join(", ")
+                throw new ErrorWithCode(
+                    `Unique constraint violation for group "${groupName}". Combination (${valuesStr}) already exists.`,
+                    { status: 400 }
+                )
+            }
+        }
+    }
+
     static async createAuditTrail<TN extends Zodula.DoctypeName>(
         doctypeName: TN,
         old: Zodula.SelectDoctype<TN>,

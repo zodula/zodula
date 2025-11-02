@@ -2,7 +2,7 @@ import { Database, type DatabaseSchemaName } from "../database/database";
 import { DatabaseHelper } from "../database/database";
 import { logger } from "../logger";
 import { loader } from "../loader";
-import type { BunQL } from "bunql";
+import type { Bunely } from "bunely";
 import { FieldHelper } from "../field";
 import type { FieldType } from "../field/type";
 
@@ -15,7 +15,6 @@ export interface SyncSchemaDiff {
         type: string;
         /* notNull: boolean; */ primaryKey: boolean;
       }>;
-      uniqueConstraints: Array<{ name: string; columns: string[] }>;
     }>;
     removed: Array<{
       name: string;
@@ -40,10 +39,6 @@ export interface SyncSchemaDiff {
       type: string /* notNull?: boolean */;
     }>;
   };
-  uniqueConstraints: {
-    added: Array<{ table: string; name: string; columns: string[] }>;
-    removed: Array<{ table: string; name: string; columns: string[] }>;
-  };
 }
 
 export interface OrphanedSchemaElements {
@@ -65,9 +60,7 @@ export interface SyncOperation {
     | "dropTable"
     | "addColumn"
     | "removeColumn"
-    | "modifyColumn"
-    | "addUniqueConstraint"
-    | "removeUniqueConstraint";
+    | "modifyColumn";
   data: any;
 }
 
@@ -105,10 +98,6 @@ export class SyncMigrator {
         modified: [],
         removed: [],
       },
-      uniqueConstraints: {
-        added: [],
-        removed: [],
-      },
     };
 
     // Find table differences
@@ -118,14 +107,10 @@ export class SyncMigrator {
     for (const doctype of doctypes) {
       if (!currentTableSet.has(doctype.name)) {
         const columns = await this.getTableColumnsFromDoctype(doctype);
-        const uniqueConstraints = await this.getUniqueConstraintsFromDoctype(
-          doctype.name
-        );
 
         diff.tables.added.push({
           name: doctype.name,
           columns: columns,
-          uniqueConstraints: uniqueConstraints,
         });
       }
     }
@@ -153,13 +138,6 @@ export class SyncMigrator {
           currentTable,
           doctype,
           diff,
-          applyDestructive
-        );
-        await this.compareTableUniqueConstraintsWithDoctype(
-          currentTable,
-          doctype,
-          diff,
-          currentDb,
           applyDestructive
         );
       }
@@ -202,7 +180,6 @@ export class SyncMigrator {
         data: {
           tableName: table.name,
           columns: table.columns,
-          uniqueConstraints: table.uniqueConstraints,
         },
       });
     }
@@ -241,21 +218,6 @@ export class SyncMigrator {
       });
     }
 
-    // Unique constraint additions
-    for (const constraint of diff.uniqueConstraints.added) {
-      operations.push({
-        type: "addUniqueConstraint",
-        data: constraint,
-      });
-    }
-
-    // Unique constraint removals (destructive)
-    for (const constraint of diff.uniqueConstraints.removed) {
-      operations.push({
-        type: "removeUniqueConstraint",
-        data: constraint,
-      });
-    }
 
     return operations;
   }
@@ -264,7 +226,7 @@ export class SyncMigrator {
    * Execute an operation on the target database
    */
   private async executeOperation(
-    targetDb: BunQL,
+    targetDb: Bunely,
     operation: SyncOperation
   ): Promise<void> {
     switch (operation.type) {
@@ -272,8 +234,7 @@ export class SyncMigrator {
         await this.createTable(
           targetDb,
           operation.data.tableName,
-          operation.data.columns,
-          operation.data.uniqueConstraints
+          operation.data.columns
         );
         break;
       case "dropTable":
@@ -288,12 +249,6 @@ export class SyncMigrator {
       case "modifyColumn":
         await this.modifyColumn(targetDb, operation.data);
         break;
-      case "addUniqueConstraint":
-        await this.addUniqueConstraint(targetDb, operation.data);
-        break;
-      case "removeUniqueConstraint":
-        await this.removeUniqueConstraint(targetDb, operation.data);
-        break;
     }
   }
 
@@ -301,15 +256,14 @@ export class SyncMigrator {
    * Create a table in target database
    */
   private async createTable(
-    targetDb: BunQL,
+    targetDb: Bunely,
     tableName: string,
     columns: Array<{
       name: string;
       type: string;
       notNull: boolean;
       primaryKey: boolean;
-    }>,
-    uniqueConstraints: Array<{ name: string; columns: string[] }>
+    }>
   ): Promise<void> {
     try {
       // Create table using bunely schema builder
@@ -322,21 +276,12 @@ export class SyncMigrator {
           type: column.type as any,
           notNull: this.handleNotNullConstraints ? column.notNull : false, // Use toggle for NOT NULL constraints
           primaryKey: column.primaryKey,
-          unique: false, // We'll handle unique constraints separately
+          unique: false, // Unique constraints are now validated at application level
         });
       }
 
       // Execute table creation
       await createTableBuilder.execute();
-
-      // Add unique constraints after table creation
-      for (const constraint of uniqueConstraints) {
-        const constraintName = `idx_${tableName}_${constraint.columns.join("_")}_unique`;
-        const columnsStr = constraint.columns.map((c) => `"${c}"`).join(", ");
-        await targetDb.run(
-          `ALTER TABLE "${tableName}" ADD CONSTRAINT "${constraintName}" UNIQUE (${columnsStr})`
-        );
-      }
 
       logger.info(`Created table: ${tableName}`);
     } catch (error) {
@@ -347,7 +292,7 @@ export class SyncMigrator {
   /**
    * Add a column to an existing table
    */
-  private async addColumn(targetDb: BunQL, column: any): Promise<void> {
+  private async addColumn(targetDb: Bunely, column: any): Promise<void> {
     try {
       let sql = `ALTER TABLE "${column.table}" ADD COLUMN "${column.column}" ${column.type}`;
 
@@ -368,7 +313,7 @@ export class SyncMigrator {
   /**
    * Modify a column
    */
-  private async modifyColumn(targetDb: BunQL, column: any): Promise<void> {
+  private async modifyColumn(targetDb: Bunely, column: any): Promise<void> {
     try {
       logger.info(`Modifying column: ${column.table}.${column.column}`);
 
@@ -443,35 +388,9 @@ export class SyncMigrator {
   }
 
   /**
-   * Add a unique constraint to a table
-   */
-  private async addUniqueConstraint(
-    targetDb: BunQL,
-    constraint: any
-  ): Promise<void> {
-    try {
-      const constraintName = `idx_${constraint.table}_${constraint.columns.join("_")}_unique`;
-      const columnsStr = constraint.columns
-        .map((c: string) => `"${c}"`)
-        .join(", ");
-      await targetDb.run(
-        `ALTER TABLE "${constraint.table}" ADD CONSTRAINT "${constraintName}" UNIQUE (${columnsStr})`
-      );
-      logger.info(
-        `Added unique constraint: ${constraint.table} on columns: ${constraint.columns.join(", ")}`
-      );
-    } catch (error) {
-      console.error(
-        `Error adding unique constraint ${constraint.table}.${constraint.name}:`,
-        error
-      );
-    }
-  }
-
-  /**
    * Drop a table from the target database
    */
-  private async dropTable(targetDb: BunQL, tableName: string): Promise<void> {
+  private async dropTable(targetDb: Bunely, tableName: string): Promise<void> {
     try {
       await targetDb.run(`DROP TABLE IF EXISTS "${tableName}"`);
       logger.info(`Dropped table: ${tableName}`);
@@ -483,7 +402,7 @@ export class SyncMigrator {
   /**
    * Remove a column from an existing table
    */
-  private async removeColumn(targetDb: BunQL, column: any): Promise<void> {
+  private async removeColumn(targetDb: Bunely, column: any): Promise<void> {
     try {
       // SQLite doesn't support DROP COLUMN directly, so we need to recreate the table
       // This is a simplified implementation - in practice, you might want to use a more sophisticated approach
@@ -500,51 +419,9 @@ export class SyncMigrator {
   }
 
   /**
-   * Remove a unique constraint from a table
-   */
-  private async removeUniqueConstraint(
-    targetDb: BunQL,
-    constraint: any
-  ): Promise<void> {
-    try {
-      // Find the constraint name for the unique constraint
-      const result = await targetDb.all(
-        `
-                SELECT tc.constraint_name
-                FROM information_schema.table_constraints tc
-                JOIN information_schema.key_column_usage kcu 
-                    ON tc.constraint_name = kcu.constraint_name
-                    AND tc.table_schema = kcu.table_schema
-                WHERE tc.table_schema = 'public'
-                    AND tc.table_name = ?
-                    AND tc.constraint_type = 'UNIQUE'
-                GROUP BY tc.constraint_name
-                HAVING array_agg(kcu.column_name ORDER BY kcu.ordinal_position) = ?
-            `,
-        [constraint.table, `{${constraint.columns.join(",")}}`]
-      );
-
-      if (result.length > 0) {
-        const constraintName = (result[0] as any).constraint_name;
-        await targetDb.run(
-          `ALTER TABLE "${constraint.table}" DROP CONSTRAINT "${constraintName}"`
-        );
-        logger.info(
-          `Removed unique constraint: ${constraint.table} on columns: ${constraint.columns.join(", ")}`
-        );
-      }
-    } catch (error) {
-      console.error(
-        `Error removing unique constraint ${constraint.table}.${constraint.name}:`,
-        error
-      );
-    }
-  }
-
-  /**
    * Get all tables from a database
    */
-  private async getTables(db: BunQL): Promise<
+  private async getTables(db: Bunely): Promise<
     Array<{
       name: string;
       columns: Array<{ name: string; type: string /* notNull?: boolean */ }>;
@@ -556,19 +433,19 @@ export class SyncMigrator {
     }> = [];
 
     try {
+      // SQLite approach: query sqlite_master for table names
       const tableNames = (await db.all(`
-                SELECT table_name as name 
-                FROM information_schema.tables 
-                WHERE table_schema = 'public' 
-                AND table_type = 'BASE TABLE'
-                AND table_name NOT LIKE 'pg_%'
+                SELECT name 
+                FROM sqlite_master 
+                WHERE type = 'table' 
+                AND name NOT LIKE 'sqlite_%'
             `)) as { name: string }[];
 
       for (const { name } of tableNames) {
-        const tableInfo = await db.schema.getTableInfo(name);
+        const columns = await db.schema.getTableInfo(name);
         tables.push({
           name,
-          columns: tableInfo.columns,
+          columns: columns,
         });
       }
 
@@ -664,60 +541,6 @@ export class SyncMigrator {
   }
 
   /**
-   * Compare unique constraints between current database table and doctype definition
-   */
-  private async compareTableUniqueConstraintsWithDoctype(
-    currentTable: any,
-    doctype: any,
-    diff: SyncSchemaDiff,
-    currentDb: BunQL,
-    applyDestructive: boolean = false
-  ): Promise<void> {
-    // Get constraints from doctype definitions (expected schema)
-    const expectedConstraints = await this.getUniqueConstraintsFromDoctype(
-      currentTable.name
-    );
-
-    // Get constraints that actually exist in the current database
-    const currentConstraints = await this.getUniqueConstraintsFromDatabase(
-      currentDb,
-      currentTable.name
-    );
-
-    // Create maps using column combinations as keys instead of names
-    const currentConstraintMap = new Map(
-      currentConstraints.map((c) => [c.columns.join(","), c])
-    );
-    const expectedConstraintMap = new Map(
-      expectedConstraints.map((c) => [c.columns.join(","), c])
-    );
-
-    // Find added constraints (in doctype but not in current database)
-    for (const [columnsKey, constraint] of expectedConstraintMap) {
-      if (!currentConstraintMap.has(columnsKey)) {
-        diff.uniqueConstraints.added.push({
-          table: currentTable.name,
-          name: constraint.name,
-          columns: constraint.columns,
-        });
-      }
-    }
-
-    // Find removed constraints (in current database but not in doctype) - only when destructive operations are enabled
-    if (applyDestructive) {
-      for (const [columnsKey, constraint] of currentConstraintMap) {
-        if (!expectedConstraintMap.has(columnsKey)) {
-          diff.uniqueConstraints.removed.push({
-            table: currentTable.name,
-            name: constraint.name,
-            columns: constraint.columns,
-          });
-        }
-      }
-    }
-  }
-
-  /**
    * Get doctype by name
    */
   private async getDoctypeByName(tableName: string): Promise<any> {
@@ -776,134 +599,6 @@ export class SyncMigrator {
     }
   }
 
-  /**
-   * Get unique constraints that actually exist in the database
-   */
-  private async getUniqueConstraintsFromDatabase(
-    db: BunQL,
-    tableName: string
-  ): Promise<Array<{ name: string; columns: string[] }>> {
-    try {
-      // Query PostgreSQL system tables to get unique constraints
-      const result = await db.all(
-        `
-                SELECT 
-                    tc.constraint_name as name,
-                    array_agg(kcu.column_name ORDER BY kcu.ordinal_position) as columns
-                FROM information_schema.table_constraints tc
-                JOIN information_schema.key_column_usage kcu 
-                    ON tc.constraint_name = kcu.constraint_name
-                    AND tc.table_schema = kcu.table_schema
-                WHERE tc.table_schema = 'public'
-                    AND tc.table_name = ?
-                    AND tc.constraint_type = 'UNIQUE'
-                GROUP BY tc.constraint_name
-            `,
-        [tableName]
-      );
-
-      const constraints: Array<{ name: string; columns: string[] }> = [];
-
-      for (const row of result) {
-        // Parse PostgreSQL array string to JavaScript array
-        let columns: string[] = [];
-        const columnsStr = (row as any).columns;
-
-        if (typeof columnsStr === "string") {
-          // PostgreSQL array format: "{value1,value2,value3}"
-          // Remove curly braces and split by comma
-          columns = columnsStr
-            .replace(/^{|}$/g, "")
-            .split(",")
-            .map((col) => col.trim());
-        } else if (Array.isArray(columnsStr)) {
-          // If it's already an array, use it directly
-          columns = columnsStr;
-        }
-
-        constraints.push({
-          name: (row as any).name,
-          columns: columns,
-        });
-      }
-
-      return constraints;
-    } catch (error) {
-      console.error(
-        `Error getting unique constraints from database for table ${tableName}:`,
-        error
-      );
-      return [];
-    }
-  }
-
-  /**
-   * Get unique constraints for a table based on doctype definition
-   */
-  private async getUniqueConstraintsFromDoctype(
-    tableName: string
-  ): Promise<Array<{ name: string; columns: string[] }>> {
-    try {
-      // Get the doctype definition
-      const doctypes = loader.from("doctype").list();
-      const doctype = doctypes.find((d) => d.name === tableName);
-
-      if (!doctype) {
-        return [];
-      }
-
-      const constraints: Array<{ name: string; columns: string[] }> = [];
-      const fields = doctype.schema.fields;
-
-      // Group fields by their group parameter for unique constraints
-      const uniqueGroups = new Map<string, string[]>();
-      const individualUniqueFields: string[] = [];
-
-      // Process fields to find unique constraints
-      for (const [fieldName, fieldDef] of Object.entries(fields)) {
-        const field = fieldDef as any;
-
-        if (field.unique) {
-          if (field.group) {
-            // Add to group
-            if (!uniqueGroups.has(field.group)) {
-              uniqueGroups.set(field.group, []);
-            }
-            uniqueGroups.get(field.group)!.push(fieldName);
-          } else {
-            // Individual unique field
-            individualUniqueFields.push(fieldName);
-          }
-        }
-      }
-
-      // Add individual unique constraints
-      for (const fieldName of individualUniqueFields) {
-        const constraint = {
-          name: `idx_${tableName}_${fieldName}_unique`,
-          columns: [fieldName],
-        };
-        constraints.push(constraint);
-      }
-
-      // Add grouped unique constraints
-      for (const [groupName, fieldNames] of uniqueGroups) {
-        const constraint = {
-          name: `idx_${tableName}_${groupName}_unique`,
-          columns: fieldNames,
-        };
-        constraints.push(constraint);
-      }
-
-      return constraints;
-    } catch (error) {
-      console.error(
-        `Error getting unique constraints for table ${tableName}:`,
-        error
-      );
-      return [];
-    }
-  }
 
   /**
    * Sort tables by dependency order
@@ -964,16 +659,15 @@ export class SyncMigrator {
   /**
    * Create a table from doctype definition
    */
-  private async createTableFromDoctype(db: BunQL, doctype: any): Promise<void> {
+  private async createTableFromDoctype(
+    db: Bunely,
+    doctype: any
+  ): Promise<void> {
     const tableName = doctype.name;
     const fields = doctype.schema.fields;
 
     // Create table using bunely schema builder
     const createTableBuilder = db.schema.createTable(tableName);
-
-    // Group fields by their group parameter for unique constraints
-    const uniqueGroups = new Map<string, string[]>();
-    const individualUniqueFields: string[] = [];
 
     // Add columns with proper constraints
     for (const [fieldName, fieldDef] of Object.entries(fields)) {
@@ -985,20 +679,6 @@ export class SyncMigrator {
         continue;
       }
 
-      // Handle unique constraints - group by group parameter
-      if (field.unique) {
-        if (field.group) {
-          // Add to group
-          if (!uniqueGroups.has(field.group)) {
-            uniqueGroups.set(field.group, []);
-          }
-          uniqueGroups.get(field.group)!.push(fieldName);
-        } else {
-          // Individual unique field
-          individualUniqueFields.push(fieldName);
-        }
-      }
-
       createTableBuilder.addColumn({
         name: fieldName,
         type: sqlType as any,
@@ -1006,29 +686,12 @@ export class SyncMigrator {
           ? field.required || false
           : false, // Use toggle for NOT NULL constraints
         primaryKey: field.primaryKey || false,
-        unique: false, // We'll handle unique constraints separately
+        unique: false, // Unique constraints are now validated at application level
       });
     }
 
     // Execute table creation
     await createTableBuilder.execute();
-
-    // Add individual unique constraints
-    for (const fieldName of individualUniqueFields) {
-      const constraintName = `idx_${tableName}_${fieldName}_unique`;
-      await db.run(
-        `ALTER TABLE "${tableName}" ADD CONSTRAINT "${constraintName}" UNIQUE ("${fieldName}")`
-      );
-    }
-
-    // Add grouped unique constraints
-    for (const [groupName, fieldNames] of uniqueGroups) {
-      const constraintName = `idx_${tableName}_${groupName}_unique`;
-      const columnsStr = fieldNames.map((f) => `"${f}"`).join(", ");
-      await db.run(
-        `ALTER TABLE "${tableName}" ADD CONSTRAINT "${constraintName}" UNIQUE (${columnsStr})`
-      );
-    }
   }
 
   /**
@@ -1204,35 +867,24 @@ export class SyncMigrator {
    * Check if a table has any NOT NULL columns (excluding primary keys)
    */
   private async hasNotNullColumns(
-    db: BunQL,
+    db: Bunely,
     tableName: string
   ): Promise<boolean> {
     try {
-      const result = await db.all(
-        `
-                SELECT COUNT(*) as count 
-                FROM information_schema.columns 
-                WHERE table_schema = 'public'
-                    AND table_name = $1
-                    AND is_nullable = 'NO'
-                    AND column_name NOT IN (
-                        SELECT column_name 
-                        FROM information_schema.key_column_usage 
-                        WHERE table_schema = 'public'
-                            AND table_name = $1
-                            AND constraint_name IN (
-                                SELECT constraint_name 
-                                FROM information_schema.table_constraints 
-                                WHERE table_schema = 'public'
-                                    AND table_name = $1
-                                    AND constraint_type = 'PRIMARY KEY'
-                            )
-                    )
-            `,
-        [tableName]
-      );
+      // SQLite approach: use PRAGMA table_info to get column information
+      const columns = (await db.all(
+        `PRAGMA table_info("${tableName}")`
+      )) as Array<{
+        cid: number;
+        name: string;
+        type: string;
+        notnull: number;
+        dflt_value: any;
+        pk: number;
+      }>;
 
-      return (result[0] as any).count > 0;
+      // Check if any non-primary-key columns have NOT NULL constraint (notnull = 1)
+      return columns.some((col) => col.notnull === 1 && col.pk === 0);
     } catch (error) {
       logger.warn(
         `Could not check NOT NULL columns for table ${tableName}:`,
@@ -1246,12 +898,12 @@ export class SyncMigrator {
    * Make all columns in a table nullable by recreating the table
    */
   private async makeTableColumnsNullable(
-    db: BunQL,
+    db: Bunely,
     tableName: string
   ): Promise<void> {
     try {
       // Get the current table schema
-      const tableInfo = await db.schema.getTableInfo(tableName);
+      const columns = await db.schema.getTableInfo(tableName);
 
       // Create a new table with the same structure but without NOT NULL constraints
       const newTableName = `${tableName}_temp_nullable`;
@@ -1259,7 +911,7 @@ export class SyncMigrator {
       // Create new table without NOT NULL constraints
       const createTableBuilder = db.schema.createTable(newTableName);
 
-      for (const column of tableInfo.columns) {
+      for (const column of columns) {
         createTableBuilder.addColumn({
           name: column.name,
           type: column.type as any,
@@ -1298,13 +950,13 @@ export class SyncMigrator {
    * Make a specific column nullable by recreating the table
    */
   private async makeColumnNullable(
-    db: BunQL,
+    db: Bunely,
     tableName: string,
     columnName: string
   ): Promise<void> {
     try {
       // Get the current table schema
-      const tableInfo = await db.schema.getTableInfo(tableName);
+      const columns = await db.schema.getTableInfo(tableName);
 
       // Create a new table with the same structure but without NOT NULL constraints
       const newTableName = `${tableName}_temp_nullable`;
@@ -1312,7 +964,7 @@ export class SyncMigrator {
       // Create new table without NOT NULL constraints
       const createTableBuilder = db.schema.createTable(newTableName);
 
-      for (const column of tableInfo.columns) {
+      for (const column of columns) {
         createTableBuilder.addColumn({
           name: column.name,
           type: column.type as any,
