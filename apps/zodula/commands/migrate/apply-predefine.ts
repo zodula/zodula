@@ -437,6 +437,7 @@ async function upsertDoctype(
       tabs: doctype.config.tabs || null,
       idx,
       vector: "[]",
+      comments_enabled: doctype.config.comments_enabled ? 1 : 0,
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype">>;
 
@@ -525,10 +526,10 @@ export const applyPredefine = async (): Promise<void> => {
 
     // Clean up orphaned entities
     try {
-      console.log("Cleaning up orphaned entities...");
+      logger.info("Cleaning up orphaned entities...");
       await cleanupOrphanedEntities(trx, processedEntities);
     } catch (error) {
-      console.error("Error during cleanup:", error);
+      logger.error("Error during cleanup:", error);
       throw error; // Re-throw cleanup errors as they're critical
     }
 

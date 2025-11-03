@@ -295,9 +295,20 @@ export function DocFormView({
 
   const handleSubmit = async () => {
     try {
-      await zodula.doc.submit_doc(doctype, id || "");
-    } finally {
-      reload();
+      const con = await confirm({
+        title: "Submit Document",
+        message: `Are you sure you want to submit this ${doctypeDoc?.label || doctype} document? This action will change the document status.`,
+        confirmText: "Submit",
+        cancelText: "Cancel",
+        variant: "default",
+      });
+      if (con) {
+        await zodula.doc.submit_doc(doctype, id || "").then(() => {
+          reload();
+        });
+      }
+    } catch (error) {
+      console.error("Error submitting doc:", error);
     }
   };
 
@@ -319,10 +330,12 @@ export function DocFormView({
         variant: "destructive",
       });
       if (con) {
-        await zodula.doc.cancel_doc(doctype, id || "");
+        await zodula.doc.cancel_doc(doctype, id || "").then(() => {
+          reload();
+        });
       }
-    } finally {
-      reload();
+    } catch (error) {
+      console.error("Error canceling doc:", error);
     }
   };
 

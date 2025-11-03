@@ -513,18 +513,6 @@ export class SyncMigrator {
         const expectedType = (expectedColumn as any).type;
 
         const typeChanged = currentType !== expectedType;
-        // const notNullChanged = currentNotNull !== expectedNotNull
-
-        // Debug logging for type comparison
-        if (typeChanged) {
-          console.log(
-            `Type mismatch for ${currentTable.name}.${name as string}:`
-          );
-          console.log(
-            `  Current (PostgreSQL): ${(currentColumn as any).type} -> Normalized: ${currentType}`
-          );
-          console.log(`  Expected (Doctype): ${expectedType}`);
-        }
 
         if (typeChanged /* || notNullChanged */) {
           diff.columns.modified.push({
