@@ -1,8 +1,9 @@
-import { type BasePlugin } from "../base"
-import { loader } from ".."
+import { type BasePlugin } from "../../base"
+import { loader } from "../.."
 import path from "path"
+import { Glob } from "bun"
 import type BXO from "bxo"
-import { events, type DoctypeEvent, type DoctypeEventCallback, type DoctypeEventCallbackByName } from "./doctype"
+import { events, type DoctypeEvent, type DoctypeEventCallback, type DoctypeEventCallbackByName } from "../doctype"
 
 const DEBUG = process.env.DEBUG === "true"
 
@@ -40,20 +41,31 @@ export class ExtendLoader implements BasePlugin<ExtendMetadata> {
 
     async load() {
         this.extends = [];
-        const apps = loader.from("app").list()
-        for (const app of apps) {
-            const extendImport = await import(path.resolve(app.dir, "extend")).catch((e) => null)
-            if (!extendImport) {
-                continue
+        const extendGlob = new Glob("apps/*/scripts/**/*.extend.ts");
+        
+        for await (const extendPath of extendGlob.scan(".")) {
+            const app = loader.from("app").getAppByPath(extendPath);
+            if (!app) {
+                continue;
             }
-            const extendDefault = extendImport.default
-            const extendHandler = extendDefault.handler
+            
+            const extendImport = await import(path.resolve(extendPath)).catch((e) => null);
+            if (!extendImport) {
+                continue;
+            }
+            
+            const extendDefault = extendImport.default;
+            if (!extendDefault || !extendDefault.handler) {
+                continue;
+            }
+            
             this.extends.push({
                 appName: app.packageName,
-                handler: extendHandler
-            })
+                handler: extendDefault.handler
+            });
         }
-        return this.extends
+        
+        return this.extends;
     }
     list(): any[] {
         return this.extends
@@ -62,9 +74,7 @@ export class ExtendLoader implements BasePlugin<ExtendMetadata> {
         return this.extends.find((e) => e.appName === name)
     }
     validate() {
-        if (this.extends.length !== new Set(this.extends.map((e) => e.appName)).size) {
-            throw new Error("Duplicate extend names");
-        }
+        // Multiple extends per app are now allowed
         return Promise.resolve();
     }
 }

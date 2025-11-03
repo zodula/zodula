@@ -8,8 +8,8 @@ import path from "path";
 import fs from "fs";
 
 export default new Command("scaffold")
-    .description("Scaffold new app, doctype, or action")
-    .argument("[type]", "Type of scaffold: app, doctype, or action")
+    .description("Scaffold new app, doctype, action, background, or extend")
+    .argument("[type]", "Type of scaffold: app, doctype, action, background, or extend")
     .action(async (type) => {
         await startup();
 
@@ -26,7 +26,8 @@ export default new Command("scaffold")
                         { name: "App", value: "app" },
                         { name: "Doctype", value: "doctype" },
                         { name: "Action", value: "action" },
-                        { name: "Background", value: "background" }
+                        { name: "Background", value: "background" },
+                        { name: "Extend", value: "extend" }
                     ]
                 }
             ]);
@@ -34,8 +35,8 @@ export default new Command("scaffold")
         }
 
         // Validate the type
-        if (!["app", "doctype", "action", "background"].includes(scaffoldType)) {
-            logger.error(`Invalid scaffold type: ${scaffoldType}. Must be one of: app, doctype, action, background`);
+        if (!["app", "doctype", "action", "background", "extend"].includes(scaffoldType)) {
+            logger.error(`Invalid scaffold type: ${scaffoldType}. Must be one of: app, doctype, action, background, extend`);
             return;
         }
 
@@ -51,6 +52,9 @@ export default new Command("scaffold")
                 break;
             case "background":
                 await scaffoldBackground();
+                break;
+            case "extend":
+                await scaffoldExtend();
                 break;
         }
     });
@@ -89,6 +93,7 @@ async function scaffoldApp() {
 
     // Create app directory structure
     await $`mkdir -p ${appDir}/doctypes/core`;
+    await $`mkdir -p ${appDir}/scripts/core`;
     await $`mkdir -p ${appDir}/actions`;
     await $`mkdir -p ${appDir}/migrations`;
     await $`mkdir -p ${appDir}/fixtures`;
@@ -590,4 +595,128 @@ async function scaffoldBackground() {
     logger.info(`1. Implement the background job logic`);
     logger.info(`2. Configure job options (retry, timeout, queue)`);
     logger.info(`3. Enqueue the job from your actions or other parts of the app`);
+}
+
+async function scaffoldExtend() {
+    // Get available apps
+    const apps = loader.from("app").list();
+    if (apps.length === 0) {
+        logger.error("No apps found. Create an app first.");
+        return;
+    }
+
+    // Get available doctypes for reference
+    const doctypes = loader.from("doctype").list();
+    const doctypeChoices = doctypes.map(dt => ({
+        name: `${dt.name} (${dt.packageName})`,
+        value: dt.name
+    }));
+
+    // Build prompts array
+    const prompts: any[] = [
+        {
+            type: "list",
+            name: "appName",
+            message: "Select app:",
+            choices: apps.map(app => ({
+                name: `${app.packageName} (${app.folder})`,
+                value: app.packageName
+            }))
+        },
+        {
+            type: "input",
+            name: "domain",
+            message: "Domain (folder name in scripts):",
+            default: "core",
+            validate: (input: string) => {
+                if (!input.trim()) return "Domain is required";
+                if (!/^[a-z][a-z0-9_-]*$/.test(input)) {
+                    return "Domain must start with lowercase letter and contain only lowercase letters, numbers, hyphens, and underscores";
+                }
+                return true;
+            }
+        }
+    ];
+
+    // Add doctype prompt based on availability
+    if (doctypeChoices.length > 0) {
+        prompts.push({
+            type: "list",
+            name: "doctypeName",
+            message: "Select doctype to extend:",
+            choices: doctypeChoices
+        });
+    } else {
+        prompts.push({
+            type: "input",
+            name: "doctypeName",
+            message: "Doctype name to extend (e.g., zodula__User):",
+            validate: (input: string) => {
+                if (!input.trim()) return "Doctype name is required";
+                return true;
+            }
+        });
+    }
+
+    prompts.push({
+        type: "list",
+        name: "event",
+        message: "Select event type:",
+        choices: [
+            { name: "before_insert", value: "before_insert" },
+            { name: "after_insert", value: "after_insert" },
+            { name: "before_update", value: "before_update" },
+            { name: "after_update", value: "after_update" },
+            { name: "before_delete", value: "before_delete" },
+            { name: "after_delete", value: "after_delete" },
+            { name: "before_submit", value: "before_submit" },
+            { name: "after_submit", value: "after_submit" },
+            { name: "before_cancel", value: "before_cancel" },
+            { name: "after_cancel", value: "after_cancel" }
+        ],
+        default: "before_insert"
+    });
+
+    const { appName, domain, doctypeName, event } = await inquirer.prompt(prompts);
+
+    const app = apps.find(a => a.packageName === appName);
+    if (!app) {
+        logger.error(`App ${appName} not found`);
+        return;
+    }
+
+    const scriptsDir = `${app.dir}/scripts/${domain}`;
+    const extendFile = `${scriptsDir}/${doctypeName}.extend.ts`;
+
+    // Check if extend file already exists
+    if (await Bun.file(extendFile).exists()) {
+        logger.error(`Extend file for ${doctypeName} already exists in ${domain} domain`);
+        return;
+    }
+
+    logger.info(`Creating extend file: ${doctypeName} in ${appName}/${domain}`);
+
+    // Create scripts domain directory if it doesn't exist
+    await $`mkdir -p ${scriptsDir}`;
+
+    // Create extend file
+    const extendContent = `export default $extend((ctx) => {
+  ctx.on("${doctypeName}", "${event}", async ({ doc }) => {
+    // TODO: Implement ${event} logic for ${doctypeName}
+    // Example:
+    // if (event === "before_insert") {
+    //   // Modify doc before insert
+    // }
+  });
+});
+`;
+
+    await Bun.write(extendFile, extendContent);
+
+    logger.success(`Extend file for ${doctypeName} created successfully!`);
+    logger.info(`File: ${extendFile}`);
+    logger.info(`Next steps:`);
+    logger.info(`1. Implement the ${event} logic`);
+    logger.info(`2. Add more event handlers as needed`);
+    logger.info(`3. The extend will be automatically loaded when the server starts`);
 }
