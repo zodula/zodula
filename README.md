@@ -55,7 +55,7 @@ Server runs at `http://localhost:3000`
 
 ```bash
 # Scaffold
-mailgun scaffold
+nailgun scaffold
 
 # Apply migrations and load data
 nailgun migrate

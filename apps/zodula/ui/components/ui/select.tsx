@@ -104,8 +104,45 @@ const Select = ({
   // Get selected options for display
   const selectedOptions = multiple ? options.filter(option => selectedValues.includes(option.value)) : [];
 
+  // Function to calculate relevance score for sorting
+  const calculateRelevance = (option: SelectOption, searchTerm: string): number => {
+    if (!searchTerm) return 0;
+    
+    const searchLower = searchTerm.toLowerCase();
+    const labelLower = option.label.toLowerCase();
+    const valueLower = option.value.toLowerCase();
+    const subtitleLower = option.subtitle?.toLowerCase() || '';
+    
+    // Exact match gets highest score
+    if (labelLower === searchLower || valueLower === searchLower) {
+      return 1000;
+    }
+    
+    // Starts with gets high score
+    if (labelLower.startsWith(searchLower) || valueLower.startsWith(searchLower)) {
+      return 500;
+    }
+    
+    // Contains in label gets medium score
+    if (labelLower.includes(searchLower)) {
+      return 100;
+    }
+    
+    // Contains in value gets lower score
+    if (valueLower.includes(searchLower)) {
+      return 50;
+    }
+    
+    // Contains in subtitle gets lowest score
+    if (subtitleLower.includes(searchLower)) {
+      return 25;
+    }
+    
+    return 0;
+  };
+
   // Filter options based on search
-  const filteredOptions = searchable && searchValue
+  let filteredOptions = searchable && searchValue
     ? options.filter(option => {
       if (multiple && searchValue.includes(',')) {
         // In multiple mode, search based on the last value after comma
@@ -119,6 +156,28 @@ const Select = ({
       }
     })
     : options;
+
+  // Sort filtered options by relevance
+  if (searchable && searchValue && filteredOptions.length > 0) {
+    const searchTermForSorting = multiple && searchValue.includes(',')
+      ? searchValue.split(',').pop()?.trim() || ''
+      : searchValue.trim();
+    
+    if (searchTermForSorting) {
+      filteredOptions = [...filteredOptions].sort((a, b) => {
+        const scoreA = calculateRelevance(a, searchTermForSorting);
+        const scoreB = calculateRelevance(b, searchTermForSorting);
+        
+        // Higher score first (descending)
+        if (scoreB !== scoreA) {
+          return scoreB - scoreA;
+        }
+        
+        // If scores are equal, maintain alphabetical order
+        return a.label.localeCompare(b.label);
+      });
+    }
+  }
 
   // Calculate dropdown position
   const calculateDropdownPosition = () => {

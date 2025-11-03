@@ -304,7 +304,7 @@ export class FieldHelper {
     }) {
         let properties: Record<string, any> = {};
         for (const [fieldName, fieldConfig] of Object.entries(doctype.fields)) {
-            const fieldSchema = FieldHelper.getZodSchema(fieldConfig);
+            const fieldSchema = FieldHelper.getZodSchema(fieldConfig).nullable().optional();
             properties[fieldName] = fieldSchema;
             if (standardFields[fieldName as keyof typeof standardFields]) {
                 properties[fieldName] = fieldSchema.nullish().optional();

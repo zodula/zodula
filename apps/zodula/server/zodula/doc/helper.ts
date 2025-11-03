@@ -123,12 +123,9 @@ export class ZodulaDoctypeHelper {
                 }
             }
 
-            // is required
-            if (config.required && (value === undefined || value === null || value === "")) {
-                throw new ErrorWithCode(`Field ${fieldName} in ${doctype.name} is required`, {
-                    status: 400,
-                })
-            }
+            // Note: Required field validation should be done via validateDoc(), not here
+            // formatDoc() is used for formatting/processing and shouldn't validate required fields
+            // (e.g., when reading from database via select operations)
 
             (doc as any)[fieldName] = value
         }

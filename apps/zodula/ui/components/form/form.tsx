@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Tabs, Section, FormControl } from "@/zodula/ui";
 import { popup } from "@/zodula/ui";
 import { useFormLayoutTabs } from "./form-layout";
@@ -109,6 +109,25 @@ const FormDebugDialog = ({
     );
 };
 
+// Helper function to deep compare objects
+const deepEqual = (obj1: any, obj2: any): boolean => {
+    if (obj1 === obj2) return true;
+    if (obj1 == null || obj2 == null) return obj1 === obj2;
+    if (typeof obj1 !== 'object' || typeof obj2 !== 'object') return obj1 === obj2;
+    
+    const keys1 = Object.keys(obj1);
+    const keys2 = Object.keys(obj2);
+    
+    if (keys1.length !== keys2.length) return false;
+    
+    for (const key of keys1) {
+        if (!keys2.includes(key)) return false;
+        if (!deepEqual(obj1[key], obj2[key])) return false;
+    }
+    
+    return true;
+};
+
 export const Form = <T extends Record<string, Zodula.Field>>(props: FormProps<T>) => {
     const [activeTab, setActiveTab] = useState<string>("");
     const { push } = useRouter();
@@ -118,6 +137,76 @@ export const Form = <T extends Record<string, Zodula.Field>>(props: FormProps<T>
 
     // Translation hook
     const { t } = useTranslation();
+
+    // Track initial values to detect dirty state
+    const initialValuesRef = useRef<Partial<T> | undefined>(undefined);
+    const isDirtyRef = useRef<boolean>(false);
+    const lastDocIdRef = useRef<string | undefined>(undefined);
+
+    // Initialize and update initial values when values are loaded or docId changes
+    useEffect(() => {
+        // Update initial values when:
+        // 1. Initial values haven't been set yet and values are available
+        // 2. docId changes (new document loaded)
+        const docIdChanged = lastDocIdRef.current !== props.docId;
+        
+        if (props.values !== undefined) {
+            const shouldUpdate = 
+                initialValuesRef.current === undefined || 
+                (docIdChanged && props.docId !== undefined);
+            
+            if (shouldUpdate) {
+                initialValuesRef.current = props.values ? JSON.parse(JSON.stringify(props.values)) : undefined;
+                isDirtyRef.current = false;
+                lastDocIdRef.current = props.docId;
+            }
+        }
+    }, [props.values, props.docId]);
+
+    // Calculate if form is dirty by comparing current values with initial values
+    const isDirty = useMemo(() => {
+        if (!props.values || initialValuesRef.current === undefined) {
+            return false;
+        }
+        
+        const currentValues = props.values;
+        const initialValues = initialValuesRef.current;
+        
+        // Compare current values with initial values
+        const dirty = !deepEqual(currentValues, initialValues);
+        isDirtyRef.current = dirty;
+        return dirty;
+    }, [props.values]);
+
+    // Handle beforeunload event to show confirmation when form is dirty
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (isDirtyRef.current) {
+                // Standard way to show confirmation dialog
+                e.preventDefault();
+                // For modern browsers
+                e.returnValue = '';
+                // Return a string for older browsers
+                return '';
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, []);
+
+    // Reset dirty state when form is successfully saved (when docId changes or values reset)
+    useEffect(() => {
+        // When values change but match initial values, reset dirty state
+        if (initialValuesRef.current !== undefined && props.values) {
+            if (deepEqual(props.values, initialValuesRef.current)) {
+                isDirtyRef.current = false;
+            }
+        }
+    }, [props.values]);
 
     // Client script hook
     const { execute } = useUIScript(props.doctype || '', {

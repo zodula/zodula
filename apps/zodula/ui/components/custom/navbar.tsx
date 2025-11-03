@@ -46,7 +46,44 @@ export const Navbar = ({ children }: NavbarProps) => {
         order: "asc"
     })
 
-    // Combine and format results with translation support
+    // Function to calculate relevance score for sorting
+    const calculateRelevance = (option: SelectOption, searchTerm: string): number => {
+        if (!searchTerm) return 0
+        
+        const searchLower = searchTerm.toLowerCase()
+        const labelLower = option.label.toLowerCase()
+        const valueLower = option.value.toLowerCase()
+        const subtitleLower = option.subtitle?.toLowerCase() || ""
+        
+        // Exact match gets highest score
+        if (labelLower === searchLower || valueLower === searchLower) {
+            return 1000
+        }
+        
+        // Starts with gets high score
+        if (labelLower.startsWith(searchLower) || valueLower.startsWith(searchLower)) {
+            return 500
+        }
+        
+        // Contains in label gets medium score
+        if (labelLower.includes(searchLower)) {
+            return 100
+        }
+        
+        // Contains in value gets lower score
+        if (valueLower.includes(searchLower)) {
+            return 50
+        }
+        
+        // Contains in subtitle gets lowest score
+        if (subtitleLower.includes(searchLower)) {
+            return 25
+        }
+        
+        return 0
+    }
+
+    // Combine and format results with translation support, sorted by relevance
     const options = useMemo(() => {
         const combinedOptions: SelectOption[] = []
 
@@ -71,8 +108,24 @@ export const Navbar = ({ children }: NavbarProps) => {
             })
         })
 
+        // Sort by relevance if searchTerm exists, otherwise keep original order
+        if (searchTerm) {
+            combinedOptions.sort((a, b) => {
+                const scoreA = calculateRelevance(a, searchTerm)
+                const scoreB = calculateRelevance(b, searchTerm)
+                
+                // Higher score first (descending)
+                if (scoreB !== scoreA) {
+                    return scoreB - scoreA
+                }
+                
+                // If scores are equal, maintain alphabetical order
+                return a.label.localeCompare(b.label)
+            })
+        }
+
         return combinedOptions
-    }, [doctypeResults.docs, pageResults.docs, t])
+    }, [doctypeResults.docs, pageResults.docs, t, searchTerm])
 
     const handleLogout = async () => {
         const con = await confirm({
