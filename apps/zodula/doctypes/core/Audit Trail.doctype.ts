@@ -61,7 +61,7 @@ export default $doctype<"zodula__Audit Trail">(
   }
 ).on("before_insert", async ({ doc }) => {
   const doctype = await $zodula.doctype("zodula__Doctype").get(doc.doctype);
-  if (doctype.comments_enabled && doc.action === "Comment") {
+  if (!doctype.comments_enabled && doc.action === "Comment") {
     throw new Error("Comments are not enabled for this doctype");
   }
 });

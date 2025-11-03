@@ -36,7 +36,7 @@ export default function Page() {
                         <Zap className="zd:w-6! zd:h-6! zd:text-primary-foreground" />
                     </div>
                     <h1 className="zd:text-4xl zd:font-bold zd:text-foreground">
-                        <span className="zd:text-primary">Zodula</span> Framework
+                        <span className="zd:text-4xl zd:text-primary">Zodula</span> Framework
                     </h1>
                 </div>
 

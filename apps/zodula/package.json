@@ -16,10 +16,7 @@
   "idx": 0,
   "nailgun": {
     "commands": [
-      "./commands/build",
-      "./commands/prepare",
       "./commands/migrate",
-      "./commands/generate",
       "./commands/dev",
       "./commands/admin",
       "./commands/backup",

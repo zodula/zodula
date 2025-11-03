@@ -61,7 +61,6 @@ export const TextInputPlugin = new FormPlugin(["Text", "Password", "Integer", "F
             type={type}
             value={props.value || ""}
             onChange={(e) => props.onChange?.(e.target.value)}
-            className="zd:flex-1"
         />
     );
 });

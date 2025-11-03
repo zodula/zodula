@@ -67,7 +67,6 @@ const KEYBOARD_SHORTCUTS = {
   PRINT: "ctrl+p",
   NEW: "ctrl+n",
   LIST: "ctrl+l",
-  BACK: "escape",
   RESET: "ctrl+shift+r",
   HELP: "f1",
 } as const;
@@ -586,11 +585,6 @@ export function DocFormView({
   );
   useCmd(
     KEYBOARD_SHORTCUTS.LIST,
-    () => push(`/desk/doctypes/${doctype}/list`),
-    { disabled: isSystemGenerated }
-  );
-  useCmd(
-    KEYBOARD_SHORTCUTS.BACK,
     () => push(`/desk/doctypes/${doctype}/list`),
     { disabled: isSystemGenerated }
   );

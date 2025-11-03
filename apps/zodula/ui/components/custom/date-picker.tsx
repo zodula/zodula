@@ -612,7 +612,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
                 }
             }}>
                 <PopoverTrigger asChild>
-                    <div className="zd:relative">
+                    <div className="zd:relative zd:flex-1">
                         <div onBlur={handleInputBlur}>
                             <Input
                                 ref={inputRef}
@@ -620,7 +620,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
                                 onChange={handleInputChange}
                                 placeholder={placeholder}
                                 readOnly={readOnly}
-                                className="zd:pr-10 zd:w-full"
+                                className="zd:pr-10"
                                 disabled={disabled}
                             />
                         </div>
