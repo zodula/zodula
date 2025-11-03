@@ -181,6 +181,78 @@ export class ZodulaDoctypeHelper {
                 }
             }
         }
+
+        // Recursive check for Extend fields - check all Extend fields regardless of user permission matching
+        for (const [fieldName, field] of Object.entries(fields)) {
+            if (field.type === "Extend" && field.reference) {
+                const extendValue = data[fieldName as keyof Zodula.SelectDoctype<DN>]
+                if (extendValue && typeof extendValue === "object" && !Array.isArray(extendValue)) {
+                    try {
+                        const referencedDoctype = loader.from("doctype").get(field.reference as Zodula.DoctypeName)
+                        if (referencedDoctype && referencedDoctype.schema) {
+                            const nestedPermission = ZodulaDoctypeHelper.canUserPermission(
+                                field.reference as Zodula.DoctypeName,
+                                extendValue as any,
+                                {
+                                    requireUserPermission: referencedDoctype.config?.require_user_permission === 1,
+                                    fields: referencedDoctype.schema.fields as Record<string, Zodula.Field>,
+                                    bypass: bypass,
+                                    userPermissions: userPermissions,
+                                    isSystemAdmin: isSystemAdmin
+                                }
+                            )
+                            if (!nestedPermission) {
+                                fieldChecks.push(false)
+                            } else {
+                                fieldChecks.push(true)
+                            }
+                        }
+                    } catch (error) {
+                        // If we can't load the doctype, fail the check
+                        fieldChecks.push(false)
+                    }
+                }
+            }
+        }
+
+        // Recursive check for Reference Table fields - check all Reference Table fields regardless of user permission matching
+        for (const [fieldName, field] of Object.entries(fields)) {
+            if (field.type === "Reference Table" && field.reference) {
+                const refTableValue = data[fieldName as keyof Zodula.SelectDoctype<DN>]
+                if (refTableValue && Array.isArray(refTableValue)) {
+                    try {
+                        const referencedDoctype = loader.from("doctype").get(field.reference as Zodula.DoctypeName)
+                        if (referencedDoctype && referencedDoctype.schema) {
+                            const nestedChecks = refTableValue.map((item: any) => {
+                                if (item && typeof item === "object") {
+                                    return ZodulaDoctypeHelper.canUserPermission(
+                                        field.reference as Zodula.DoctypeName,
+                                        item,
+                                        {
+                                            requireUserPermission: referencedDoctype.config?.require_user_permission === 1,
+                                            fields: referencedDoctype.schema.fields as Record<string, Zodula.Field>,
+                                            bypass: bypass,
+                                            userPermissions: userPermissions,
+                                            isSystemAdmin: isSystemAdmin
+                                        }
+                                    )
+                                }
+                                return true
+                            })
+                            // All items in the array must pass permission check
+                            if (!nestedChecks.every((check) => check)) {
+                                fieldChecks.push(false)
+                            } else {
+                                fieldChecks.push(true)
+                            }
+                        }
+                    } catch (error) {
+                        // If we can't load the doctype, fail the check
+                        fieldChecks.push(false)
+                    }
+                }
+            }
+        }
         let fieldCheck = fieldChecks.every((check) => check)
         if (fieldChecks.filter((check) => check).length === 0) {
             if (requireUserPermission) {
