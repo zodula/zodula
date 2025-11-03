@@ -1,5 +1,5 @@
 /// <reference path="./doctype.d.ts" />
-import prepareScript from "@/zodula/scripts/prepare";
+import prepareScript from "@/zodula/server/prepare";
 import { loader } from "@/zodula/server/loader";
 import { migrationHandler } from "@/zodula/server/handler/migration";
 import { zodula } from "@/zodula/server/zodula";

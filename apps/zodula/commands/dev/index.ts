@@ -1,7 +1,7 @@
 import { Command } from "nailgun";
 import { watch } from "fs";
 import path from "path";
-import { prepareApp, prepareTsxPage } from "@/zodula/scripts/prepare/tsxPage";
+import { prepareApp, prepareTsxPage } from "@/zodula/server/prepare/tsxPage";
 
 let proc: Bun.Subprocess | null = null
 let debounceTimer: NodeJS.Timeout | null = null

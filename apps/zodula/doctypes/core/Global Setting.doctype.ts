@@ -1,4 +1,4 @@
-import { prepareIndexHtml, prepareTsxPage } from "@/zodula/scripts/prepare/tsxPage"
+import { prepareIndexHtml, prepareTsxPage } from "@/zodula/server/prepare/tsxPage"
 
 export default $doctype({
     website_name: {
