@@ -243,7 +243,8 @@ export class ZodulaDoctypeUpdate<
     // Prevent changing doc_status through update - use submit/cancel methods instead
     if (
       this.input.doc_status !== undefined &&
-      this.input.doc_status !== old.doc_status
+      this.input.doc_status !== old.doc_status &&
+      !this.options.override
     ) {
       throw new ErrorWithCode(
         `Cannot change doc_status through update API. Use submit() or cancel() methods instead.`,

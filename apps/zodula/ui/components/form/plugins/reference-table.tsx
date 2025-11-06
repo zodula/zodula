@@ -336,7 +336,7 @@ export const ReferenceTablePlugin = new FormPlugin(["Reference Table"], (props) 
                                     </span>
                                 </th>
                             ))}
-                            <th className="zd:px-2 zd:py-2 zd:font-medium zd:text-right zd:w-20  no-print">{t("Actions")}</th>
+                            <th className="zd:px-2 zd:py-2 zd:font-medium zd:text-right zd:w-20  no-print"></th>
                         </tr>
                     </thead>
                     <tbody>

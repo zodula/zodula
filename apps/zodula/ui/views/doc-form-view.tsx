@@ -466,7 +466,7 @@ export function DocFormView({
   const isMac =
     typeof navigator !== "undefined" &&
     navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-  const modifierKey = isMac ? "Cmd" : "Ctrl";
+  const modifierKey = isMac ? "Ctrl" : "Ctrl";
 
   // ===== SIDEBAR CONTENT =====
   const sidebarContent = (
@@ -548,7 +548,7 @@ export function DocFormView({
     { keys: `${modifierKey} + N`, description: "New" },
     { keys: `${modifierKey} + L`, description: "List" },
     { keys: "Escape", description: "Back to List" },
-    { keys: `${modifierKey} + Shift + R`, description: "Reset" },
+    // { keys: `${modifierKey} + Shift + R`, description: "Reset" },
   ];
 
   useCmd(
@@ -588,7 +588,7 @@ export function DocFormView({
     () => push(`/desk/doctypes/${doctype}/list`),
     { disabled: isSystemGenerated }
   );
-  useCmd(KEYBOARD_SHORTCUTS.RESET, reset, { disabled: isSystemGenerated });
+  //   useCmd(KEYBOARD_SHORTCUTS.RESET, reset, { disabled: isSystemGenerated });
   useCmd(
     KEYBOARD_SHORTCUTS.HELP,
     async () => {
@@ -639,7 +639,7 @@ export function DocFormView({
       return (
         <Button onClick={handleSave} className="zd:h-8" disabled={!isDirty}>
           <SaveIcon />
-          {t("Save")}
+          {t("Save")}{" "}
         </Button>
       );
     }

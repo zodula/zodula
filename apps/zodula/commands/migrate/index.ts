@@ -1,16 +1,15 @@
 import { Command } from "nailgun";
 import { applyMigrations } from "@/zodula/commands/migrate/apply-migration";
+import { applyPredefine } from "@/zodula/commands/migrate/apply-predefine";
+import { applyTranslation } from "@/zodula/commands/migrate/apply-translation";
 import { startup } from "@/zodula/server/startup";
 import { SyncMigrator } from "@/zodula/server/migrator/migrator.sync";
-import { applyFixtures } from "./apply-fixtures";
 import {
   Database,
   DatabaseHelper,
   type DatabaseSchemaName,
 } from "@/zodula/server/database/database";
 import { dbcontext } from "@/zodula/server/async-context";
-import { applyPredefine } from "./apply-predefine";
-import { applyTranslation } from "./apply-translation";
 import { logger } from "@/zodula/server/logger";
 import path from "path";
 
@@ -26,12 +25,14 @@ export const doMigrate = async (
   const orphanedElements = await migrator.detectOrphanedElements(schema);
   migrator.logOrphanedWarnings(orphanedElements);
 
-  // Apply migrations in transaction
+  // Apply migrations, predefine, and translations in transaction
   await db.transaction(async (trx) => {
     dbcontext.enterWith({
       trx: trx,
     });
     await applyMigrations(schema);
+    await applyPredefine();
+    await applyTranslation();
   });
 
   // Sync database schema - outside transaction
@@ -46,16 +47,6 @@ export const doMigrate = async (
   );
   await migrator.apply(schema, diff, applyDestructive);
   logger.success("Applied schema sync");
-
-  // Apply fixtures, predefine, and translations in separate transaction
-  await db.transaction(async (trx) => {
-    dbcontext.enterWith({
-      trx: trx,
-    });
-    await applyFixtures();
-    await applyPredefine();
-    await applyTranslation();
-  });
 
   // DatabaseHelper.delete("__temp__apply_migration")
 };

@@ -65,6 +65,11 @@ export default $doctype(
       description:
         "The tabs of the doctype. The tabs are defined as an array of objects with the following properties: name, label, layout. The layout is an array of objects with the following properties: type, value, align. The type is the type of the field and the value is the value of the field. The align is the alignment of the field. The alignment can be left, right, center or justify.",
     },
+
+    only_fixtures: {
+      type: "Check",
+      label: "Only Fixtures",
+    },
   },
   {
     label: "Doctype",

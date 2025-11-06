@@ -26,6 +26,7 @@
       "./commands/start",
       "./commands/add",
       "./commands/remove",
+      "./commands/seed",
       "./commands/pull"
     ]
   },
@@ -33,6 +34,7 @@
     "@types/nunjucks": "^3.2.6",
     "@types/signale": "^1.4.7",
     "axios": "^1.11.0",
+    "binba": "^0.0.6",
     "bun-plugin-tailwind": "^0.0.15",
     "bunely": "^0.0.6",
     "bunmq": "^0.0.3-dev.2",
@@ -44,7 +46,6 @@
     "ioredis": "^5.8.1",
     "json-schema-to-typescript": "^15.0.4",
     "nailgun": "^1.0.22",
-    "nunjucks": "^3.2.4",
     "prettier": "^3.6.2",
     "puppeteer": "^24.25.0",
     "sharp": "^0.34.4",

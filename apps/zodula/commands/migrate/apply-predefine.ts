@@ -35,13 +35,12 @@ async function getAppVersion(appName: string): Promise<string> {
     const app = loader.from("app").get(appName);
     const appDir = path.resolve(app.dir);
 
-    const branch = (
-      await $.cwd(appDir)`git branch --show-current`.quiet()
+    const commitDateTime = (
+      await $.cwd(
+        appDir
+      )`git log -1 --format=%cd --date=format:'%Y-%m-%d-%H%M%S' HEAD`.quiet()
     ).text();
-    const commitHash = (await $.cwd(appDir)`git rev-parse HEAD`.quiet())
-      .text()
-      ?.slice(0, 7);
-    return `${branch} | ${commitHash}`;
+    return commitDateTime || "local";
   } catch (error) {
     return "local";
   }
@@ -438,6 +437,7 @@ async function upsertDoctype(
       idx,
       vector: "[]",
       comments_enabled: doctype.config.comments_enabled ? 1 : 0,
+      only_fixtures: doctype.config.only_fixtures ? 1 : 0,
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype">>;
 

@@ -1,9 +1,0 @@
-[
-  {
-    "id": "Default Letter Head",
-    "name": "Default Letter Head",
-    "content": "<div style=\"text-align: center; margin-bottom: 20px;\"><h2>{{company_name || 'Company Name'}}</h2><p>{{company_address || 'Company Address'}}</p></div>",
-    "is_default": 1,
-    "disabled": 0
-  }
-]
