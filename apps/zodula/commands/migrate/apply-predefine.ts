@@ -438,6 +438,7 @@ async function upsertDoctype(
       vector: "[]",
       comments_enabled: doctype.config.comments_enabled ? 1 : 0,
       only_fixtures: doctype.config.only_fixtures ? 1 : 0,
+      is_child_doctype: doctype.config.is_child_doctype ? 1 : 0,
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype">>;
 

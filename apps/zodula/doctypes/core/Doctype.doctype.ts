@@ -70,6 +70,10 @@ export default $doctype(
       type: "Check",
       label: "Only Fixtures",
     },
+    is_child_doctype: {
+      type: "Check",
+      label: "Is Child Doctype",
+    },
   },
   {
     label: "Doctype",

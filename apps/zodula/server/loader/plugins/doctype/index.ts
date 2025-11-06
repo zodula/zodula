@@ -509,6 +509,16 @@ export class DoctypeLoader implements DoctypePlugin {
         this.processDoctypeEvents(doctypeWithConfig, doctypeName);
         const fields = this.processDoctypeFields(doctypeWithConfig, standardFields, doctypeName, relatives);
 
+        // Check if any field has reference_type of "One to One" or "One to Many"
+        const hasChildDoctypeField = Object.values(fields).some(field => {
+            const referenceType = (field as any)?.reference_type;
+            return referenceType === "One to One" || referenceType === "One to Many";
+        });
+
+        if (hasChildDoctypeField) {
+            config.is_child_doctype = 1;
+        }
+
         const doctypeMetadata: DoctypeMetadata = {
             name: doctypeName,
             dir: path.resolve(doctypePath),
