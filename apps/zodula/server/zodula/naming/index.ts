@@ -43,13 +43,36 @@ export async function naming<TN extends Zodula.DoctypeName>(
     // count #
     for (const runingNumberSqure of id.match(runingNumberSqureRegex) || []) {
       const whereId = id.replaceAll(runingNumberSqure, "%");
-      const countQuery = `SELECT COUNT(*) as count FROM "${doctypeMetadata?.name}" WHERE id LIKE '${whereId}'`;
-      const countResult = (await db.get(countQuery)) as { count: number };
-      const count = countResult.count + 1;
+      
+      // Instead of counting, find the maximum number used to handle gaps from deletions
+      const existingIdsQuery = `SELECT id FROM "${doctypeMetadata?.name}" WHERE id LIKE '${whereId}'`;
+      const existingIds = (await db.all(existingIdsQuery)) as { id: string }[];
+      
+      let maxNumber = 0;
+      const numberLength = runingNumberSqure.length - 2; // -2 for { and }
+      const patternIndex = whereId.indexOf("%");
+      
+      // Extract the numeric part from each existing ID
+      for (const row of existingIds) {
+        if (patternIndex !== -1 && row.id.length >= patternIndex + numberLength) {
+          // Extract the numeric part at the position where {#####} appears
+          const numericPart = row.id.substring(
+            patternIndex,
+            patternIndex + numberLength
+          );
+          const number = parseInt(numericPart, 10);
+          if (!isNaN(number) && number > maxNumber) {
+            maxNumber = number;
+          }
+        }
+      }
+      
+      // Next number is max + 1, or 1 if no documents exist
+      const nextNumber = maxNumber + 1;
 
-      const squareCount = count
+      const squareCount = nextNumber
         .toString()
-        .padStart(runingNumberSqure.length, "0");
+        .padStart(numberLength, "0");
       id = id.replace(runingNumberSqure, squareCount);
     }
     return id;

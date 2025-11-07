@@ -63,7 +63,7 @@ const LanguageSelectionDialog = ({
     }
 
     return (
-        <div className="zd:flex zd:flex-col zd:h-full zd:gap-4">
+        <div className="zd:flex zd:flex-col zd:h-full zd:gap-4 zd:w-[90vw] zd:max-w-md">
             {/* Search Input */}
             <div className="zd:flex-shrink-0">
                 <Input

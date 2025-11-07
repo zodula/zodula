@@ -637,14 +637,14 @@ const Select = ({
                         <div className="zd:flex zd:flex-col zd:flex-1">
                           <div
                             className={cn(
-                              "zd:font-medium zd:flex zd:items-center zd:gap-2",
+                              "zd:text-sm zd:font-medium zd:flex zd:items-center zd:gap-2",
                               isSelected ? "zd:text-primary" : ""
                             )}
                           >
                             {option.label}
                           </div>
                           {option.subtitle && (
-                            <div className="zd:text-muted-foreground zd:mt-0.5">
+                            <div className="zd:text-xs zd:text-muted-foreground zd:mt-0.5">
                               {option.subtitle}
                             </div>
                           )}
