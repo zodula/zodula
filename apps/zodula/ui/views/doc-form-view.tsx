@@ -273,7 +273,7 @@ export function DocFormView({
   };
 
   const handlePrint = async () => {
-    if (!id) return;
+    if (!id && doctypeDoc?.is_single !== 1) return;
 
     try {
       const result = await popup(
@@ -284,7 +284,7 @@ export function DocFormView({
         },
         {
           doctype: doctype as Zodula.DoctypeName,
-          docIds: [id],
+          docIds: [id || doctype],
         }
       );
     } catch (error) {

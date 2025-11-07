@@ -92,12 +92,14 @@ export default $action(
     let doctypeFields: Record<string, Zodula.Field> = {};
     let doctypeMetadata: any = null;
     let doctypeLabel: string = doctypeName;
+    let isSingle: boolean = false;
     try {
       doctypeMetadata = loader
         .from("doctype")
         .get(doctypeName as Zodula.DoctypeName);
       doctypeFields = doctypeMetadata.schema.fields;
       doctypeLabel = doctypeMetadata.schema.label || doctypeName;
+      isSingle = doctypeMetadata.schema.is_single === 1 || doctypeMetadata.schema.is_single === true;
     } catch (error) {
       console.warn(
         `Could not fetch field configuration for doctype ${doctypeName}:`,
@@ -194,7 +196,8 @@ export default $action(
         combinedCss,
         db,
         lang,
-        defaultCurrency
+        defaultCurrency,
+        isSingle
       );
     } else {
       // No template provided - generate default layout from doctype tabs or fields
@@ -208,7 +211,8 @@ export default $action(
         combinedCss,
         db,
         lang,
-        defaultCurrency
+        defaultCurrency,
+        isSingle
       );
     }
 
@@ -272,6 +276,7 @@ export default $action(
           letter_head_css: letterHeadCss,
           page_title: pageTitle,
           doctype_label: doctypeLabel,
+          is_single: isSingle,
         });
         renderedDocs.push(rendered);
       } catch (error) {
@@ -350,7 +355,8 @@ function convertLayoutToTemplate(
   customCSS: string = "",
   db?: any,
   lang?: string,
-  defaultCurrency?: string
+  defaultCurrency?: string,
+  isSingle: boolean = false
 ): string {
   try {
     const layout = JSON.parse(layoutJson);
@@ -360,7 +366,8 @@ function convertLayoutToTemplate(
       customCSS,
       db,
       lang,
-      defaultCurrency
+      defaultCurrency,
+      isSingle
     );
   } catch (error) {
     console.error("Error parsing layout JSON:", error);
@@ -374,7 +381,8 @@ function generateTemplateRecursive(
   customCSS: string = "",
   db?: any,
   lang?: string,
-  defaultCurrency?: string
+  defaultCurrency?: string,
+  isSingle: boolean = false
 ): string {
   let html = `
 <!DOCTYPE html>
@@ -673,7 +681,9 @@ function generateTemplateRecursive(
     {% endif %}
     <div class="document-header">
         <h1>{{ doctype_label }}</h1>
+        {% if not is_single %}
         <p>{{ doc.id }}</p>
+        {% endif %}
     </div>
 </div>
 `;
