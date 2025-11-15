@@ -18,7 +18,9 @@ export const TextInputPlugin = new FormPlugin(["Text", "Password", "Integer", "F
         }
     }, [props.fieldOptions.type]);
 
-    const inputValue = typeof props.value === 'string' ? props.value : props.value;
+    // Normalize value to always be a string to prevent cursor jumping
+    // When value is undefined/null, use empty string to match onChange behavior
+    const inputValue = props.value ?? "";
 
     return (
         <Input
@@ -27,8 +29,8 @@ export const TextInputPlugin = new FormPlugin(["Text", "Password", "Integer", "F
             value={inputValue}
             readOnly={props.readonly}
             onChange={(e) => {
-                const value = e.target.value
-                props.onChange?.(value || "");
+                const value = e.target.value;
+                props.onChange?.(value);
             }}
         />
     );

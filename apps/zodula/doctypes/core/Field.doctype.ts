@@ -141,6 +141,20 @@ export default $doctype({
     },
     readonly_on: {
         type: "Code"
+    },
+
+    // Fetch Section
+    fetch_from: {
+        type: "Virtual Reference",
+        reference: "zodula__Doctype",
+    },
+    fetch_field: {
+        type: "Text",
+    },
+
+    width: {
+        type: "Integer",
+        label: "Width"
     }
 
 }, {

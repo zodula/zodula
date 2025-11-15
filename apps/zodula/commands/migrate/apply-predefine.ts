@@ -129,6 +129,9 @@ async function upsertFieldsBatch(
       currency_symbol: fieldSchema.currency_symbol || null,
       hidden: fieldSchema.hidden ? 1 : 0,
       only_db: fieldSchema.only_db ? 1 : 0,
+      width: fieldSchema.width || null,
+      fetch_from: fieldSchema.fetch_from || null,
+      fetch_field: fieldSchema.fetch_field || null,
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Field">>;
 
