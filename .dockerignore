@@ -1,0 +1,61 @@
+# Dependencies
+node_modules
+apps/*/node_modules
+
+# Build outputs
+out
+dist
+*.tgz
+
+# Zodula data (should be mounted as volumes)
+.zodula_data
+.zodula_backup
+.zodula
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+!README.md
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage
+*.lcov
+.nyc_output
+
+# Cache
+.cache
+.eslintcache
+*.tsbuildinfo
+
+# Temporary files
+tmp
+temp
+*.tmp
+
