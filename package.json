@@ -1,6 +1,8 @@
 {
   "name": "zodula-monorepo",
-  "scripts": {},
+  "scripts": {
+    "dev": "nailgun dev"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5"
