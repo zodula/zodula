@@ -1,0 +1,27 @@
+[
+  {
+    "id": "Desk User",
+    "name": "Desk User",
+    "description": "User who can access Desk UI"
+  },
+  {
+    "id": "Anonymous",
+    "name": "Anonymous",
+    "description": "The person who is not logged in"
+  },
+  {
+    "id": "Authenticated",
+    "name": "Authenticated",
+    "description": "The person who is logged in"
+  },
+  {
+    "id": "OpenAPI User",
+    "name": "OpenAPI User",
+    "description": "The person who can access the OpenAPI docs"
+  },
+  {
+    "id": "System Admin",
+    "name": "System Admin",
+    "description": "The person who has all the permissions"
+  }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "id": "0199819b-1964-7000-98e2-0a1a6e4a540d",
+    "name": "Settings",
+    "idx": 0,
+    "workspace_parent": null,
+    "icon": "Settings",
+    "app": "zodula",
+    "owner": "01998197-48d4-7000-907d-e53f2027c059",
+    "created_at": "2025-09-25 23:00:49",
+    "updated_at": "2025-09-25 23:00:49",
+    "created_by": null,
+    "updated_by": null,
+    "doc_status": 0
+  }
+]

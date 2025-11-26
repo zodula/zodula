@@ -1,0 +1,55 @@
+{
+  "name": "zodula",
+  "module": "server/index.ts",
+  "entry": "server/index.ts",
+  "type": "module",
+  "exports": {
+    "./ui": "./ui/index.tsx",
+    ".": "./client/index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "idx": 0,
+  "nailgun": {
+    "commands": [
+      "./commands/migrate",
+      "./commands/dev",
+      "./commands/admin",
+      "./commands/backup",
+      "./commands/restore",
+      "./commands/scaffold",
+      "./commands/start",
+      "./commands/add",
+      "./commands/remove",
+      "./commands/seed",
+      "./commands/pull"
+    ]
+  },
+  "dependencies": {
+    "@types/nunjucks": "^3.2.6",
+    "@types/signale": "^1.4.7",
+    "axios": "^1.11.0",
+    "binba": "^0.0.6",
+    "bun-plugin-tailwind": "^0.0.15",
+    "bunely": "^0.0.6",
+    "bunmq": "^0.0.3-dev.2",
+    "bunql": "link:bunql",
+    "bxo": "^0.0.10-dev.9",
+    "csv-writer": "^1.6.0",
+    "date-fns": "^4.1.0",
+    "inquirer": "^12.9.4",
+    "ioredis": "^5.8.1",
+    "json-schema-to-typescript": "^15.0.4",
+    "nailgun": "^1.0.22",
+    "prettier": "^3.6.2",
+    "puppeteer": "^24.25.0",
+    "sharp": "^0.34.4",
+    "signale": "^1.4.0",
+    "sqlite3": "^5.1.7",
+    "zod-openapi": "^5.4.0"
+  }
+}
