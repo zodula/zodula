@@ -20,5 +20,6 @@ export default $doctype({
         label: "IP Address"
     }
 }, {
-    label: "Session"
+    label: "Session",
+    is_global: 1,
 })

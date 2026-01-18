@@ -3,7 +3,10 @@ import { FormPlugin } from "../plugin";
 import { Select } from "../../ui/select";
 import { Input } from "../../ui/input";
 
-export const SelectPlugin = new FormPlugin(["Select"], (props) => {
+export const SelectPlugin = new FormPlugin({
+    types: ["Select"],
+    supportOperators: ["=", "!=", "IN", "NOT IN", "IS NULL", "IS NOT NULL"],
+    render: (props) => {
     const options = useMemo(() => {
         return props.fieldOptions.options?.split?.("\n").map((option: string) => ({
             label: option,
@@ -28,9 +31,11 @@ export const SelectPlugin = new FormPlugin(["Select"], (props) => {
             }}
         />
     );
-}, (props) => {
-    return <span className="zd:truncate zd:text-sm zd:bg-muted zd:rounded zd:px-2 zd:py-1">{String(props.value || "-")}</span>;
-}, (props) => {
+    },
+    cellRender: (props) => {
+        return <span className="zd:truncate zd:text-sm zd:bg-muted zd:rounded zd:px-2 zd:py-1">{String(props.value || "-")}</span>;
+    },
+    renderFilter: (props) => {
     const options = useMemo(() => {
         return props.fieldOptions.options?.split?.("\n").map((option: string) => ({
             label: option,
@@ -67,4 +72,5 @@ export const SelectPlugin = new FormPlugin(["Select"], (props) => {
             className="flex-1"
         />
     );
+    }
 });

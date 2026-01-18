@@ -46,7 +46,27 @@ export class ZodulaDoctypeInsert<
     try {
       const db = Database("main");
       const user = await this.session.user(true);
+      const userRoles = await zodula.session.roles();
+      const organizationRoles = await this.session.organizationRoles(true);
+      const organizations = await this.session.organizations(true);
+      const organization = await this.session.organization(true);
       const doctype = loader.from("doctype").get(this.doctypeName);
+
+      if(!userRoles.includes("System Admin") && !organizations?.includes(organization)) {
+        throw new ErrorWithCode("You are not allowed to create this document", {
+          status: 403,
+        });
+      }
+      console.log(`inserting document ${this.doctypeName} in organization ${organization}`);
+      this.input.organization = organization || null;
+
+      if(doctype.config.is_global !== 1 && !organization && organization !== "system") {
+        throw new ErrorWithCode("You are not allowed to create this document in this organization", {
+          status: 403,
+        });
+      } else if(doctype.config.is_global !== 1 && organization === "system") {
+        this.input.organization = "system";
+      }
 
       // Validate readonly fields
       ZodulaDoctypeHelper.validateDoc(

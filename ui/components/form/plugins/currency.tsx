@@ -3,7 +3,10 @@ import { FormPlugin } from "../plugin";
 import { Input } from "../../ui/input";
 import { useDoc } from "@/zodula/ui/hooks/use-doc";
 
-export const CurrencyPlugin = new FormPlugin(["Currency"], (props) => {
+export const CurrencyPlugin = new FormPlugin({
+    types: ["Currency"],
+    supportOperators: ["=", "!=", ">", ">=", "<", "<=", "IS NULL", "IS NOT NULL"],
+    render: (props) => {
     const { doc: websiteSetting } = useDoc({
         doctype: "zodula__Global Setting",
         id: "zodula__Global Setting"
@@ -46,11 +49,8 @@ export const CurrencyPlugin = new FormPlugin(["Currency"], (props) => {
             }}
         />
     );
-}, (props) => {
-    const { doc: websiteSetting } = useDoc({
-        doctype: "zodula__Global Setting",
-        id: "zodula__Global Setting"
-    })
+    },
+    cellRender: (props) => {
     // Custom cell render for currency: show formatted currency
     if (props.value === null || props.value === undefined || props.value === "") {
         return <span className="zd:text-muted-foreground zd:italic">-</span>;
@@ -60,16 +60,10 @@ export const CurrencyPlugin = new FormPlugin(["Currency"], (props) => {
     if (isNaN(numValue)) {
         return <span className="zd:text-muted-foreground zd:italic">-</span>;
     }
+    return <>{numValue}</>
 
-    return (
-        <span className="zd:truncate">
-            {props?.fieldOptions?.currency_symbol || websiteSetting?.currency_symbol || "$"} {numValue.toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-            })}
-        </span>
-    );
-}, (props) => {
+    },
+    renderFilter: (props) => {
     const { doc: websiteSetting } = useDoc({
         doctype: "zodula__Global Setting",
         id: "zodula__Global Setting"
@@ -114,6 +108,7 @@ export const CurrencyPlugin = new FormPlugin(["Currency"], (props) => {
             className="zd:flex-1"
         />
     );
+    }
 });
 
 function getPlaceholder(operator?: string): string {

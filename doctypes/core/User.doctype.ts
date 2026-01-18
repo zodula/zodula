@@ -21,7 +21,8 @@ export default $doctype<"zodula__User">({
     },
 }, {
     label: "User",
-    search_fields: "email\nname\nid"
+    search_fields: "email\nname\nid",
+    is_global: 1,
 })
     .on("before_change", async ({ doc, old, input }) => {
         if (input?.password) {

@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, useParams } from "react-router";
 import { Select, type SelectOption } from "../ui/select";
 import { useEffect, useState, useMemo } from "react";
 import { zodula } from "@/zodula/client";
@@ -32,6 +32,7 @@ export const Navbar = ({ children }: NavbarProps) => {
   const { doc: zodula__WebsiteSetting } = useDoc({
     doctype: "zodula__Global Setting",
   });
+  const { org } = useParams();
   const [searchTerm, setSearchTerm] = useState<string>("");
   const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
@@ -106,7 +107,7 @@ export const Navbar = ({ children }: NavbarProps) => {
       const translatedLabel = t(doc.label || doc.name);
       combinedOptions.push({
         label: translatedLabel,
-        value: `/desk/doctypes/${doc.name}/list`,
+        value: `/desk/${org}/doctypes/${doc.name}/list`,
         icon: "BookIcon",
         subtitle: t(doc.app || ""),
       });
@@ -172,7 +173,7 @@ export const Navbar = ({ children }: NavbarProps) => {
         >
           <div className="zd:relative zd:group zd:flex zd:items-center zd:gap-2 zd:flex-1">
             <Link
-              to="/desk"
+              to={`/desk`}
               className={cn(
                 "zd:text-xl zd:font-bold zd:flex zd:items-center zd:gap-2  zd:w-10 zd:h-10"
               )}
@@ -192,7 +193,7 @@ export const Navbar = ({ children }: NavbarProps) => {
                 className={cn("zd:rounded")}
               />
             </Link>
-            <Breadcrumb showHome={false} className="zd:w-full zd:ml-2" />
+            <Breadcrumb showHome={true} className="zd:w-full zd:ml-2" />
           </div>
 
           <div className="zd:flex zd:gap-2 zd:items-center zd:justify-end zd:flex-1">

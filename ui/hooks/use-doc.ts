@@ -36,10 +36,12 @@ export function useDoc<DT extends Zodula.DoctypeName = Zodula.DoctypeName, TDoc 
 
     // Get cached data from store
     const cachedData = useMemo(() => {
-        if (!doctype) return null;
+        if (!doctype){
+            // set loading to false
+            return null
+        }
         return getDoc(doctype, effectiveId);
     }, [doctype, effectiveId, getDoc, deps]);
-
     const doc = cachedData?.data as TDoc | null;
     const loading = cachedData?.loading || false;
     const error = cachedData?.error || null;

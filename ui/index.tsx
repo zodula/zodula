@@ -19,6 +19,9 @@ export { useDoc, useDocList, useAction, useTranslation }
 export type { Metadata }
 export { useAuth } from "./hooks/use-auth";
 export { useForm }
+export { zui } from "./zui";
+export { useUIScript } from "./hooks/use-ui-script";
+export type { Form as FormType, UIScript, UIScriptEvent, UIScriptContext } from "./zui";
 // components
 export { ToastPortal } from "./components/ui/toast";
 export { toast } from "./components/ui/toast";

@@ -4,11 +4,13 @@ import { Form } from "../form";
 import { useDocList } from "../../../hooks/use-doc-list";
 import { useDoc } from "../../../hooks/use-doc";
 import { ClientFieldHelper } from "@/zodula/client/field";
-import { useUIScript } from "@/zodula/ui/hooks/use-ui-script";
+import { useUIScript } from "@/zodula/ui";
 import { useRouter } from "../../router";
 import { popup } from "../../ui/popit";
 
-export const ExtendPlugin = new FormPlugin(["Extend"], (props: {
+export const ExtendPlugin = new FormPlugin({
+    types: ["Extend"],
+    render: (props: {
     fieldOptions: Zodula.Field;
     value?: any;
     onChange?: (value: any) => void;
@@ -148,4 +150,5 @@ export const ExtendPlugin = new FormPlugin(["Extend"], (props: {
             />
         </div>
     );
+    }
 });

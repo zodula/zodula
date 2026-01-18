@@ -1,8 +1,10 @@
 import React from "react";
 import { Input } from "../ui/input";
+import type { IOperator } from "@/zodula/server/zodula/type";
 
 export class FormPlugin<FieldSupports extends string[] = string[]> {
     public types: FieldSupports = [] as unknown as FieldSupports;
+    public supportOperators?: IOperator[];
     public render: ({
         fieldOptions,
         model,
@@ -53,8 +55,8 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
         operator?: string;
     }) => React.ReactNode;
 
-    constructor(
-        types: FieldSupports,
+    constructor(ctx: {
+        types: FieldSupports;
         render: ({
             fieldOptions,
             model,
@@ -65,7 +67,8 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
             multiple,
             fieldKey,
             formData,
-            docId
+            docId,
+            fieldPath
         }: {
             fieldOptions: Zodula.Field;
             model?: any;
@@ -77,7 +80,8 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
             fieldKey?: string;
             formData?: any;
             docId: string;
-        }) => React.ReactNode,
+            fieldPath?: string;
+        }) => React.ReactNode;
         cellRender?: ({
             fieldOptions,
             value,
@@ -88,7 +92,7 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
             value?: any;
             doc?: any;
             docId?: string;
-        }) => React.ReactNode,
+        }) => React.ReactNode;
         renderFilter?: ({
             fieldOptions,
             value,
@@ -99,15 +103,17 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
             value?: any;
             onChange?: (value: any) => void;
             operator?: string;
-        }) => React.ReactNode
-    ) {
-        this.types = types;
-        this.render = render.bind(this);
-        this.cellRender = cellRender || (({ value }) => {
+        }) => React.ReactNode;
+        supportOperators?: IOperator[];
+    }) {
+        this.types = ctx.types;
+        this.supportOperators = ctx.supportOperators;
+        this.render = ctx.render.bind(this);
+        this.cellRender = ctx.cellRender || (({ value }) => {
             // Default cell render: show string value or dash if empty
             return value != null ? String(value) : <span className="zd:text-muted-foreground zd:italic">-</span>;
         });
-        this.renderFilter = renderFilter || (({ value, onChange, operator }) => {
+        this.renderFilter = ctx.renderFilter || (({ value, onChange, operator }) => {
             // Default filter render: simple input for most field types
             if (["IS NULL", "IS NOT NULL"].includes(operator || "")) {
                 return null; // No input needed for null checks
@@ -117,7 +123,7 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
                     type="text"
                     value={value || ""}
                     onChange={(e) => onChange?.(e.target.value)}
-                    placeholder="Enter value"
+                    placeholder="Enter Value"
                 />
             );
         });

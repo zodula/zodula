@@ -6,6 +6,7 @@ import { ListTable, type ListColumn } from "./ListTable";
 import { Button } from "../ui/button";
 import { Select } from "../ui/select";
 import { useRouter } from "../router";
+import { useParams } from "react-router";
 import { popup } from "../ui/popit";
 import { ColumnSettingsDialog } from "../dialogs/column-settings-dialog";
 import { zodula } from "@/zodula/client";
@@ -17,6 +18,7 @@ import type {
 import { ClientFieldHelper } from "@/zodula/client/field";
 import { plugins } from "../form/plugins";
 import { useTranslation } from "../../hooks/use-translation";
+import { useColumnSettings } from "../../hooks/use-column-settings";
 
 interface ListViewProps {
   doctype: string;
@@ -69,6 +71,7 @@ export function ListView({
   setSelected,
   hideDocStatus = false,
 }: ListViewProps) {
+  const { org } = useParams();
   const { push } = useRouter();
   const { t } = useTranslation();
   // Get doctype schema to determine columns
@@ -80,8 +83,6 @@ export function ListView({
   const [hasActiveFilter, setHasActiveFilter] = useState(false);
   const [searchInput, setSearchInput] = useState(searchQuery);
   const [filterPopupOpen, setFilterPopupOpen] = useState(false);
-  const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
-  const [hasCustomColumns, setHasCustomColumns] = useState(false);
 
   // Update search input when searchQuery prop changes
   useEffect(() => {
@@ -196,36 +197,35 @@ export function ListView({
     return defaultCols;
   }, [doctypeDoc, fields, allAvailableColumns]);
 
-  // Load column settings from localStorage
-  useEffect(() => {
-    const storageKey = `column-settings-${doctype}`;
-    const savedSettings = localStorage.getItem(storageKey);
+  // Use shared column settings hook with validation
+  const columnSettings = useColumnSettings(
+    doctype,
+    defaultColumns,
+    allAvailableColumns
+  );
+  const {
+    visibleColumns,
+    hasCustomColumns,
+    setVisibleColumns,
+    setHasCustomColumns,
+    resetVisibleColumns,
+  } = columnSettings;
 
-    if (savedSettings) {
-      try {
-        const parsed = JSON.parse(savedSettings);
-        setVisibleColumns(parsed.visibleColumns || defaultColumns);
-        setHasCustomColumns(true);
-      } catch (error) {
-        console.error("Error parsing column settings:", error);
-        setVisibleColumns(defaultColumns);
-        setHasCustomColumns(false);
-      }
-    } else {
-      setVisibleColumns(defaultColumns);
-      setHasCustomColumns(false);
+  // Filter columns based on visible columns and preserve order from visibleColumns
+  const derivedColumns: string[] = useMemo(() => {
+    // Ensure visibleColumns is not empty - use defaultColumns as fallback
+    const columnsToUse =
+      visibleColumns && visibleColumns.length > 0
+        ? visibleColumns
+        : defaultColumns;
+
+    if (!columnsToUse || columnsToUse.length === 0) {
+      return [];
     }
-  }, [doctype, defaultColumns]);
 
-  // Filter columns based on visible columns
-  const derivedColumns: ListColumn[] = useMemo(() => {
-    return allAvailableColumns
-      .filter((col) => visibleColumns.includes(col.key))
-      .map((col) => ({
-        ...col,
-        label: t(col.label || col.key || ""),
-      }));
-  }, [allAvailableColumns, visibleColumns, t]);
+    // Filter and sort according to columnsToUse order (preserve visibleColumns order)
+    return columnsToUse.map((colKey) => String(colKey));
+  }, [allAvailableColumns, visibleColumns, defaultColumns, t]);
 
   // Get available sort fields from columns - pass full field metadata for FilterPopup
   const sortFields = useMemo(() => {
@@ -266,7 +266,7 @@ export function ListView({
 
   const handleRowClick = (doc: any) => {
     // Navigate to the form page with the doc ID
-    push(`/desk/doctypes/${doctype}/form/${doc.id}`);
+    push(`/desk/${org}/doctypes/${doctype}/form/${doc.id}`);
   };
 
   const handleColumnSettings = async () => {
@@ -288,26 +288,21 @@ export function ListView({
       const storageKey = `column-settings-${doctype}`;
 
       if (result.resetToDefault) {
-        // Delete localStorage to return to system default behavior
-        localStorage.removeItem(storageKey);
-        setVisibleColumns(result.visibleColumns);
-        setHasCustomColumns(false);
+        resetVisibleColumns();
       } else {
-        // Save to localStorage
-        localStorage.setItem(
-          storageKey,
-          JSON.stringify({
-            visibleColumns: result.visibleColumns,
-            timestamp: Date.now(),
-          })
-        );
-
-        // Update state
         setVisibleColumns(result.visibleColumns);
         setHasCustomColumns(true);
       }
     }
   };
+  const _columns = useMemo(() => {
+    return allAvailableColumns
+      ?.filter((col) => derivedColumns.includes(String(col.key)))
+      .map((col) => ({
+        ...col,
+        label: t(col.label || col.key || ""),
+      }));
+  }, [allAvailableColumns, derivedColumns, t]);
 
   return (
     <div className="zd:flex zd:flex-col zd:gap-4 zd:pb-12">
@@ -342,7 +337,7 @@ export function ListView({
       ) : null}
 
       <ListTable
-        columns={derivedColumns}
+        columns={_columns ?? []}
         docs={docs}
         count={count}
         sort={sort ?? ""}

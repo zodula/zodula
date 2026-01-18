@@ -116,6 +116,10 @@ export const isStandardField = (name: string) => {
     return Object.keys(ClientFieldHelper.standardFields()).includes(name)
 }
 
+export const isNumericField = (field: Zodula.Field) => {
+    return ["Currency", "Float", "Integer"].includes(field.type)
+}
+
 // Utility functions that work on both client and server
 const genRanHex = (size: number) => [...Array(size)].map(() => Math.floor(Math.random() * 16).toString(16)).join('')
 

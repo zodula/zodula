@@ -39,5 +39,6 @@ export default $doctype<"zodula__User Permission">({
         description: "The user will be allowed to access the doctype for the given value."
     },
 }, {
-    label: "User Permission"
+    label: "User Permission",
+    is_global: 1,
 })

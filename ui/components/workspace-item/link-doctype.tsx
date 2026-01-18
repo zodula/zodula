@@ -1,4 +1,4 @@
-import { Link } from "react-router"
+import { Link, useParams } from "react-router"
 import { BaseWorkspaceItemPlugin } from "./base"
 import { BookIcon, Database, FileIcon } from "lucide-react"
 import { cn } from "../../lib/utils"
@@ -11,13 +11,14 @@ export const LinkDoctypePlugin = new BaseWorkspaceItemPlugin(
     "zd:w-[100%] zd:xl:w-[23.7%]",
     (props) => {
         const { t } = useTranslation()
+        const { org } = useParams();
         const { doc } = useDoc({
             doctype: "zodula__Doctype",
             id: props.value
         })
         return (
             <Link
-                to={`/desk/doctypes/${props.value}`}
+                to={`/desk/${org}/doctypes/${props.value}`}
                 className={cn(
                     "zd:w-full zd:h-full zd:flex zd:items-center zd:gap-2 zd:p-2 zd:pl-4",
                     !props.value ? "zd:italic zd:text-muted-foreground" : "",

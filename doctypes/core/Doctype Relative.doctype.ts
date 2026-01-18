@@ -32,5 +32,6 @@ export default $doctype({
         description: "The field to place the reference field after."
     })
 }, {
-    label: "Doctype Relative"
+    label: "Doctype Relative",
+    is_global: 1,
 })

@@ -74,11 +74,18 @@ export default $doctype(
       type: "Check",
       label: "Is Child Doctype",
     },
+
+    // Global
+    is_global: {
+      type: "Check",
+      label: "Is Global",
+    },
   },
   {
     label: "Doctype",
     is_system_generated: 1,
     display_field: "label",
     search_fields: "app\nname",
+    is_global: 1,
   }
 );

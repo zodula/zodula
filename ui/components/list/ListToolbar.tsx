@@ -53,7 +53,7 @@ export function ListToolbar({
 }: ListToolbarProps) {
     const { t } = useTranslation()
     return (
-        <div className="zd:flex zd:items-center zd:justify-between zd:gap-3">
+        <div className="zd:flex zd:items-center zd:justify-between zd:gap-3 zd:w-full">
             {/* Left side - ID search field */}
             <div className="zd:flex zd:items-center zd:gap-2">
                 <Input
@@ -85,10 +85,10 @@ export function ListToolbar({
 
                 {hasActiveFilter && (
                     <Button
-                        variant="destructive"
+                        variant="ghost"
                         onClick={onClearFilter}
                     >
-                        <FilterXIcon className="zd:w-4 zd:h-4" />
+                        <FilterXIcon className="zd:w-4 zd:h-4 zd:text-destructive" />
                     </Button>
                 )}
 

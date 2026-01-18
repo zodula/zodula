@@ -43,11 +43,13 @@ import {
 import { PrintTemplateDialog } from "../components/dialogs/print-template-dialog";
 import { useUserName } from "../hooks/use-user-name";
 import ErrorView from "./error-view";
+import { useParams } from "react-router";
 
 const UserLink = ({ userId, name }: { userId: string; name: string }) => {
+  const { org } = useParams();
   return (
     <Link
-      to={`/desk/doctypes/zodula__User/form/${userId}`}
+      to={`/desk/${org}/doctypes/zodula__User/form/${userId}`}
       className="zd:hover:text-primary zd:transition-colors zd:text-sm"
     >
       {name}
@@ -95,7 +97,7 @@ export function DocFormView({
   // ===== ROUTER & STATE =====
   const { push, replace, pathname, location } = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-
+  const { org } = useParams();
   // ===== AUTH & TRANSLATION =====
   const { roles } = useAuth();
   const { t } = useTranslation();
@@ -227,7 +229,9 @@ export function DocFormView({
           if (["Integer", "Float", "Check"].includes(field.type)) {
             defaultValues[field.name] = +field.default;
           } else {
-            defaultValues[field.name] = field.default;
+            defaultValues[field.name] = zodula.utils.getDefaultValue(
+              field as Zodula.Field
+            );
           }
         }
       });
@@ -267,7 +271,7 @@ export function DocFormView({
       }
     });
 
-    push(`/desk/doctypes/${doctype}/form`, {
+    push(`/desk/${org}/doctypes/${doctype}/form`, {
       state: { prefill: prefillData },
     });
   };
@@ -343,7 +347,7 @@ export function DocFormView({
     const updatedDoc = await zodula.doc.update_doc(doctype, id || "", payload);
 
     if (updatedDoc.id !== id && !isSingle) {
-      replace(`/desk/doctypes/${doctype}/form/${updatedDoc.id}`);
+      replace(`/desk/${org}/doctypes/${doctype}/form/${updatedDoc.id}`);
     } else {
       reload();
     }
@@ -390,7 +394,7 @@ export function DocFormView({
               obj[fromField] = createdDoc.id;
             }
           }
-          push(cbUrl, {
+          replace(cbUrl, {
             state: {
               prefill: obj,
             },
@@ -398,7 +402,7 @@ export function DocFormView({
           reset();
         } else {
           reset();
-          replace(`/desk/doctypes/${doctype}/form/${createdDoc.id}`);
+          replace(`/desk/${org}/doctypes/${doctype}/form/${createdDoc.id}`);
         }
       }
     } catch (error) {
@@ -423,7 +427,7 @@ export function DocFormView({
       setIsLoading(true);
       try {
         await zodula.doc.delete_doc(doctype, id);
-        push(`/desk/doctypes/${doctype}/list`);
+        push(`/desk/${org}/doctypes/${doctype}/list`);
       } catch (error) {
         console.error("Error deleting doc:", error);
       } finally {
@@ -487,28 +491,46 @@ export function DocFormView({
       ) : (
         /* Activity Log */
         <div className="zd:space-y-3">
-          <h3 className="zd:text-sm zd:font-medium zd:text-muted-foreground">
-            Relatives
-          </h3>
-          <div className="zd:flex zd:flex-col zd:gap-2">
-            {relatives.map((relative) => {
-              const filterQuery = encodeURIComponent(
-                `[["${relative.child_field_name}", "=", "${id}"]]`
-              );
-              return (
-                <Link
-                  className="zd:text-xs zd:opacity-50 zd:hover:opacity-100"
-                  to={`/desk/doctypes/${relative.child_doctype}/list?filters=${filterQuery}`}
-                  key={relative.id}
-                >
-                  {relative.child_doctype} (
-                  {relativeCount?.results?.find(
-                    (result: any) => result.doctype === relative.child_doctype
-                  )?.count || 0}
-                  )
-                </Link>
-              );
-            })}
+          <div className="zd:space-y-3">
+            <h3 className="zd:text-sm zd:font-medium zd:text-muted-foreground">
+              {t("Relatives")}
+            </h3>
+            <div className="zd:flex zd:flex-col zd:gap-2">
+              {relatives.map((relative) => {
+                const filterQuery = encodeURIComponent(
+                  `[["${relative.child_field_name}", "=", "${id}"]]`
+                );
+                return (
+                  <Link
+                    className="zd:text-xs zd:opacity-50 zd:hover:opacity-100"
+                    to={`/desk/${org}/doctypes/${relative.child_doctype}/list?filters=${filterQuery}`}
+                    key={relative.id}
+                  >
+                    {relative.child_doctype} (
+                    {relativeCount?.results?.find(
+                      (result: any) => result.doctype === relative.child_doctype
+                    )?.count || 0}
+                    )
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+          <div className="zd:space-y-3">
+            <h3 className="zd:text-sm zd:font-medium zd:text-muted-foreground">
+              {t("Metadata")}
+            </h3>
+            <div className="zd:flex zd:flex-col zd:gap-2">
+              <label className="zd:text-xs zd:text-muted-foreground">
+                {t("Organization")}
+              </label>
+              <div className={cn(
+                "zd:text-xs",
+                !doc?.organization ? "zd:italic" : ""
+              )}>
+                {doc?.organization || "Unknown"}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -580,12 +602,14 @@ export function DocFormView({
   useCmd(
     KEYBOARD_SHORTCUTS.NEW,
     () =>
-      push(`/desk/doctypes/${doctype}/form`, { state: { resetForm: true } }),
+      push(`/desk/${org}/doctypes/${doctype}/form`, {
+        state: { resetForm: true },
+      }),
     { disabled: isSystemGenerated }
   );
   useCmd(
     KEYBOARD_SHORTCUTS.LIST,
-    () => push(`/desk/doctypes/${doctype}/list`),
+    () => push(`/desk/${org}/doctypes/${doctype}/list`),
     { disabled: isSystemGenerated }
   );
   //   useCmd(KEYBOARD_SHORTCUTS.RESET, reset, { disabled: isSystemGenerated });

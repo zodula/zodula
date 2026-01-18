@@ -3,12 +3,13 @@ import { useRouter } from "@/zodula/ui/components/router";
 import { useDoc } from "@/zodula/ui/hooks/use-doc";
 import { DocFormView } from "@/zodula/ui/views/doc-form-view";
 import ErrorView from "@/zodula/ui/views/error-view";
+import { useParams } from "react-router";
 
 export default function DoctypePage() {
     const { params, push, replace, location } = useRouter();
     const doctype = params.doctype as Zodula.DoctypeName;
     const prefill = location.state?.prefill;
-
+    const { org } = useParams();
     // Get doctype metadata to check if it's single
     const { doc: doctypeDoc, loading } = useDoc({
         doctype: "zodula__Doctype",
@@ -18,7 +19,7 @@ export default function DoctypePage() {
     // Redirect to list if not single doctype
     useEffect(() => {
         if (doctypeDoc && !doctypeDoc.is_single) {
-            replace(`/desk/doctypes/${doctype}/list`);
+            replace(`/desk/${org}/doctypes/${doctype}/list`);
         }
     }, [doctypeDoc, push, doctype]);
 

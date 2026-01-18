@@ -29,5 +29,6 @@ export default $doctype({
         in_list_view: 1,
     },
 }, {
-    label: "Workspace Item"
+    label: "Workspace Item",
+    is_global: 1,
 });

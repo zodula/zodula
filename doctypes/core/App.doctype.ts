@@ -20,5 +20,6 @@ export default $doctype(
     label: "App",
     is_system_generated: 1,
     naming_series: "{{name}}",
+    is_global: 1,
   }
 );

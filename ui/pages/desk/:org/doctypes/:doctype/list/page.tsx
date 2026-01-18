@@ -5,7 +5,13 @@ import { ListView } from "@/zodula/ui/components/list/ListView";
 import { useListParams } from "@/zodula/ui/hooks/use-list-params";
 import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
 import { useDoc } from "@/zodula/ui/hooks/use-doc";
-import { Plus, Printer, Download, X, Trash2, RefreshCw } from "lucide-react";
+import { Plus, Printer, Download, X, Trash2, RefreshCw, Grid3x3, List, ChevronDown } from "lucide-react";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/zodula/ui/components/ui/dropdown-menu";
 import { useEffect, useMemo, useState } from "react";
 import { confirm, popup } from "@/zodula/ui/components/ui/popit";
 import { zodula } from "@/zodula/client";
@@ -15,13 +21,16 @@ import { toast } from "@/zodula/ui/components/ui/toast";
 import { CSVDialog } from "@/zodula/ui/components/dialogs/csv-dialog";
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
 import ErrorView from "@/zodula/ui/views/error-view";
+import { Button } from "@/zodula/ui/components/ui/button";
+import { useParams } from "react-router";
 
 export default function DoctypeListPage() {
-    const { params, push, replace, search } = useRouter()
+    const { params, push, replace, search, location } = useRouter()
     const doctype = params.doctype as Zodula.DoctypeName
     const { roles } = useAuth()
     const { t } = useTranslation()
     const [isRefreshing, setIsRefreshing] = useState(false)
+    const { org } = useParams();
     const {
         limit,
         sort,
@@ -66,7 +75,7 @@ export default function DoctypeListPage() {
 
     useEffect(() => {
         if (doctypeDoc?.is_single) {
-            replace(`/desk/doctypes/${doctype}`);
+            replace(`/desk/${org}/doctypes/${doctype}`);
         }
     }, [doctypeDoc, replace, doctype]);
 
@@ -80,7 +89,7 @@ export default function DoctypeListPage() {
         const displayFieldName = doctypeDoc?.display_field || "id";
         const displayField = fields.find((field) => field.name === displayFieldName);
         const _columns = fields.filter((field) => {
-            return (field.in_list_view === 1 || field.required === 1) && field.name !== displayFieldName && !zodula.utils.isStandardField(field.name)
+            return (field.in_list_view === 1 || field.required === 1) && field.name !== displayFieldName && (!zodula.utils.isStandardField(field.name))
         }
         ).map((field) => ({
             key: field.name,
@@ -99,7 +108,7 @@ export default function DoctypeListPage() {
     const isSubmittable = doctypeDoc?.is_submittable === 1;
 
     const handleCreate = () => {
-        push(`/desk/doctypes/${doctype}/form`, {
+        push(`/desk/${org}/doctypes/${doctype}/form`, {
             state: {
                 resetForm: true
             }
@@ -200,6 +209,10 @@ export default function DoctypeListPage() {
         reload();
     };
 
+    const handleSwitchToSheetView = () => {
+        push(`/desk/${org}/doctypes/${doctype}/sheet${location.search}`);
+    };
+
     const primaryActions: PrimaryAction[] = [
         {
             label: t("Create"),
@@ -262,6 +275,29 @@ export default function DoctypeListPage() {
             defaultOpen={false}
             primaryAction={primaryActions}
             actions={selected.size > 0 ? actions : []}
+            actionSection={
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant="outline"
+                            className="zd:flex zd:items-center zd:gap-2"
+                        >
+                            <List className="zd:h-4 zd:w-4" />
+                            {t("List View")}
+                            <ChevronDown className="zd:h-4 zd:w-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                            onClick={handleSwitchToSheetView}
+                            className="zd:flex zd:items-center zd:gap-2"
+                        >
+                            <Grid3x3 className="zd:h-4 zd:w-4" />
+                            {t("Sheet View")}
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            }
         >
             <ListView
                 hideDocStatus={doctypeDoc?.is_submittable !== 1}

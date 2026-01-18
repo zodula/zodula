@@ -131,7 +131,7 @@ async function upsertFieldsBatch(
       only_db: fieldSchema.only_db ? 1 : 0,
       width: fieldSchema.width || null,
       fetch_from: fieldSchema.fetch_from || null,
-      fetch_field: fieldSchema.fetch_field || null,
+      organization: "system",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Field">>;
 
@@ -235,6 +235,7 @@ async function upsertRelativesBatch(
       below_field: relativeItem.below_field || null,
       idx: relativeIdx++,
       vector: "[]",
+      organization: "system",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype Relative">>;
 
@@ -323,6 +324,7 @@ async function upsertApp(
       description: app.package.description || null,
       idx,
       vector: "[]",
+      organization: "system",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__App">>;
 
@@ -442,6 +444,8 @@ async function upsertDoctype(
       comments_enabled: doctype.config.comments_enabled ? 1 : 0,
       only_fixtures: doctype.config.only_fixtures ? 1 : 0,
       is_child_doctype: doctype.config.is_child_doctype ? 1 : 0,
+      is_global: doctype.config.is_global ? 1 : 0,
+      organization: "system",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype">>;
 

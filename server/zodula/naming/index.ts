@@ -45,7 +45,7 @@ export async function naming<TN extends Zodula.DoctypeName>(
       const whereId = id.replaceAll(runingNumberSqure, "%");
       
       // Instead of counting, find the maximum number used to handle gaps from deletions
-      const existingIdsQuery = `SELECT id FROM "${doctypeMetadata?.name}" WHERE id LIKE '${whereId}'`;
+      const existingIdsQuery = `SELECT id FROM "${doctypeMetadata?.name}" WHERE id LIKE '${whereId}' AND organization = '${data.organization}'`;
       const existingIds = (await db.all(existingIdsQuery)) as { id: string }[];
       
       let maxNumber = 0;

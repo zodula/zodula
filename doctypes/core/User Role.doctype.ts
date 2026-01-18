@@ -22,5 +22,6 @@ export default $doctype({
         in_list_view: 1
     },
 }, {
-    label: "User Role"
+    label: "User Role",
+    is_global: 1,
 });

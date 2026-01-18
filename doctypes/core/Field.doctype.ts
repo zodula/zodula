@@ -145,10 +145,6 @@ export default $doctype({
 
     // Fetch Section
     fetch_from: {
-        type: "Virtual Reference",
-        reference: "zodula__Doctype",
-    },
-    fetch_field: {
         type: "Text",
     },
 
@@ -159,7 +155,8 @@ export default $doctype({
 
 }, {
     label: "Field",
-    is_system_generated: 1
+    is_system_generated: 1,
+    is_global: 1,
 })
 
     .on("after_cancel", () => { })

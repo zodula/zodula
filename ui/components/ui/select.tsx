@@ -65,6 +65,7 @@ export interface SelectProps {
   allowFreeText?: boolean;
   validate?: boolean;
   displayMode?: "label" | "value" | "key";
+  autocomplete?: 'on' | 'off';
 }
 
 const Select = ({
@@ -92,6 +93,7 @@ const Select = ({
   allowFreeText = false,
   validate = false,
   displayMode = "value",
+  autocomplete = "off",
 }: SelectProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
@@ -549,6 +551,7 @@ const Select = ({
         placeholder={placeholder}
         disabled={disabled}
         readOnly={readOnly}
+        autoComplete={autocomplete}
         className={cn(
           "zd:cursor-text",
           !allowFreeText && !searchable && !clearable ? "zd:select-none" : "",

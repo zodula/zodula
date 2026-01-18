@@ -490,8 +490,8 @@ export class ZodulaDoctypeHelper {
             }
 
             // Check if another document with the same value exists
-            let query = `SELECT id FROM "${doctypeName}" WHERE "${fieldName}" = ?`
-            const params: any[] = [value]
+            let query = `SELECT id FROM "${doctypeName}" WHERE "${fieldName}" = ? AND organization = ?`
+            const params: any[] = [value, input.organization]
 
             // For updates, exclude the current document
             if (currentId) {

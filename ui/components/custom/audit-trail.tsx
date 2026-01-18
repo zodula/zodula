@@ -3,7 +3,7 @@ import { cn } from "@/zodula/ui/lib/utils";
 import { zodula } from "@/zodula/client";
 import { useDocList } from "../../hooks/use-doc-list";
 import { useDoc } from "../../hooks/use-doc";
-import { Link } from "react-router";
+import { Link, useParams } from "react-router";
 import { useTranslation } from "../../hooks/use-translation";
 import { ExternalLinkIcon } from "lucide-react";
 import { Textarea } from "../ui/textarea";

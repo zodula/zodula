@@ -77,32 +77,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     }
     return <div>
         {children}
-        {/* <FormLayout
-            doctype="zodula__Audit Trail"
-            tabs={[
-                {
-                    label: "Main",
-                    layout: [
-                        "Doctype",
-                        ["doctype", "doctype_id"],
-                        ["action", ""],
-                        "Value",
-                        ["old_value", "new_value"],
-                    ]
-                },
-                {
-                    label: "User",
-                    layout: [
-                        "By",
-                        ["by", "by_name"],
-                        "At",
-                        ["at"],
-                        "Comment",
-                        ["comment"],
-                    ]
-                }
-            ]}
-        /> */}
         <ToastPortal />
         <DialogPortal />
     </div>

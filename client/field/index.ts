@@ -1,4 +1,12 @@
 export const standardFields = {
+    organization: {
+        type: "Reference",
+        label: "Organization",
+        reference: "zodula__Organization",
+        on_delete: "CASCADE",
+        allow_on_submit: 1,
+        in_list_view: 1,
+    },
     id: {
         type: "Text",
         label: "ID",

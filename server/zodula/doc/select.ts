@@ -92,7 +92,9 @@ export class ZodulaDoctypeSelector<
     roles: string[],
     permissions: Zodula.SelectDoctype<"zodula__Doctype Permission">[],
     userPermissions: Zodula.SelectDoctype<"zodula__User Permission">[],
-    user: Zodula.SelectDoctype<"zodula__User">
+    user: Zodula.SelectDoctype<"zodula__User">,
+    organization: string | null,
+    userOrganizationRoles: string[]
   ): string {
     const { filters = [], q } = this.options;
     const whereConditions: string[] = [];
@@ -137,6 +139,14 @@ export class ZodulaDoctypeSelector<
         whereConditions.push(condition);
       }
     }
+
+    if (doctype.config.is_global !== 1 && organization !== "system") {
+      whereConditions.push(`("organization" = "${organization}" OR "organization" = "system")`);
+    }
+    if(doctype.name === "zodula__Organization" && !roles.includes("System Admin")) {
+      whereConditions.push(`("owner" = "${user?.id}" OR "id" IN (${userOrganizationRoles.join(",")}))`);
+    }
+
 
     // Process search query
     if (q) {
@@ -246,8 +256,10 @@ export class ZodulaDoctypeSelector<
       const doctype = loader.from("doctype").get(this.doctypeName);
       const session = new ZodulaSession();
       const user = await session.user(true);
-
+      const organization = await session.organization(true);
+      const userOrganizationRoles = await session.organizationRoles(true);
       const roles = await session.roles();
+
       const permissions = await ZodulaDoctypeHelper.getPermissions(
         this.doctypeName,
         roles
@@ -283,7 +295,9 @@ export class ZodulaDoctypeSelector<
         roles,
         permissions,
         userPermissions,
-        user
+        user,
+        organization || null,
+        userOrganizationRoles
       );
       const orderClause = this.options.sort
         ? `ORDER BY "${this.options.sort as string}" ${this.options.order}`

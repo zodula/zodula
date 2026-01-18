@@ -31,6 +31,7 @@ const InlineFieldEditor = ({ field, value, onChange, formData, docId, readonly, 
 
     return (
         <FormControl
+            showDescription={false}
             docId={docId}
             field={field}
             fieldKey={field.name}
@@ -46,7 +47,9 @@ const InlineFieldEditor = ({ field, value, onChange, formData, docId, readonly, 
     );
 };
 
-export const ReferenceTablePlugin = new FormPlugin(["Reference Table"], (props) => {
+export const ReferenceTablePlugin = new FormPlugin({
+    types: ["Reference Table"],
+    render: (props) => {
     const { doc: doctypeDoc } = useDoc({
         doctype: "zodula__Doctype",
         id: props.fieldOptions.reference as any
@@ -398,7 +401,7 @@ export const ReferenceTablePlugin = new FormPlugin(["Reference Table"], (props) 
                                                     field={field}
                                                     value={row[field.name]}
                                                     onChange={(value) => handleFieldChange(index, field.name, value)}
-                                                    formData={props.formData} // Use parent form data for reference fields (e.g., Invoice data for Invoice Item account field)
+                                                    formData={{ ...props.formData, ...row }} // Merge parent and row data so dynamic references can resolve from row fields first, then parent fields
                                                     readonly={field.readonly === 1}
                                                     doctype={doctypeDoc?.id}
                                                     onRowUpdate={(fieldName, newValue) => handleRowFieldUpdate(index, fieldName, newValue)}
@@ -453,4 +456,5 @@ export const ReferenceTablePlugin = new FormPlugin(["Reference Table"], (props) 
             </div>
         </div>
     );
+    }
 });

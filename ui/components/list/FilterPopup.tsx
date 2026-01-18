@@ -58,6 +58,15 @@ export function FilterPopup({
     return plugins.find((plugin) => plugin.types.includes(field.type as any));
   };
 
+  // Get supported operators for a field
+  const getSupportedOperators = (fieldName: string) => {
+    const plugin = getFieldPlugin(fieldName);
+    if (plugin?.supportOperators) {
+      return OPERATORS.filter((op) => plugin.supportOperators!.includes(op.value));
+    }
+    return OPERATORS; // Default to all operators if no supportOperators specified
+  };
+
   // Convert fields to options for the field selector
   const fieldOptions = useMemo(
     () => [
@@ -211,15 +220,18 @@ export function FilterPopup({
                   displayMode="label"
                   options={fieldOptions}
                   value={row.field}
-                  onChange={(value) =>
-                    updateFilterRow(row.id, { field: value })
-                  }
+                  onChange={(value) => {
+                    const supportedOps = getSupportedOperators(value);
+                    // If current operator is not supported by new field, reset to first supported operator
+                    const newOperator = supportedOps.find(op => op.value === row.operator)?.value || supportedOps[0]?.value || "=";
+                    updateFilterRow(row.id, { field: value, operator: newOperator as IOperator });
+                  }}
                   className="zd:w-40"
                 />
 
                 <Select
                   displayMode="label"
-                  options={OPERATORS.map((operator) => ({
+                  options={getSupportedOperators(row.field).map((operator) => ({
                     value: operator.value,
                     label: operator.value,
                     subtitle: operator.label,

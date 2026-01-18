@@ -105,6 +105,16 @@ export function createZodulaClient(baseUrl: string, options: ZodulaOptions = {})
 }
 
 export const zodula = createZodulaClient(zodulaUtils.BASE_URL, {
+    async onRequest(config) {
+        const selectedOrganization = localStorage.getItem("zodula-selected-organization")
+        if (selectedOrganization) {
+            if (!config.headers) {
+                config.headers = {}
+            }
+            (config.headers as any)["x-organization"] = selectedOrganization
+        }
+        return config as InternalAxiosRequestConfig
+    },
     onResponse(response: any) {
         if (response.status === 200) {
             return response

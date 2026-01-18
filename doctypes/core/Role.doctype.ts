@@ -9,5 +9,6 @@ export default $doctype({
   })
 }, {
   naming_series: "{{name}}",
-  label: "Role"
+  label: "Role",
+  is_global: 1,
 });

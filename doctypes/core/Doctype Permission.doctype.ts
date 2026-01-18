@@ -88,5 +88,6 @@ export default $doctype({
         default: "0"
     }),
 }, {
-    label: "Doctype Permission"
+    label: "Doctype Permission",
+    is_global: 1,
 }); 

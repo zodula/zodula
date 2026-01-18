@@ -134,7 +134,7 @@ function PromptDialog({
   const {
     title = "Prompt",
     message,
-    placeholder = "Enter value...",
+    placeholder = "Enter Value",
     defaultValue = "",
     confirmText = "OK",
     cancelText = "Cancel",

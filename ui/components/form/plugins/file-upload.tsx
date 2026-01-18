@@ -3,7 +3,9 @@ import { FormPlugin } from "../plugin";
 import { FileUpload } from "../../custom/file-upload";
 import { BASE_URL } from "@/zodula/client/utils";
 
-export const FileUploadPlugin = new FormPlugin(["File"], (props) => {
+export const FileUploadPlugin = new FormPlugin({
+    types: ["File"],
+    render: (props) => {
     const doctype = props.fieldOptions.doctype;
     const docId = props.docId || "";
     const fieldName = props.fieldOptions.name;
@@ -26,4 +28,5 @@ export const FileUploadPlugin = new FormPlugin(["File"], (props) => {
             )}
         </>
     );
+    }
 });

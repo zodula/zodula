@@ -23,6 +23,7 @@ export default $doctype<"zodula__Workspace">({
         on_delete: "CASCADE"
     },
 }, {
-    label: "Workspace"
+    label: "Workspace",
+    is_global: 1,
 })
 

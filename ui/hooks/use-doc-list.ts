@@ -69,7 +69,7 @@ const SYSTEM_GENERATED_DOCTYPES = [
     'zodula__Global Setting',
     'zodula__Doctype Relative',
     'zodula__Language',
-    'zodula__Translation'
+    'zodula__Translation',
 ];
 
 // Doctypes that should load ALL records and use client-side filtering/sorting

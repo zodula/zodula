@@ -213,6 +213,10 @@ export const extendDoctype = () => {
           const docid = !!isSingle ? doctypeMeta.name : (ctx as any).params.id;
           const db = Database("main");
 
+          if (!Array.isArray(ctx.query.fields)) {
+            ctx.query.fields = [ctx.query.fields || "*"];
+          }
+
           return await db.transaction(async (trx) => {
             dbcontext.enterWith({
               trx: trx,
