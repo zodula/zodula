@@ -1,1187 +1,804 @@
-import { z } from "@/zodula/client";
-import { Database } from "../../server/database/database";
-import nunjucks from "nunjucks";
-import { Template } from "binba";
-import { zodula } from "../../server/zodula";
-import { translate } from "../../server/zodula/utils";
-import { loader } from "../../server/loader";
-import type { DoctypeMetadata } from "../../server/loader/plugins/doctype";
-import { isStandardField } from "../../client/utils";
+import { z } from "bxo"
+import puppeteer from "puppeteer"
+import path from "path"
+import { getFieldValueFromDoc } from "@/zodula/client/utils"
+// @ts-ignore - binba may not have type definitions
+import { Template } from "binba"
 
-// Constants
-const DEFAULT_CURRENCY = "$";
-const DEFAULT_PDF_FORMAT = "A4";
-const DEFAULT_MARGIN = 10;
-const MAX_TABLE_COLUMNS = 5;
-const DEFAULT_IMAGE_WIDTH = 200;
-
-const IMAGE_EXTENSIONS = [
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".gif",
-  ".webp",
-  ".svg",
-  ".bmp",
-  ".ico",
-];
-
-const BASE_CSS = `
-body {
-    font-family: Arial, sans-serif;
-    font-size: 13px;
-    line-height: 1.4;
-    color: #000;
-    margin: 0;
-    padding: 0;
+// Page format dimensions in mm
+const PAGE_FORMATS: Record<string, { width: number; height: number }> = {
+  A4: { width: 210, height: 297 },
+  A3: { width: 297, height: 420 },
+  A5: { width: 148, height: 210 },
+  Letter: { width: 216, height: 279 },
+  Legal: { width: 216, height: 356 },
+  Tabloid: { width: 279, height: 432 },
 }
 
-.section {
-    margin-bottom: 20px;
-    page-break-inside: avoid;
+function mmToPx(mm: number): number {
+  return (mm * 96) / 25.4 // 96 DPI
 }
 
-.row {
-    display: flex;
-    gap: 20px;
-    margin-bottom: 10px;
+function pxToMm(px: number): number {
+  return (px * 25.4) / 96 // Convert pixels to mm at 96 DPI
 }
 
-.field-group {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
+function getFieldValue(doc: any, fieldName: string): string {
+  if (!doc || !fieldName) return ""
+  const value = doc[fieldName]
+  if (value === null || value === undefined) return ""
+  return String(value)
 }
 
-.field-group.align-left { text-align: left; }
-.field-group.align-right { text-align: right; }
-.field-group.align-center { text-align: center; }
-
-.field-label {
-    font-size: 11px;
-    margin-bottom: 2px;
-    color: #555;
-}
-
-.field-label.align-left { text-align: left; }
-.field-label.align-right { text-align: right; }
-.field-label.align-center { text-align: center; }
-
-.field-value {
-    font-size: 14px;
-    min-height: 16px;
-    padding: 2px 0;
-    word-break: break-all;
-}
-
-.field-value.boolean.true::before { content: '✓ '; }
-.field-value.boolean.false::before { content: '✗ '; }
-.field-value.number { text-align: left; }
-.field-value.currency::before { content: '{{ defaultCurrency }}'; }
-.field-value.currency-custom::before { content: attr(data-currency); }
-.field-value.textarea {
-    white-space: pre-wrap;
-    min-height: 40px;
-}
-.field-value.json {
-    font-family: monospace;
-    font-size: 10px;
-    white-space: pre-wrap;
-}
-
-.letter-head {
-    margin-bottom: 20px;
-    page-break-inside: avoid;
-}
-
-.document-header-container {
-    margin-bottom: 20px;
-    padding-bottom: 10px;
-    page-break-inside: avoid;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.document-header h1 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: bold;
-}
-
-.document-header p {
-    margin: 0;
-    font-size: 12px;
-}
-
-.reference-table-section {
-    margin-bottom: 20px;
-    page-break-inside: avoid;
-    width: 100%;
-    padding: 0 10px 0 0;
-    overflow-x: auto;
-    max-width: 100%;
-}
-
-.reference-table {
-    border-collapse: collapse;
-    width: 100%;
-    max-width: 100%;
-    overflow-x: auto;
-    display: table;
-    table-layout: fixed;
-}
-
-.table-row {
-    display: table-row;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.table-cell {
-    display: table-cell;
-    padding: 4px;
-    font-size: 12px;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    width: auto;
-}
-
-.table-cell:last-child {
-
-}
-
-.table-header {
-    display: table-header-group;
-    background-color: #f8fafc;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.table-header .table-cell {
-    background-color: #f5f5f5;
-}
-
-.extend-section {
-    margin-bottom: 15px;
-    page-break-inside: avoid;
-}
-
-.extend-content {
-    margin-left: 0px;
-    border-left: 2px solid #ddd;
-    padding-left: 20px;
-}
-
-@media print {
-    body { margin: 0; }
-    .section { page-break-inside: avoid; }
-    .reference-table-section {
-        overflow: visible;
-        width: 100%;
+// Calculate anchor position for an item (with optional measured heights)
+function calculateAnchorPosition(
+  item: any,
+  allItems: any[],
+  visited: Set<string> = new Set(),
+  measuredHeights?: Map<string, number>
+): { x: number; y: number } {
+  // Parse anchor config
+  let anchorConfig: any = null
+  if (item.anchor_config) {
+    if (typeof item.anchor_config === "string") {
+      try {
+        anchorConfig = JSON.parse(item.anchor_config)
+      } catch (e) {
+        // Ignore parse errors
+      }
+    } else if (typeof item.anchor_config === "object") {
+      anchorConfig = item.anchor_config
     }
-    .reference-table {
-        overflow: visible;
-        display: table;
-        width: 100%;
-        table-layout: fixed;
-    }
-    .table-row { display: table-row; }
-    .table-cell {
-        display: table-cell;
-        padding: 8px;
-        width: auto;
-    }
-    .table-header {
-        display: table-header-group;
-        font-weight: 500;
-    }
-    .table-header .table-cell {
-        background-color: #f5f5f5;
-        font-size: 11px;
-    }
-    .extend-section { page-break-inside: avoid; }
+  }
+  
+  if (!anchorConfig || !anchorConfig.anchorTo) {
+    return { x: item.transform_x || 0, y: item.transform_y || 0 }
+  }
+  
+  // Prevent infinite loops
+  if (visited.has(item.id)) {
+    return { x: item.transform_x || 0, y: item.transform_y || 0 }
+  }
+  visited.add(item.id)
+  
+  const anchorItem = allItems.find((i: any) => i.id === anchorConfig.anchorTo)
+  if (!anchorItem) {
+    return { x: item.transform_x || 0, y: item.transform_y || 0 }
+  }
+  
+  // Recursively calculate anchor position
+  const anchorPos = calculateAnchorPosition(anchorItem, allItems, visited, measuredHeights)
+  const anchorX = anchorPos.x
+  const anchorY = anchorPos.y
+  const anchorWidth = anchorItem.transform_width || 0
+  // Use measured height if available, otherwise use transform_height
+  const anchorHeight = measuredHeights?.get(anchorItem.id) || anchorItem.transform_height || 0
+  const offset = anchorConfig.anchorOffset || 0
+  const position = anchorConfig.anchorPosition || "bottom"
+  
+  let newX = item.transform_x || 0
+  let newY = item.transform_y || 0
+  
+  switch (position) {
+    case "top":
+      const itemHeight = measuredHeights?.get(item.id) || item.transform_height || 0
+      newX = anchorX
+      newY = anchorY - itemHeight - (typeof offset === "number" ? offset : 0)
+      break
+    case "bottom":
+      newX = anchorX
+      newY = anchorY + anchorHeight + (typeof offset === "number" ? offset : 0)
+      break
+    case "left":
+      const itemWidth = item.transform_width || 0
+      newX = anchorX - itemWidth - (typeof offset === "number" ? offset : 0)
+      newY = anchorY
+      break
+    case "right":
+      newX = anchorX + anchorWidth + (typeof offset === "number" ? offset : 0)
+      newY = anchorY
+      break
+    case "inside":
+      const offsetX = typeof offset === "object" ? offset.x : 0
+      const offsetY = typeof offset === "object" ? offset.y : 0
+      newX = anchorX + offsetX
+      newY = anchorY + offsetY
+      break
+  }
+  
+  return { x: newX, y: newY }
 }
-`;
 
-// Try to import puppeteer, fallback to HTML if not available
-let puppeteer: any = null;
-try {
-  puppeteer = await import("puppeteer");
-} catch (error) {
-  console.warn("Puppeteer not available, falling back to HTML response");
-}
-
-// ============================================================================
-// Data Fetching Functions
-// ============================================================================
-
-async function fetchPrintTemplate(
-  db: any,
-  templateId: string
-): Promise<Zodula.SelectDoctype<"zodula__Print Template"> | null> {
-  return (await db
-    .select("*")
-    .from("zodula__Print Template" as Zodula.DoctypeName)
-    .where("id", "=", templateId)
-    .first()) as Zodula.SelectDoctype<"zodula__Print Template"> | null;
-}
-
-async function fetchDocuments(
-  doctypeName: string,
-  ids: string[]
-): Promise<any[]> {
-  const documents = [];
-  for (const id of ids) {
+// Calculate actual height for an item (especially for reference tables)
+function calculateItemHeight(
+  item: any,
+  doc: any
+): number {
+  const { type, transform_height = 30, fields, field_name } = item
+  
+  // For reference tables, calculate height based on actual data
+  if (type === "field" && fields && typeof fields === "string") {
     try {
-      const doc = await zodula
-        .doctype(doctypeName as Zodula.DoctypeName)
-        .get(id)
-        .bypass(true);
-      if (doc) documents.push(doc);
-    } catch (error) {
-      console.error(`Error fetching document from ${doctypeName}:`, error);
-    }
-  }
-  return documents;
-}
-
-function getDoctypeMetadata(doctypeName: string): {
-  metadata: DoctypeMetadata | null;
-  fields: Record<string, Zodula.Field>;
-  label: string;
-  isSingle: boolean;
-} {
-  try {
-    const metadata = loader
-      .from("doctype")
-      .get(doctypeName as Zodula.DoctypeName);
-    return {
-      metadata,
-      fields: metadata.schema.fields,
-      label: metadata.schema.label || doctypeName,
-      isSingle: !!(
-        metadata.schema.is_single === 1 || metadata.schema.is_single
-      ),
-    };
-  } catch (error) {
-    console.warn(
-      `Could not fetch field configuration for doctype ${doctypeName}:`,
-      error
-    );
-    return {
-      metadata: null,
-      fields: {},
-      label: doctypeName,
-      isSingle: false,
-    };
-  }
-}
-
-async function fetchLetterHead(
-  db: any,
-  letterHeadId: string
-): Promise<{ template: string; css: string }> {
-  try {
-    const letterHead = (await db
-      .select("*")
-      .from("zodula__Letter Head" as Zodula.DoctypeName)
-      .where("id", "=", letterHeadId)
-      .first()) as Zodula.SelectDoctype<"zodula__Letter Head"> | null;
-
-    return {
-      template: letterHead?.content || "",
-      css: letterHead?.css_content || "",
-    };
-  } catch (error) {
-    console.warn("Could not fetch letter head:", error);
-    return { template: "", css: "" };
-  }
-}
-
-async function fetchDefaultCurrency(db: any): Promise<string> {
-  try {
-    const globalSetting = (await db
-      .select("*")
-      .from("zodula__Global Setting" as Zodula.DoctypeName)
-      .where("id", "=", "zodula__Global Setting")
-      .first()) as Zodula.SelectDoctype<"zodula__Global Setting"> | null;
-
-    return globalSetting?.currency_symbol || DEFAULT_CURRENCY;
-  } catch (error) {
-    console.warn("Could not fetch default currency:", error);
-    return DEFAULT_CURRENCY;
-  }
-}
-
-// ============================================================================
-// Main Action
-// ============================================================================
-
-export default $action(
-  async (ctx) => {
-    const {
-      print_template,
-      doctype,
-      lang,
-      ids: idsString,
-      letter_head,
-    } = ctx.query;
-
-    const ids = idsString?.split(",") || [];
-
-    if (!ids.length) {
-      return ctx.json({ error: "Document IDs are required" }, 400);
-    }
-
-    if (!doctype) {
-      return ctx.json({ error: "Doctype is required" }, 400);
-    }
-
-    const db = Database("main");
-
-    // Fetch print template if provided
-    let template: Zodula.SelectDoctype<"zodula__Print Template"> | null = null;
-    let doctypeName = doctype;
-
-    if (print_template) {
-      template = await fetchPrintTemplate(db, print_template);
-      if (!template) {
-        return ctx.json({ error: "Print template not found" }, 404);
+      const childFields = JSON.parse(fields)
+      if (Array.isArray(childFields) && childFields.length > 0) {
+        const parentFieldValue = doc[field_name]
+        if (Array.isArray(parentFieldValue) && parentFieldValue.length > 0) {
+          // Parse table config
+          let tableConfig: any = null
+          if (item.table_config && typeof item.table_config === "string") {
+            try {
+              tableConfig = JSON.parse(item.table_config)
+            } catch (e) {
+              // Ignore parse errors
+            }
+          } else if (item.table_config) {
+            tableConfig = item.table_config
+          }
+          
+          const showHeader = tableConfig?.showHeader !== false
+          const rowHeight = tableConfig?.rowHeight || 20
+          const showBorder = tableConfig?.showBorder !== false
+          
+          // Calculate total height based on actual table structure
+          let totalHeight = 0
+          
+          // Header row height
+          if (showHeader) {
+            totalHeight += rowHeight
+            if (showBorder) {
+              totalHeight += 1 // Top border of table
+            }
+          }
+          
+          // Data rows height
+          totalHeight += parentFieldValue.length * rowHeight
+          
+          // Row borders (between rows)
+          if (showBorder) {
+            totalHeight += parentFieldValue.length * 1 // Border between each row
+            if (showHeader) {
+              totalHeight += 1 // Border between header and first row
+            }
+          }
+          
+          // Padding (2px top + 2px bottom = 4px total, but we account for it in row height)
+          // The rowHeight already includes padding, so we don't need to add extra
+          
+          console.log(`[PDF] Table height calculation for ${item.id}: ${parentFieldValue.length} rows, rowHeight=${rowHeight}px, showHeader=${showHeader}, showBorder=${showBorder}, calculated=${totalHeight}px, original=${transform_height}px`)
+          
+          // Use the maximum of calculated height and original height
+          return Math.max(totalHeight, transform_height)
+        }
       }
-      if (!template.doctype) {
-        return ctx.json(
-          { error: "Print template must have a doctype specified" },
-          400
-        );
-      }
-      doctypeName = template.doctype || doctype;
+    } catch (e) {
+      console.error(`[PDF] Error calculating height for item ${item.id}:`, e)
+      // If parsing fails, return transform_height
     }
-
-    // Fetch documents
-    const documents = await fetchDocuments(doctypeName, ids);
-    if (documents.length === 0) {
-      return ctx.json({ error: "No documents found" }, 404);
-    }
-
-    // Get doctype metadata
-    const {
-      metadata: doctypeMetadata,
-      fields: doctypeFields,
-      label: doctypeLabel,
-      isSingle,
-    } = getDoctypeMetadata(doctypeName);
-
-    // Fetch letter head and currency
-    const { template: letterHeadTemplate, css: letterHeadCss } = letter_head
-      ? await fetchLetterHead(db, letter_head)
-      : { template: "", css: "" };
-    const defaultCurrency = await fetchDefaultCurrency(db);
-
-    // Setup template environment
-    const env = nunjucks.configure({ autoescape: false });
-    setupTemplateEnvironment(env, db, doctypeFields, defaultCurrency, lang);
-
-    // Get template content
-    const combinedCss = [letterHeadCss, template?.css || ""]
-      .filter(Boolean)
-      .join("\n");
-    const templateContent = getTemplateContent(
-      template,
-      doctypeMetadata,
-      doctypeFields,
-      combinedCss,
-      defaultCurrency,
-      isSingle
-    );
-
-    if (!templateContent) {
-      return ctx.json({ error: "No template content found" }, 400);
-    }
-
-    // Render documents
-    const renderedDocs = await renderDocuments(
-      documents,
-      templateContent,
-      env,
-      {
-        doctypeName,
-        doctypeLabel,
-        isSingle,
-        letterHeadTemplate,
-        letterHeadCss,
-        letterHead: letter_head,
-        lang: lang || "en",
-      }
-    );
-
-    const finalHtml = renderedDocs.join("\n");
-
-    // Generate PDF or return HTML
-    if (puppeteer) {
-      const pdfResponse = await generatePDF(finalHtml, template);
-      if (pdfResponse) return pdfResponse;
-    }
-
-    return new Response(finalHtml, {
-      headers: {
-        "Content-Type": "text/html",
-        "Content-Disposition": "inline; filename=print.html",
-      },
-    });
-  },
-  {
-    query: z.object({
-      print_template: z.string().optional(),
-      doctype: z.string(),
-      lang: z.string().optional(),
-      ids: z.string().optional(),
-      letter_head: z.string().optional(),
-    }),
-    method: "GET",
   }
-);
-
-// ============================================================================
-// Template Setup Functions
-// ============================================================================
-
-function setupTemplateEnvironment(
-  env: nunjucks.Environment,
-  db: any,
-  doctypeFields: Record<string, Zodula.Field>,
-  defaultCurrency: string,
-  lang?: string
-): void {
-  env.addGlobal("zodula", zodula);
-  env.addGlobal("__", (key: string) => translate(key, lang || "en"));
-  env.addGlobal("fields", doctypeFields);
-  env.addGlobal("defaultCurrency", defaultCurrency);
-  env.addGlobal(
-    "getDoctypeFileUrl",
-    (doctype: string, docId: string, fieldName: string, fileName: string) => {
-      return `/files/${doctype}/${docId || doctype}/${fieldName}/${fileName}`;
-    }
-  );
-  env.addFilter("isImageFile", isImageFile);
-  env.addGlobal("getNestedPrintTemplate", async (templateId: string) => {
-    try {
-      const nestedTemplate = await fetchPrintTemplate(db, templateId);
-      return nestedTemplate?.html || null;
-    } catch (error) {
-      console.warn(
-        `Could not fetch nested print template ${templateId}:`,
-        error
-      );
-      return null;
-    }
-  });
+  
+  return transform_height
 }
 
-function getTemplateContent(
-  template: Zodula.SelectDoctype<"zodula__Print Template"> | null,
-  doctypeMetadata: DoctypeMetadata | null,
-  doctypeFields: Record<string, Zodula.Field>,
-  combinedCss: string,
-  defaultCurrency: string,
-  isSingle: boolean
-): string {
-  if (template?.is_custom && template.html) {
-    return template.html;
-  }
-
-  if (template?.layout) {
-    return convertLayoutToTemplate(
-      template.layout,
-      doctypeFields,
-      combinedCss,
-      defaultCurrency,
-      isSingle
-    );
-  }
-
-  // Generate default layout
-  const defaultLayout = generateDefaultLayout(doctypeMetadata, doctypeFields);
-  return convertLayoutToTemplate(
-    JSON.stringify(defaultLayout),
-    doctypeFields,
-    combinedCss,
-    defaultCurrency,
-    isSingle
-  );
-}
-
-async function renderLetterHead(
-  template: string,
-  context: any
+async function renderTemplateItem(
+  item: any,
+  doc: any,
+  baseUrl: string,
+  sessionContext?: any,
+  allItems?: any[],
+  measuredHeights?: Map<string, number>
 ): Promise<string> {
-  if (!template) return "";
-  try {
-    return await Template.render(template, context, { autoescape: false });
-  } catch (error) {
-    console.warn("Error rendering letter head template:", error);
-    return "";
+  const {
+    type,
+    value,
+    field_name,
+    label,
+    label_position = "left",
+    align = "left",
+    vertical_align = "middle",
+    transform_x = 0,
+    transform_y = 0,
+    transform_width = 200,
+    transform_height = 30,
+    style_font_size,
+    style_font_weight,
+    style_color,
+    style_background_color,
+    style_border,
+    style_padding,
+    style_margin,
+    image,
+    reference_doctype,
+    reference_id_filter,
+    reference_field,
+    fields,
+  } = item
+
+  // Calculate actual position (accounting for anchors)
+  let actualX = transform_x
+  let actualY = transform_y
+  if (allItems) {
+    const anchorPos = calculateAnchorPosition(item, allItems, new Set(), measuredHeights)
+    actualX = anchorPos.x
+    actualY = anchorPos.y
   }
+  
+  // Use measured height if available, otherwise use transform_height
+  const actualHeight = measuredHeights?.get(item.id) || transform_height
+
+  const style: string[] = []
+  style.push(`position: absolute`)
+  // Convert pixels to mm (builder stores coordinates in pixels, PDF needs mm)
+  style.push(`left: ${pxToMm(actualX)}mm`)
+  style.push(`top: ${pxToMm(actualY)}mm`)
+  style.push(`width: ${pxToMm(transform_width)}mm`)
+  // Use measured height if available, otherwise use transform_height
+  const isReferenceTable = type === "field" && fields
+  if (!isReferenceTable) {
+    style.push(`height: ${pxToMm(actualHeight)}mm`)
+  } else {
+    // For reference tables, use min-height and let content determine height
+    // But if we have a measured height, use it
+    if (measuredHeights?.has(item.id)) {
+      style.push(`height: ${pxToMm(actualHeight)}mm`)
+    } else {
+      style.push(`min-height: ${pxToMm(transform_height)}mm`)
+    }
+  }
+
+  // Alignment
+  if (align === "center") {
+    style.push(`text-align: center`)
+  } else if (align === "right") {
+    style.push(`text-align: right`)
+  } else {
+    style.push(`text-align: left`)
+  }
+
+  if (vertical_align === "middle") {
+    style.push(`display: flex`)
+    style.push(`align-items: center`)
+  } else if (vertical_align === "top") {
+    style.push(`display: flex`)
+    style.push(`align-items: flex-start`)
+  } else if (vertical_align === "bottom") {
+    style.push(`display: flex`)
+    style.push(`align-items: flex-end`)
+  }
+
+  // Custom styles
+  if (style_font_size) style.push(`font-size: ${style_font_size}px`)
+  if (style_font_weight) style.push(`font-weight: ${style_font_weight}`)
+  if (style_color) style.push(`color: ${style_color}`)
+  if (style_background_color) style.push(`background-color: ${style_background_color}`)
+  if (style_border) style.push(`border: ${style_border}`)
+  if (style_padding) style.push(`padding: ${style_padding}`)
+  if (style_margin) style.push(`margin: ${style_margin}`)
+
+  let content = ""
+
+  switch (type) {
+    case "text":
+      content = value || ""
+      break
+
+    case "field": {
+      let fieldValue = field_name ? getFieldValue(doc, field_name) : ""
+      
+      // Handle nested fields for Reference Table/Extend types
+      if (fields && typeof fields === "string") {
+        try {
+          const childFields = JSON.parse(fields)
+          if (Array.isArray(childFields) && childFields.length > 0) {
+            // Get the field value (should be an array of child documents)
+            const parentFieldValue = doc[field_name]
+            if (Array.isArray(parentFieldValue) && parentFieldValue.length > 0) {
+              // Parse table config if available
+              let tableConfig: any = null
+              if (item.table_config && typeof item.table_config === "string") {
+                try {
+                  tableConfig = JSON.parse(item.table_config)
+                } catch (e) {
+                  // Ignore parse errors
+                }
+              } else if (item.table_config) {
+                tableConfig = item.table_config
+              }
+              
+              // Get column configuration
+              const columns = tableConfig?.columns || childFields.map((f: string, idx: number) => ({ field: f, order: idx }))
+              const sortedColumns = [...columns].sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
+              const showHeader = tableConfig?.showHeader !== false
+              const showBorder = tableConfig?.showBorder !== false
+              const rowHeight = tableConfig?.rowHeight || 20
+              
+              // Calculate total width of specified columns
+              const elementWidthPx = transform_width
+              const elementWidthMm = pxToMm(elementWidthPx)
+              const specifiedWidths = sortedColumns.filter((col: any) => col.width).map((col: any) => col.width)
+              const totalSpecifiedWidth = specifiedWidths.reduce((sum: number, w: number) => sum + w, 0)
+              const columnsWithWidth = sortedColumns.filter((col: any) => col.width).length
+              const columnsWithoutWidth = sortedColumns.length - columnsWithWidth
+              
+              // Build table with configuration
+              const tableStyles: string[] = []
+              tableStyles.push(`width: ${elementWidthMm}mm`)
+              tableStyles.push("border-collapse: collapse")
+              tableStyles.push("table-layout: fixed")
+              
+              const borderStyle = showBorder ? "1px solid #000" : "none"
+              
+              // Render rows
+              const rows = parentFieldValue.map((childDoc: any) => {
+                const cells = sortedColumns.map((col: any) => {
+                  const childValue = getFieldValue(childDoc, col.field)
+                  const cellStyles: string[] = []
+                  
+                  // Calculate column width
+                  if (col.width) {
+                    // Use specified width, converted to mm
+                    cellStyles.push(`width: ${pxToMm(col.width)}mm`)
+                  } else if (columnsWithoutWidth > 0) {
+                    // Distribute remaining width equally among unspecified columns
+                    const remainingWidth = elementWidthPx - totalSpecifiedWidth
+                    const autoWidth = remainingWidth / columnsWithoutWidth
+                    cellStyles.push(`width: ${pxToMm(autoWidth)}mm`)
+                  } else {
+                    // All columns have width, distribute equally
+                    cellStyles.push(`width: ${elementWidthMm / sortedColumns.length}mm`)
+                  }
+                  
+                  if (showBorder) {
+                    cellStyles.push(`border: ${borderStyle}`)
+                  }
+                  // Use min-height for dynamic row height
+                  cellStyles.push(`min-height: ${pxToMm(rowHeight)}mm`)
+                  cellStyles.push(`padding: 2px`)
+                  cellStyles.push(`overflow: hidden`)
+                  cellStyles.push(`text-overflow: ellipsis`)
+                  return `<td style="${cellStyles.join("; ")}">${childValue}</td>`
+                }).join("")
+                const rowStyles: string[] = []
+                if (showBorder) {
+                  rowStyles.push(`border-bottom: ${borderStyle}`)
+                }
+                return `<tr style="${rowStyles.join("; ")}">${cells}</tr>`
+              }).join("")
+              
+              // Render headers if enabled
+              let headers = ""
+              if (showHeader) {
+                const headerCells = sortedColumns.map((col: any) => {
+                  const headerStyles: string[] = []
+                  
+                  // Calculate column width (same logic as cells)
+                  if (col.width) {
+                    headerStyles.push(`width: ${pxToMm(col.width)}mm`)
+                  } else if (columnsWithoutWidth > 0) {
+                    const remainingWidth = elementWidthPx - totalSpecifiedWidth
+                    const autoWidth = remainingWidth / columnsWithoutWidth
+                    headerStyles.push(`width: ${pxToMm(autoWidth)}mm`)
+                  } else {
+                    headerStyles.push(`width: ${elementWidthMm / sortedColumns.length}mm`)
+                  }
+                  
+                  if (showBorder) {
+                    headerStyles.push(`border: ${borderStyle}`)
+                  }
+                  headerStyles.push(`padding: 2px`)
+                  headerStyles.push(`font-weight: bold`)
+                  headerStyles.push(`background-color: #f0f0f0`)
+                  headerStyles.push(`overflow: hidden`)
+                  headerStyles.push(`text-overflow: ellipsis`)
+                  return `<th style="${headerStyles.join("; ")}">${col.field}</th>`
+                }).join("")
+                headers = `<thead><tr style="border-bottom: ${borderStyle}">${headerCells}</tr></thead>`
+              }
+              
+              fieldValue = `<table style="${tableStyles.join("; ")}">${headers}<tbody>${rows}</tbody></table>`
+            }
+          }
+        } catch (e) {
+          // If parsing fails, just use the field value as is
+        }
+      }
+      
+      const labelText = label || ""
+      
+      if (labelText && label_position === "top") {
+        content = `<div style="display: flex; flex-direction: column;"><span style="font-size: 0.9em; opacity: 0.7;">${labelText}</span><span>${fieldValue}</span></div>`
+      } else if (labelText && label_position === "bottom") {
+        content = `<div style="display: flex; flex-direction: column;"><span>${fieldValue}</span><span style="font-size: 0.9em; opacity: 0.7;">${labelText}</span></div>`
+      } else if (labelText && label_position === "left") {
+        content = `<span style="margin-right: 0.5em; font-size: 0.9em; opacity: 0.7;">${labelText}</span><span>${fieldValue}</span>`
+      } else if (labelText && label_position === "right") {
+        content = `<span>${fieldValue}</span><span style="margin-left: 0.5em; font-size: 0.9em; opacity: 0.7;">${labelText}</span>`
+      } else {
+        content = fieldValue
+      }
+      break
+    }
+
+    case "image": {
+      const imagePath = image || value || ""
+      if (imagePath) {
+        let imageUrl = imagePath
+        if (!imagePath.startsWith("http") && !imagePath.startsWith("data:")) {
+          // Construct file URL
+          imageUrl = `${baseUrl}/files/zodula__Print Template Item/${item.id}/image/${imagePath}`
+        }
+        content = `<img src="${imageUrl}" style="max-width: 100%; max-height: 100%; object-fit: contain;" />`
+      }
+      break
+    }
+
+    case "line": {
+      style.push(`border-top: 1px solid #000`)
+      style.push(`height: 1px`)
+      content = ""
+      break
+    }
+
+    case "reference": {
+      // Fetch referenced document
+      let refValue = ""
+      if (reference_doctype && reference_field) {
+        try {
+          // Parse reference_id_filter (e.g., "{{session.organization}}")
+          let refId = reference_id_filter || ""
+          if (refId.includes("{{")) {
+            // Replace template variables
+            refId = refId.replace(/\{\{session\.(\w+)\}\}/g, (_: string, key: string) => {
+              return sessionContext?.[key] || ""
+            })
+            refId = refId.replace(/\{\{doc\.(\w+)\}\}/g, (_: string, key: string) => {
+              return getFieldValue(doc, key) || ""
+            })
+          }
+          
+          if (refId) {
+            const refDoc = await $zodula.doctype(reference_doctype as any).get(refId).bypass(true)
+            if (refDoc) {
+              refValue = getFieldValue(refDoc, reference_field)
+            }
+          }
+        } catch (e) {
+          refValue = `Error: ${e}`
+        }
+      }
+      
+      const labelText = label || ""
+      
+      if (labelText && label_position === "top") {
+        content = `<div style="display: flex; flex-direction: column;"><span style="font-size: 0.9em; opacity: 0.7;">${labelText}</span><span>${refValue}</span></div>`
+      } else if (labelText && label_position === "bottom") {
+        content = `<div style="display: flex; flex-direction: column;"><span>${refValue}</span><span style="font-size: 0.9em; opacity: 0.7;">${labelText}</span></div>`
+      } else if (labelText && label_position === "left") {
+        content = `<span style="margin-right: 0.5em; font-size: 0.9em; opacity: 0.7;">${labelText}</span><span>${refValue}</span>`
+      } else if (labelText && label_position === "right") {
+        content = `<span>${refValue}</span><span style="margin-left: 0.5em; font-size: 0.9em; opacity: 0.7;">${labelText}</span>`
+      } else {
+        content = refValue
+      }
+      break
+    }
+
+    case "custom_html": {
+      // Use binba to render custom HTML template
+      try {
+        const template = value || ""
+        const rendered = await Template.render(template, { doc, ...doc })
+        content = rendered
+      } catch (e: any) {
+        content = `Error rendering template: ${e?.message || e}`
+      }
+      break
+    }
+
+    default:
+      content = ""
+  }
+
+  // Add data-item-id attribute for identification during measurement
+  return `<div data-item-id="${item.id}" style="${style.join("; ")}">${content}</div>`
 }
 
-async function renderDocuments(
-  documents: any[],
-  templateContent: string,
-  env: nunjucks.Environment,
-  options: {
-    doctypeName: string;
-    doctypeLabel: string;
-    isSingle: boolean;
-    letterHeadTemplate: string;
-    letterHeadCss: string;
-    letterHead?: string;
-    lang: string;
+export default $action(async (ctx) => {
+  const { print_template, doctype, ids: idsParam, lang, letter_head, format = "pdf" } = ctx.query
+
+  // Handle ids as string or array
+  const ids = Array.isArray(idsParam) ? idsParam : idsParam ? [idsParam] : []
+
+  // Get base URL
+  const baseUrl = ctx.request.url.split("/api")[0] || "http://localhost:3000"
+  
+  // Get session context for reference filters
+  const sessionContext: any = {}
+  try {
+    const user = await $zodula.session.user(true).catch(() => null)
+    const organization = await $zodula.session.organization(true).catch(() => null)
+    if (user) sessionContext.user = user.id
+    if (organization) sessionContext.organization = organization
+  } catch (e) {
+    // Ignore session errors
   }
-): Promise<string[]> {
-  const renderedDocs: string[] = [];
+
+  // Fetch print template
+  const template = await $zodula.doctype("zodula__Print Template").get(print_template).bypass(true)
+  if (!template) {
+    return ctx.json({ error: "Print template not found" }, 404)
+  }
+
+  console.log("[PDF] Print template ID:", print_template)
+  console.log("[PDF] Template name:", template.name)
+
+  // Fetch template items - try multiple approaches
+  let items: any[] = []
+  
+  // Approach 1: Direct query
+  try {
+    const result = await $zodula.doctype("zodula__Print Template Item")
+      .select()
+      .where("print_template", "=", print_template)
+      .sort("idx", "asc")
+      .bypass(true)
+    items = result.docs || []
+    console.log("[PDF] Direct query found items:", items.length)
+  } catch (e) {
+    console.error("[PDF] Direct query error:", e)
+  }
+
+  // Approach 2: Try accessing via relationship if direct query fails
+  if (items.length === 0) {
+    try {
+      // Try getting template with items relationship
+      const templateWithItems = await $zodula.doctype("zodula__Print Template")
+        .get(print_template)
+        .fields(["*", "items"] as any)
+        .bypass(true)
+      
+      if (templateWithItems && (templateWithItems as any).items) {
+        items = (templateWithItems as any).items || []
+        console.log("[PDF] Relationship query found items:", items.length)
+      }
+    } catch (e) {
+      console.error("[PDF] Relationship query error:", e)
+    }
+  }
+
+  // Approach 3: Try without sort if still no items
+  if (items.length === 0) {
+    try {
+      const result = await $zodula.doctype("zodula__Print Template Item")
+        .select()
+        .where("print_template", "=", print_template)
+        .bypass(true)
+      items = result.docs || []
+      console.log("[PDF] Query without sort found items:", items.length)
+    } catch (e) {
+      console.error("[PDF] Query without sort error:", e)
+    }
+  }
+
+  // Debug: Check if any items exist at all for this template
+  if (items.length === 0) {
+    try {
+      const allItems = await $zodula.doctype("zodula__Print Template Item")
+        .select()
+        .limit(10)
+        .bypass(true)
+      console.log("[PDF] Total items in database (sample):", allItems.docs.length)
+      if (allItems.docs.length > 0) {
+        console.log("[PDF] Sample item print_template value:", allItems.docs[0]?.print_template)
+        console.log("[PDF] Looking for print_template:", print_template)
+        // Check if any match
+        const matching = allItems.docs.filter((item: any) => item.print_template === print_template)
+        console.log("[PDF] Matching items found:", matching.length)
+      }
+    } catch (e) {
+      console.error("[PDF] Debug query error:", e)
+    }
+  }
+
+  // Fetch documents
+  const documents: any[] = []
+  for (const id of ids) {
+    const doc = await $zodula.doctype(doctype as any).get(id).bypass(true)
+    if (doc) {
+      documents.push(doc)
+    }
+  }
+
+  if (documents.length === 0) {
+    return ctx.json({ error: "No documents found" }, 404)
+  }
+
+  console.log("[PDF] Template items count:", items.length)
+  console.log("[PDF] Documents count:", documents.length)
+
+  // Fetch letter head if provided
+  let letterHead: any = null
+  let letterHeadItems: any[] = []
+  if (letter_head) {
+    letterHead = await $zodula.doctype("zodula__Letter Head").get(letter_head).bypass(true)
+    if (letterHead) {
+      const { docs: lhItems } = await $zodula.doctype("zodula__Letter Head Item")
+        .select()
+        .where("letter_head", "=", letter_head)
+        .sort("idx", "asc")
+        .bypass(true)
+      letterHeadItems = lhItems
+    }
+  }
+
+  // Determine page dimensions
+  const pageFormat = template.format || "A4"
+  const pageDims: { width: number; height: number } = pageFormat === "Custom"
+    ? { width: template.custom_width || 210, height: template.custom_height || 297 }
+    : (PAGE_FORMATS[pageFormat] ?? { width: 210, height: 297 })
+
+  // Generate HTML for each document
+  const htmlPages: string[] = []
 
   for (const doc of documents) {
-    try {
-      let user = null;
-      try {
-        user = await zodula.doctype("zodula__User").get("current_user_id");
-      } catch (error) {
-        console.warn("Could not fetch current user:", error);
-      }
-
-      const pageTitle = `${doc.id} | ${options.doctypeLabel}`;
-      const letterHeadContent = await renderLetterHead(
-        options.letterHeadTemplate,
-        { doc, user, lang: options.lang, zodula }
-      );
-
-      const rendered = env.renderString(templateContent, {
-        doc,
-        user,
-        lang: options.lang,
-        letter_head: options.letterHead || "",
-        letter_head_content: letterHeadContent,
-        letter_head_css: options.letterHeadCss,
-        page_title: pageTitle,
-        doctype_label: options.doctypeLabel,
-        doctype_name: options.doctypeName,
-        is_single: options.isSingle,
-      });
-
-      renderedDocs.push(rendered);
-    } catch (error) {
-      console.error("Template rendering error:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      throw new Error(`Template rendering failed: ${errorMessage}`);
+    // Render letter head items if any
+    let letterHeadHtml = ""
+    if (letterHeadItems.length > 0) {
+      const letterHeadPromises = letterHeadItems.map((item) => renderTemplateItem(item, doc, baseUrl, sessionContext, letterHeadItems))
+      const letterHeadResults = await Promise.all(letterHeadPromises)
+      letterHeadHtml = letterHeadResults.join("")
     }
-  }
 
-  return renderedDocs;
-}
+    // Calculate actual heights of all elements (especially for reference tables)
+    // We calculate directly from data instead of using jsdom since jsdom doesn't do layout
+    const measuredHeights = new Map<string, number>()
+    items.forEach((item) => {
+      // Calculate height based on item type and data
+      const calculatedHeight = calculateItemHeight(item, doc)
+      measuredHeights.set(item.id, calculatedHeight)
+      console.log(`[PDF] Calculated height for item ${item.id} (${item.type}): ${calculatedHeight}px (original: ${item.transform_height}px)`)
+    })
+    
+    // Render template items with anchor calculations using measured heights
+    const itemPromises = items.map((item) => renderTemplateItem(item, doc, baseUrl, sessionContext, items, measuredHeights))
+    const itemResults = await Promise.all(itemPromises)
+    const itemsHtml = itemResults.join("")
 
-async function generatePDF(
-  html: string,
-  template: Zodula.SelectDoctype<"zodula__Print Template"> | null
-): Promise<Response | null> {
-  if (!puppeteer) return null;
-
-  try {
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
-
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
-
-    const pdfBuffer = await page.pdf({
-      format: (template?.format as any) || DEFAULT_PDF_FORMAT,
-      printBackground: true,
-      margin: {
-        top: `${template?.margin_top ?? DEFAULT_MARGIN}mm`,
-        right: `${template?.margin_right ?? DEFAULT_MARGIN}mm`,
-        bottom: `${template?.margin_bottom ?? DEFAULT_MARGIN}mm`,
-        left: `${template?.margin_left ?? DEFAULT_MARGIN}mm`,
-      },
-    });
-
-    await browser.close();
-
-    return new Response(pdfBuffer, {
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": "inline; filename=document.pdf",
-      },
-    });
-  } catch (error) {
-    console.error("PDF generation error:", error);
-    return null;
-  }
-}
-
-// ============================================================================
-// Template Generation Functions
-// ============================================================================
-
-function convertLayoutToTemplate(
-  layoutJson: string,
-  doctypeFields: Record<string, Zodula.Field>,
-  customCSS: string,
-  defaultCurrency: string,
-  isSingle: boolean
-): string {
-  try {
-    const layout = JSON.parse(layoutJson);
-    return generateTemplateFromLayout(
-      layout,
-      doctypeFields,
-      customCSS,
-      defaultCurrency,
-      isSingle
-    );
-  } catch (error) {
-    console.error("Error parsing layout JSON:", error);
-    return "";
-  }
-}
-
-function generateTemplateFromLayout(
-  layout: any[],
-  doctypeFields: Record<string, Zodula.Field>,
-  customCSS: string,
-  defaultCurrency: string,
-  isSingle: boolean
-): string {
-  const combinedCSS = `${BASE_CSS}\n${customCSS || ""}`;
-  const layoutHtml = renderLayoutRecursive(
-    layout,
-    doctypeFields,
-    "doc",
-    defaultCurrency
-  );
-
-  return `<!DOCTYPE html>
-<html lang="en">
+    // Build HTML with correct anchor positions
+    const html = `<!DOCTYPE html>
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>{{ page_title }}</title>
-    <style>${combinedCSS}</style>
+  <meta charset="UTF-8">
+  <style>
+    @page {
+      size: ${pageDims.width}mm ${pageDims.height}mm;
+      margin: 0;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      position: relative;
+    }
+    .page-container {
+      position: relative;
+      width: ${pageDims.width}mm;
+      min-height: ${pageDims.height}mm;
+      margin: 0;
+      padding: 0;
+      overflow: visible;
+    }
+    ${template.css || ""}
+    ${letterHead?.css_content || ""}
+  </style>
 </head>
 <body>
-<div class="document-header-container">
-    {% if letter_head_content %}
-    <div class="letter-head">
-        {{ letter_head_content | safe }}
-    </div>
-    {% else %}
-    <div class="document-header"></div>
-    {% endif %}
-    <div class="document-header">
-        {% if not is_single %}
-        <p>{{ doc.id }}</p>
-        {% endif %}
-        <h1>{{ doctype_label }}</h1>
-    </div>
-</div>
-${layoutHtml}
+  <div class="page-container">
+    ${letterHeadHtml}
+    ${itemsHtml}
+  </div>
 </body>
-</html>`;
-}
+</html>`
 
-// ============================================================================
-// Field Rendering Functions
-// ============================================================================
-
-function renderReferenceTableField(
-  field: any,
-  fieldConfig: Zodula.Field
-): string {
-  const fieldName = field.value;
-  const alignClass = field.align ? `align-${field.align}` : "";
-  const specifiedFields = field.fields || [];
-  const referenceDoctype = fieldConfig?.reference;
-
-  if (!referenceDoctype) {
-    return renderSimpleTable(fieldName, alignClass);
-  }
-
-  try {
-    const refDoctypeMetadata = loader
-      .from("doctype")
-      .get(referenceDoctype as Zodula.DoctypeName);
-    const refFields = refDoctypeMetadata.schema.fields;
-
-    const displayFields =
-      specifiedFields.length > 0
-        ? specifiedFields
-            .map(
-              (name: string) =>
-                [name, refFields[name]] as [string, Zodula.Field]
-            )
-            .filter(([, config]: [string, Zodula.Field]) => config)
-        : (Object.entries(refFields)
-            .filter(
-              ([name, config]: [string, Zodula.Field]) =>
-                !config.no_print &&
-                !zodula.utils.isStandardField(name) &&
-                config.in_list_view
-            )
-            .slice(0, MAX_TABLE_COLUMNS) as [string, Zodula.Field][]);
-
-    if (displayFields.length === 0) {
-      return renderSimpleTable(fieldName, alignClass);
+    console.log("[PDF] Generated HTML length:", html.length)
+    console.log("[PDF] Items HTML length:", itemsHtml.length)
+    console.log("[PDF] Letter head HTML length:", letterHeadHtml.length)
+    
+    // If no content at all, add a debug message
+    if (!itemsHtml && !letterHeadHtml) {
+      console.error("[PDF] Error: No content generated. Items:", items.length, "Letter head items:", letterHeadItems.length)
     }
-
-    return renderTableWithFields(fieldName, alignClass, displayFields);
-  } catch (error) {
-    console.warn(
-      `Could not load reference doctype ${referenceDoctype}:`,
-      error
-    );
-    return renderSimpleTable(fieldName, alignClass);
+    
+    htmlPages.push(html)
   }
-}
 
-function renderSimpleTable(fieldName: string, alignClass: string): string {
-  return `    <div class="reference-table-section">
-        <div class="field-label ${alignClass}">{{ __(fields["${fieldName}"].label) }}</div>
-        <div class="reference-table">
-            <div class="table-header">
-                <div class="table-cell">ID</div>
-            </div>
-            {% for item in doc.${fieldName} %}
-                <div class="table-row">
-                    <div class="table-cell">{{ item.id }}</div>
-                </div>
-            {% endfor %}
-        </div>
-    </div>`;
-}
-
-function renderTableWithFields(
-  fieldName: string,
-  alignClass: string,
-  displayFields: [string, Zodula.Field][]
-): string {
-  const headerCells = displayFields
-    .map(
-      ([name, config]) =>
-        `                <div class="table-cell">{{ __("${config.label || name}") }}</div>`
-    )
-    .join("\n");
-
-  const dataCells = displayFields
-    .map(([name, config]) => {
-      const fieldType = config.type || "Text";
-      const fieldClass = getFieldTypeClass(fieldType);
-      return `                        <div class="table-cell ${fieldClass}">{{ item.${name} or '' }}</div>`;
+  // If format is HTML, return HTML (useful for debugging)
+  if (format === "html") {
+    return new Response(htmlPages[0] || "", {
+    headers: {
+        "Content-Type": "text/html; charset=utf-8",
+      },
     })
-    .join("\n");
-
-  return `    <div class="reference-table-section">
-        <div class="field-label ${alignClass}">{{ __(fields["${fieldName}"].label) }}</div>
-        <div class="reference-table">
-            <div class="table-header">
-${headerCells}
-            </div>
-            {% if doc.${fieldName} and doc.${fieldName}.length > 0 %}
-                {% for item in doc.${fieldName} %}
-                    <div class="table-row">
-${dataCells}
-                    </div>
-                {% endfor %}
-            {% else %}
-                <div class="table-row">
-                    <div class="table-cell" colspan="${displayFields.length}"></div>
-                </div>
-            {% endif %}
-        </div>
-    </div>`;
-}
-
-function renderExtendFieldRecursive(
-  fieldName: string,
-  fieldConfig: Zodula.Field,
-  doctypeFields: Record<string, Zodula.Field>,
-  defaultCurrency: string,
-  docPrefix: string = "doc"
-): string {
-  if (!fieldConfig.reference) {
-    return renderSimpleExtendField(fieldName, docPrefix);
   }
+
+  // Debug: Log if no items found
+  if (items.length === 0) {
+    console.warn("[PDF] Warning: No template items found for template:", print_template)
+    // Return error if no items
+    return ctx.json({ error: "No template items found. Please add items to the print template." }, 400)
+  }
+
+  // Generate PDF using Puppeteer
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  })
 
   try {
-    const referenceDoctype = loader
-      .from("doctype")
-      .get(fieldConfig.reference as Zodula.DoctypeName);
-    const referenceFields = referenceDoctype.schema.fields;
-    const defaultLayout = generateDefaultLayout(
-      referenceDoctype,
-      referenceFields
-    );
-    const nestedDocPrefix = `${docPrefix}["${fieldName}"]`;
-    const layoutHtml = renderLayoutRecursive(
-      defaultLayout,
-      referenceFields,
-      nestedDocPrefix,
-      defaultCurrency,
-      fieldConfig
-    );
+    const pdfBuffers: Buffer[] = []
 
-    return `    <div class="extend-section">
-        <div class="section-title">{{ __("${fieldConfig.label || fieldName}") }}</div>
-        <div class="extend-content">
-${layoutHtml}        </div>
-    </div>`;
-  } catch (error) {
-    console.warn(
-      `Could not load reference doctype ${fieldConfig.reference}:`,
-      error
-    );
-    return renderSimpleExtendField(fieldName, docPrefix);
-  }
-}
-
-function renderSimpleExtendField(fieldName: string, docPrefix: string): string {
-  return `    <div class="extend-section">
-        <div class="extend-content">
-            <div class="extend-field">
-                <div class="extend-field-value">{{ ${docPrefix}["${fieldName}"] }}</div>
-            </div>
-        </div>
-    </div>`;
-}
-
-// ============================================================================
-// Layout Generation Functions
-// ============================================================================
-
-function generateDefaultLayout(
-  doctypeMetadata: DoctypeMetadata | null,
-  doctypeFields: Record<string, Zodula.Field>
-): any[] {
-  const layout: any[] = [];
-  const fieldsInLayout = new Set<string>();
-
-  const printableFields = Object.keys(doctypeFields).filter((fieldName) => {
-    const field = doctypeFields[fieldName];
-    return (
-      (!field || !field.no_print || field.no_print !== 1) &&
-      !zodula.utils.isStandardField(fieldName)
-    );
-  });
-
-  if (!doctypeMetadata) {
-    return createFieldRows(printableFields, fieldsInLayout, "");
-  }
-
-  const tabs = doctypeMetadata.schema.tabs
-    ? JSON.parse(doctypeMetadata.schema.tabs)
-    : [];
-
-  if (tabs && tabs.length > 0) {
-    for (const tab of tabs) {
-      layout.push(...tab.layout);
-      extractFieldsFromLayout(tab.layout, fieldsInLayout, doctypeFields);
+    for (const html of htmlPages) {
+      const page = await browser.newPage()
+      
+      // Set viewport to match page size
+      await page.setViewport({
+        width: Math.round((pageDims.width * 96) / 25.4), // Convert mm to pixels
+        height: Math.round((pageDims.height * 96) / 25.4),
+      })
+      
+      await page.setContent(html, { waitUntil: "domcontentloaded" })
+      
+      // Wait a bit for any async content to load
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      // Debug: Take a screenshot to see what's rendered (optional, can be removed)
+      // await page.screenshot({ path: '/tmp/debug-pdf.png', fullPage: true })
+      
+      const pdfBuffer = await page.pdf({
+        format: pageFormat === "Custom" ? undefined : (pageFormat as any),
+        width: pageFormat === "Custom" ? `${pageDims.width}mm` : undefined,
+        height: pageFormat === "Custom" ? `${pageDims.height}mm` : undefined,
+        margin: {
+          top: `${template.margin_top || 10}mm`,
+          right: `${template.margin_right || 10}mm`,
+          bottom: `${template.margin_bottom || 10}mm`,
+          left: `${template.margin_left || 10}mm`,
+        },
+        printBackground: true,
+        preferCSSPageSize: false,
+      })
+      pdfBuffers.push(Buffer.from(pdfBuffer))
+      await page.close()
     }
-  } else {
-    const sectionLabel = doctypeMetadata.schema.label || "";
-    layout.push(
-      ...createFieldRows(printableFields, fieldsInLayout, sectionLabel)
-    );
+
+    await browser.close()
+
+    // Combine multiple PDFs if needed (for now, just return first)
+    const pdfBuffer = pdfBuffers[0] || Buffer.from("")
+
+    return new Response(pdfBuffer as any, {
+      headers: {
+        "Content-Type": "application/pdf",
+      },
+    })
+  } catch (error: any) {
+    await browser.close()
+    return ctx.json({ error: error.message || "Failed to generate PDF" }, 500)
   }
-
-  const remainingFields = printableFields.filter(
-    (fieldName) => !fieldsInLayout.has(fieldName) && !isStandardField(fieldName)
-  );
-
-  if (remainingFields.length > 0) {
-    layout.push({ type: "section", value: "Additional" });
-    layout.push(...createFieldRows(remainingFields, new Set(), ""));
-  }
-
-  return layout;
-}
-
-function createFieldRows(
-  fields: string[],
-  fieldsInLayout: Set<string>,
-  sectionLabel: string
-): any[] {
-  const rows: any[] = [];
-  if (sectionLabel) {
-    rows.push({ type: "section", value: sectionLabel });
-  }
-  for (const fieldName of fields) {
-    fieldsInLayout.add(fieldName);
-    rows.push([{ type: "field", value: fieldName, align: "left" }]);
-  }
-  return rows;
-}
-
-function renderLayoutRecursive(
-  layout: any[],
-  doctypeFields: Record<string, Zodula.Field>,
-  docPrefix: string = "doc",
-  defaultCurrency: string,
-  parentField?: Zodula.Field
-): string {
-  let html = "";
-  let currentSection = "";
-
-  for (const item of layout) {
-    if (Array.isArray(item)) {
-      html += `    <div class="row">\n`;
-      for (const field of item) {
-        if (
-          typeof field === "object" &&
-          field !== null &&
-          field.type === "field"
-        ) {
-          html += renderFieldInRow(
-            field,
-            doctypeFields,
-            docPrefix,
-            defaultCurrency,
-            parentField
-          );
-        }
-      }
-      html += `    </div>\n`;
-    } else if (typeof item === "object" && item !== null) {
-      if (item.type === "section") {
-        if (currentSection) {
-          html += `    </div>\n`;
-        }
-        currentSection = item.value || "";
-        html += `    <div class="section">\n`;
-      } else if (item.type === "field") {
-        html += renderField(
-          item,
-          doctypeFields,
-          docPrefix,
-          defaultCurrency,
-          parentField
-        );
-      }
-    }
-  }
-
-  if (currentSection) {
-    html += `    </div>\n`;
-  }
-
-  return html;
-}
-
-function renderFieldInRow(
-  field: any,
-  doctypeFields: Record<string, Zodula.Field>,
-  docPrefix: string,
-  defaultCurrency: string,
-  parentField?: Zodula.Field
-): string {
-  const fieldConfig = doctypeFields[field.value];
-  if (!fieldConfig || fieldConfig.no_print === 1) return "";
-  if (parentField && parentField.reference_alias === field.value) return "";
-
-  const fieldType = fieldConfig.type || "Text";
-  const alignClass = field.align ? `align-${field.align}` : "";
-
-  if (fieldType === "Reference Table") {
-    return renderReferenceTableField(
-      { value: field.value, align: field.align, fields: field.fields },
-      fieldConfig
-    );
-  }
-
-  if (fieldType === "Extend") {
-    return renderExtendFieldRecursive(
-      field.value,
-      fieldConfig,
-      doctypeFields,
-      defaultCurrency,
-      docPrefix
-    );
-  }
-
-  if (fieldType === "File") {
-    return renderFileField(field, fieldConfig, alignClass, docPrefix);
-  }
-
-  return renderStandardField(
-    field,
-    fieldConfig,
-    alignClass,
-    docPrefix,
-    defaultCurrency
-  );
-}
-
-function renderFileField(
-  field: any,
-  fieldConfig: Zodula.Field,
-  alignClass: string,
-  docPrefix: string
-): string {
-  const fieldValueHtml =
-    `{% set fieldValue = ${docPrefix}["${field.value}"] %}\n` +
-    `{% if fieldValue and fieldValue|isImageFile %}\n` +
-    `    <img src="{{ zodula.utils.getDoctypeFileUrl(doctype_name, doc.id, "${field.value}", fieldValue) }}" alt="{{ fieldValue }}" style="max-width: ${fieldConfig.width || DEFAULT_IMAGE_WIDTH}px; height: auto;" />\n` +
-    `{% else %}\n` +
-    `    {{ fieldValue or '' }}\n` +
-    `{% endif %}`;
-
-  return `        <div class="field-group ${alignClass}">
-            <div class="field-label ${alignClass}">{{ __(fields["${field.value}"].label) }}</div>
-            <div class="field-value">
-                ${fieldValueHtml}
-            </div>
-        </div>`;
-}
-
-function renderStandardField(
-  field: any,
-  fieldConfig: Zodula.Field,
-  alignClass: string,
-  docPrefix: string,
-  defaultCurrency: string
-): string {
-  const fieldType = fieldConfig.type || "Text";
-  let fieldValueClass = getFieldTypeClass(fieldType);
-  let currencyAttr = "";
-
-  if (fieldType === "Currency") {
-    const currencySymbol = getCurrencySymbol(fieldConfig, defaultCurrency);
-    if (currencySymbol !== defaultCurrency) {
-      fieldValueClass = "currency-custom";
-      currencyAttr = ` data-currency="${currencySymbol}"`;
-    }
-  }
-
-  return `        <div class="field-group ${alignClass}">
-            <div class="field-label ${alignClass}">{{ __(fields["${field.value}"].label) }}</div>
-            <div class="field-value ${fieldValueClass}"${currencyAttr}>
-                {{ ${docPrefix}["${field.value}"] }}
-            </div>
-        </div>`;
-}
-
-function renderField(
-  item: any,
-  doctypeFields: Record<string, Zodula.Field>,
-  docPrefix: string,
-  defaultCurrency: string,
-  parentField?: Zodula.Field
-): string {
-  const fieldConfig = doctypeFields[item.value];
-  if (!fieldConfig || fieldConfig.no_print === 1) return "";
-  if (parentField && parentField.reference_alias === item.value) return "";
-
-  const fieldType = fieldConfig.type || "Text";
-
-  if (fieldType === "Reference Table") {
-    return renderReferenceTableField(
-      { value: item.value, align: item.align, fields: item.fields },
-      fieldConfig
-    );
-  }
-
-  if (fieldType === "Extend") {
-    return renderExtendFieldRecursive(
-      item.value,
-      fieldConfig,
-      doctypeFields,
-      defaultCurrency,
-      docPrefix
-    );
-  }
-
-  return renderSingleField(item, fieldConfig, docPrefix, defaultCurrency);
-}
-
-function renderSingleField(
-  field: any,
-  fieldConfig: Zodula.Field,
-  docPrefix: string = "doc",
-  defaultCurrency: string
-): string {
-  const alignClass = field.align ? `align-${field.align}` : "";
-  const fieldType = fieldConfig.type || "Text";
-
-  if (fieldType === "File") {
-    return `    <div class="row">\n${renderFileField(field, fieldConfig, alignClass, docPrefix)}\n    </div>\n`;
-  }
-
-  return `    <div class="row">\n${renderStandardField(field, fieldConfig, alignClass, docPrefix, defaultCurrency)}\n    </div>\n`;
-}
-
-function getFieldTypeClass(fieldType: string): string {
-  const typeMap: Record<string, string> = {
-    Check: "boolean",
-    Integer: "number",
-    Float: "number",
-    Currency: "currency",
-    Date: "date",
-    Datetime: "date",
-    Time: "date",
-    Text: "text",
-    Textarea: "text",
-    Select: "text",
-    Link: "text",
-    Table: "text",
-    JSON: "text",
-  };
-  return typeMap[fieldType] || "text";
-}
-
-function getCurrencySymbol(
-  fieldConfig: Zodula.Field,
-  defaultCurrency: string
-): string {
-  return fieldConfig?.currency_symbol || defaultCurrency;
-}
-
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
-function isImageFile(fileName: string | null | undefined): boolean {
-  if (!fileName || typeof fileName !== "string") return false;
-  const lowerFileName = fileName.toLowerCase();
-  return IMAGE_EXTENSIONS.some((ext) => lowerFileName.endsWith(ext));
-}
-
-function extractFieldsFromLayout(
-  layout: any[],
-  fieldsSet: Set<string>,
-  doctypeFields: Record<string, Zodula.Field> = {}
-): void {
-  for (const item of layout) {
-    if (Array.isArray(item)) {
-      for (const field of item) {
-        if (
-          typeof field === "object" &&
-          field !== null &&
-          field.type === "field"
-        ) {
-          const fieldConfig = doctypeFields[field.value];
-          if (!fieldConfig?.no_print || fieldConfig.no_print !== 1) {
-            fieldsSet.add(field.value);
-          }
-        } else if (typeof field === "string" && field.trim() !== "") {
-          const fieldConfig = doctypeFields[field];
-          if (!fieldConfig?.no_print || fieldConfig.no_print !== 1) {
-            fieldsSet.add(field);
-          }
-        }
-      }
-    } else if (
-      typeof item === "object" &&
-      item !== null &&
-      item.type === "field"
-    ) {
-      const fieldConfig = doctypeFields[item.value];
-      if (!fieldConfig?.no_print || fieldConfig.no_print !== 1) {
-        fieldsSet.add(item.value);
-      }
-    }
-  }
-}
+}, {
+  query: z.object({
+    print_template: z.string(),
+    doctype: z.string(),
+    ids: z.union([z.string(), z.array(z.string())]),
+    lang: z.string().nullable().optional(),
+    letter_head: z.string().nullable().optional(),
+    format: z.enum(["pdf", "html"]).optional()
+  }),
+  method: "GET",
+})

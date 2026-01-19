@@ -348,7 +348,7 @@ export function AuditTrail({
                   </div>
                   {/* Comment display */}
                   {trail.comment && (
-                    <div className="zd:ml-0 zd:mt-1 zd:pl-4 zd:border-l-2 zd:border-gray-200 zd:text-sm zd:text-gray-600 zd:italic">
+                    <div className="zd:ml-0 zd:mt-1 zd:pl-4 zd:border-l-2 zd:border-muted zd:text-sm zd:text-gray-600 zd:italic">
                       {trail.comment}
                     </div>
                   )}

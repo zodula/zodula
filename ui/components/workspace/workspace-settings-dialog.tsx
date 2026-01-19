@@ -58,7 +58,7 @@ export const WorkspaceSettingsDialog = ({
         <Dialog open={isOpen} onClose={onClose}>
             <div className="zd:fixed zd:inset-0 zd:z-50 zd:flex zd:items-center zd:justify-center">
                 <div className="zd:fixed zd:inset-0 zd:bg-black/50" onClick={onClose} />
-                <DialogContent className="zd:relative zd:bg-white zd:rounded-lg zd:shadow-lg zd:border zd:border-gray-200 zd:max-w-md zd:w-full zd:m-4">
+                <DialogContent className="zd:relative zd:bg-white zd:rounded-lg zd:shadow-lg zd:border zd:border-muted zd:max-w-md zd:w-full zd:m-4">
                     <div className="zd:p-6">
                         <DialogTitle className="zd:mb-4">
                             {isCreatingNew ? "Create New Workspace" : "Edit Workspace"}

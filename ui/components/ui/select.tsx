@@ -46,6 +46,7 @@ export interface SelectProps {
   value?: string;
   onChange?: (value: string) => void;
   onSelect?: (option: SelectOption) => void;
+  onOptionHover?: (value: string | null) => void;
   placeholder?: string;
   disabled?: boolean;
   readOnly?: boolean;
@@ -74,6 +75,7 @@ const Select = ({
   value = "",
   onChange,
   onSelect,
+  onOptionHover,
   placeholder = "Select an option...",
   disabled = false,
   readOnly = false,
@@ -628,7 +630,13 @@ const Select = ({
                         e.stopPropagation();
                         handleOptionSelect(option);
                       }}
-                      onMouseEnter={() => setFocusedIndex(index)}
+                      onMouseEnter={() => {
+                        setFocusedIndex(index);
+                        onOptionHover?.(option.value);
+                      }}
+                      onMouseLeave={() => {
+                        onOptionHover?.(null);
+                      }}
                       tabIndex={-1}
                     >
                       <div className="zd:flex zd:items-center zd:gap-2">

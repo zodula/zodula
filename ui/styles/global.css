@@ -28,7 +28,7 @@
     --chart-3: oklch(0.398 0.07 227.392);
     --chart-4: oklch(0.828 0.189 84.429);
     --chart-5: oklch(0.769 0.188 70.08);
-    --radius: 0.625rem;
+    --radius: 0.2rem;
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.145 0 0);
     --sidebar-primary: oklch(0.205 0 0);
@@ -214,6 +214,60 @@ svg {
 
 .grid-item.drag-handle:active {
     @apply zd:cursor-grabbing;
+}
+
+/* Custom Scrollbar Styles */
+* {
+    /* Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.556 0 0 / 0.3) transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: oklch(0.556 0 0 / 0.3);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.556 0 0 / 0.5);
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:active {
+    background: oklch(0.556 0 0 / 0.7);
+    background-clip: padding-box;
+}
+
+/* Dark mode scrollbar */
+.dark * {
+    scrollbar-color: oklch(0.708 0 0 / 0.3) transparent;
+}
+
+.dark *::-webkit-scrollbar-thumb {
+    background: oklch(0.708 0 0 / 0.3);
+    background-clip: padding-box;
+}
+
+.dark *::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.708 0 0 / 0.5);
+    background-clip: padding-box;
+}
+
+.dark *::-webkit-scrollbar-thumb:active {
+    background: oklch(0.708 0 0 / 0.7);
+    background-clip: padding-box;
 }
 
 @media print {

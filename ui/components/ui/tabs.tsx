@@ -16,7 +16,7 @@ export const Tabs: React.FC<TabsProps> = ({ tabs, activeTab, onTabChange, transl
     }, [translate, t]);
 
     return (
-        <div className="zd:border-b zd:border-gray-200">
+        <div className="zd:border-b zd:border-muted">
             <nav className="zd:-mb-px zd:flex zd:space-x-8" aria-label="Tabs">
                 {tabs.map((tab: string) => (
                     <button

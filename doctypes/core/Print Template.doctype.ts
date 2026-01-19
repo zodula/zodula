@@ -8,21 +8,8 @@ export default $doctype<"zodula__Print Template">({
         reference: "zodula__Doctype",
         required: 1
     },
-    is_custom: {
-        type: "Check",
-        default: "0"
-    },
     is_default: {
         type: "Check"
-    },
-    html: {
-        type: "Code",
-        options: "html",
-        depends_on: "doc.is_custom === 1"
-    },
-    layout: {
-        type: "JSON",
-        depends_on: "doc.is_custom === 0"
     },
     css: {
         type: "Code",
@@ -51,9 +38,21 @@ export default $doctype<"zodula__Print Template">({
     },
     format: {
         type: "Select",
-        options: "A4\nA3\nA5\nLetter\nLegal\nTabloid",
+        options: "A4\nA3\nA5\nLetter\nLegal\nTabloid\nCustom",
         default: "A4",
         label: "Page Format"
+    },
+    custom_width: {
+        type: "Float",
+        label: "Custom Width (mm)",
+        depends_on: "doc.format === 'Custom'",
+        default: "210"
+    },
+    custom_height: {
+        type: "Float",
+        label: "Custom Height (mm)",
+        depends_on: "doc.format === 'Custom'",
+        default: "297"
     },
     default_lang: {
         type: "Reference",

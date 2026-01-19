@@ -176,7 +176,7 @@ export const WorkspaceView = () => {
                 {...dropZoneProps}
                 className={cn(
                     "zd:relative zd:group zd:rounded-lg zd:relative",
-                    isEditing ? "zd:bg-white zd:border zd:border-gray-200 zd:hover:shadow-sm zd:transition-shadow" : "",
+                    isEditing ? "zd:bg-white zd:border zd:border-muted zd:hover:shadow-sm zd:transition-shadow" : "",
                     plugin.flexClass
                 )}
             >
@@ -184,7 +184,7 @@ export const WorkspaceView = () => {
                     {isEditing && (
                         <div
                             {...dragHandleProps}
-                            className="zd:absolute zd:top-2 zd:right-2 zd:p-1 zd:bg-gray-100 zd:rounded zd:opacity-0 hover:zd:opacity-100 transition-opacity zd:border zd:border-gray-200"
+                            className="zd:absolute zd:top-2 zd:right-2 zd:p-1 zd:bg-gray-100 zd:rounded zd:opacity-0 hover:zd:opacity-100 transition-opacity zd:border zd:border-muted"
                             title="Drag to reorder"
                         >
                             <LucideIcons.GripVertical className="zd:w-4 zd:h-4 zd:text-gray-600" />

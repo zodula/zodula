@@ -3,12 +3,6 @@ export default $doctype<"zodula__Letter Head">({
         type: "Text",
         required: 1
     },
-    content: {
-        type: "Code",
-        options: "html",
-        label: "Letter Head Content",
-        description: "HTML content for the letter head. Use {{company_name}}, {{company_address}}, etc. for dynamic content."
-    },
     css_content: {
         type: "Code",
         options: "css",

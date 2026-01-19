@@ -95,7 +95,7 @@ const LanguageSelectionDialog = ({
                                         ${
                                           isSelected
                                             ? "zd:bg-blue-50 zd:border-blue-500 zd:text-blue-700"
-                                            : "zd:border-gray-200 zd:text-gray-700"
+                                            : "zd:border-muted zd:text-gray-700"
                                         }
                                     `}
                 >
@@ -139,7 +139,7 @@ const LanguageSelectionDialog = ({
                                             ${
                                               isSelected
                                                 ? "zd:bg-blue-50 zd:border-blue-500 zd:text-blue-700 zd:opacity-70"
-                                                : "zd:border-gray-200 zd:text-gray-400 zd:bg-gray-50"
+                                                : "zd:border-muted zd:text-gray-400 zd:bg-gray-50"
                                             }
                                         `}
                   >

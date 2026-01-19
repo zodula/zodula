@@ -10,7 +10,7 @@ const toastVariants = cva(
   {
     variants: {
       variant: {
-        default: "zd:border-gray-200 zd:bg-white zd:text-gray-900",
+        default: "zd:border-muted zd:bg-white zd:text-gray-900",
         destructive:
           "zd:border-red-200 zd:bg-red-50 zd:text-red-800",
         success:

@@ -39,7 +39,7 @@ export const AboutZodulaDialog = ({ isOpen, onClose }: AboutZodulaDialogProps) =
                                 href={link.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="zd:flex zd:items-center zd:space-x-3 zd:p-3 zd:rounded-lg zd:border zd:border-gray-200 zd:hover:bg-gray-50 zd:transition-colors"
+                                className="zd:flex zd:items-center zd:space-x-3 zd:p-3 zd:rounded-lg zd:border zd:border-muted zd:hover:bg-gray-50 zd:transition-colors"
                             >
                                 <IconComponent className="zd:h-5 zd:w-5 zd:text-gray-600" />
                                 <div>
@@ -59,7 +59,7 @@ export const AboutZodulaDialog = ({ isOpen, onClose }: AboutZodulaDialogProps) =
                 {apps.length > 0 ? (
                     <div className="zd:space-y-2">
                         {apps.map((app) => (
-                            <div key={app.id} className="zd:flex zd:items-center zd:justify-between zd:p-4 zd:border zd:border-gray-200 zd:rounded-lg zd:bg-white">
+                            <div key={app.id} className="zd:flex zd:items-center zd:justify-between zd:p-4 zd:border zd:border-muted zd:rounded-lg zd:bg-white">
                                 <div className="zd:flex-1">
                                     <div className="zd:flex zd:items-center zd:space-x-3">
                                         <span className="zd:font-semibold zd:text-gray-900">{app.name}</span>

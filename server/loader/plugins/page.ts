@@ -37,7 +37,7 @@ export class PageLoader implements BasePlugin<PageMetadata> {
         this.shell = [];
         for await (const pagePath of portalGlob.scan(".")) {
             const app = loader.from("app").getAppByPath(pagePath);
-            const importName = pagePath.replaceAll("/", "_").replaceAll(".", "___").replaceAll(":", "__").replaceAll("-", "_____")
+            const importName = pagePath.replaceAll("/", "_").replaceAll(".", "___").replaceAll(":", "__").replaceAll("-", "_____").replaceAll(" ", "_");
             const routerPathRegex = /apps\/(.*)\/ui\/pages\/(.*)\/page\.tsx/;
             const routerPath = "/" + (pagePath.match(routerPathRegex)?.[2] || "");
             const importModule = await import(path.resolve(pagePath))
