@@ -104,6 +104,7 @@ export async function generateTemplateFromTabs(options: {
   pageDimensions: { width: number; height: number }; // in mm
   doctypeLabel: string;
   fetchChildFields: (referenceDoctype: string) => Promise<ChildField[]>;
+  doctype: string;
 }): Promise<PrintTemplateElement[]> {
   const { tabs, fields, pageDimensions, doctypeLabel, fetchChildFields } = options;
   
@@ -196,7 +197,7 @@ export async function generateTemplateFromTabs(options: {
             
             if (fieldConfig) {
               // Check if it's a Reference Table
-              if (fieldConfig.type === "Reference Table" && fieldConfig.reference) {
+              if (fieldConfig.type === "Reference Table" && fieldConfig.reference && fieldConfig.reference !== options.doctype ) {
                 // Fetch child fields for the table
                 const childFields = await fetchChildFields(fieldConfig.reference);
                 

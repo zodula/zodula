@@ -856,6 +856,7 @@ export default $action(async (ctx) => {
       pageDimensions: PAGE_FORMATS.A4 || { width: 210, height: 297 },
       doctypeLabel,
       fetchChildFields,
+      doctype,
     })
 
     // Convert elements to items format

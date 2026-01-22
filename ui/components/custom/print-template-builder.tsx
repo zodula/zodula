@@ -865,6 +865,7 @@ export function PrintTemplateBuilder({
         pageDimensions: pageDimensions || { width: 210, height: 297 },
         doctypeLabel,
         fetchChildFields,
+        doctype,
       });
       
       // Update anchored elements to calculate final positions
