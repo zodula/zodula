@@ -4,7 +4,7 @@ import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
 import { useDoc } from "@/zodula/ui/hooks/use-doc";
 import { useAuth } from "@/zodula/ui/hooks/use-auth";
 import { Button } from "@/zodula/ui/components/ui/button";
-import { FileText, Plus, ChevronRight } from "lucide-react";
+import { FileText, Plus, ChevronRight, BuildingIcon } from "lucide-react";
 import { zodula } from "@/zodula/client";
 import { popup } from "@/zodula/ui/components/ui/popit";
 import { CreateOrganizationDialog } from "../../components/dialogs/create-organization-dialog";
@@ -56,7 +56,7 @@ export default function DeskPage() {
         },
         {}
       );
-      if (result) {
+      if (result?.id) {
         await reloadOrganizations();
         // Navigate to the newly created organization
         push(`/desk/${result.id}`);
@@ -134,7 +134,7 @@ export default function DeskPage() {
                       : "zd:border-input"
                   )}
                 >
-                  <FileText className="zd:w-5 zd:h-5 zd:text-muted-foreground zd:flex-shrink-0" />
+                  <BuildingIcon className="zd:w-5 zd:h-5 zd:text-muted-foreground zd:flex-shrink-0" />
                   <div className="zd:flex-1 zd:min-w-0">
                     <div className="zd:font-medium zd:text-foreground zd:truncate">
                       {org.name || org.id}
@@ -152,6 +152,7 @@ export default function DeskPage() {
           {/* Create New Company Button */}
           <Button
             variant="outline"
+            size="lg"
             onClick={handleCreateOrganization}
             className="zd:w-full zd:flex zd:items-center zd:gap-2 zd:justify-start"
           >

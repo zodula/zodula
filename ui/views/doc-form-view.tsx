@@ -263,10 +263,32 @@ export function DocFormView({
     const prefillData: Record<string, any> = {};
 
     fields.forEach((field) => {
-      if (field.doctype === doctype && field.name && field.no_copy !== 1) {
+      if (field.doctype === doctype && field.name) {
+        // Skip fields with no_copy flag, except for Reference Table and Extend fields
+        if (field.no_copy === 1 && field.type !== "Reference Table" && field.type !== "Extend") {
+          return;
+        }
+
         const fieldValue = (doc as Record<string, any>)[field.name];
         if (fieldValue !== undefined && fieldValue !== null) {
-          prefillData[field.name] = fieldValue;
+          // Handle Reference Table fields (arrays of child documents)
+          if (field.type === "Reference Table" && Array.isArray(fieldValue)) {
+            // Copy child documents but remove IDs so new ones are created
+            prefillData[field.name] = fieldValue.map((childDoc: any) => {
+              const { id, ...rest } = childDoc;
+              return rest;
+            });
+          }
+          // Handle Extend fields (single child document)
+          else if (field.type === "Extend" && typeof fieldValue === "object" && fieldValue !== null) {
+            // Copy child document but remove ID so a new one is created
+            const { id, ...rest } = fieldValue;
+            prefillData[field.name] = rest;
+          }
+          // Handle regular fields
+          else {
+            prefillData[field.name] = fieldValue;
+          }
         }
       }
     });
@@ -289,6 +311,7 @@ export function DocFormView({
         {
           doctype: doctype as Zodula.DoctypeName,
           docIds: [id || doctype],
+          org: org || ""
         }
       );
     } catch (error) {
@@ -738,13 +761,15 @@ export function DocFormView({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={handleDuplicate}>
-                        <Copy className="zd:w-4 zd:h-4 zd:mr-1" />
-                        <span className="zd:flex-1">{t("Duplicate")}</span>
-                        <kbd className="zd:ml-2 zd:px-1 zd:py-0.5 zd:text-xs zd:bg-muted zd:rounded">
-                          Ctrl + D
-                        </kbd>
-                      </DropdownMenuItem>
+                      {!isSingle && (
+                        <DropdownMenuItem onClick={handleDuplicate}>
+                          <Copy className="zd:w-4 zd:h-4 zd:mr-1" />
+                          <span className="zd:flex-1">{t("Duplicate")}</span>
+                          <kbd className="zd:ml-2 zd:px-1 zd:py-0.5 zd:text-xs zd:bg-muted zd:rounded">
+                            Ctrl + D
+                          </kbd>
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem onClick={handleReload}>
                         <RotateCcw className="zd:w-4 zd:h-4 zd:mr-1" />
                         <span className="zd:flex-1">{t("Reload")}</span>

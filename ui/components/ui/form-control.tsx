@@ -28,6 +28,7 @@ export interface FormControlProps {
   docId?: string;
   fieldPath?: string; // The nested field path for reference table fields
   showDescription?: boolean;
+  org?: string;
 }
 
 const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
@@ -54,6 +55,7 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
       docId,
       fieldPath,
       showDescription = true,
+      org,
     },
     ref
   ) => {
@@ -101,6 +103,7 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
                 formData={formData}
                 fieldPath={fieldPath}
                 docId={docId}
+                org={org}
               />
               {!!field.description && showDescription && (
                 <p className="zd:text-muted-foreground zd:mt-1">

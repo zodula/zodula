@@ -80,6 +80,10 @@ export default $doctype(
       type: "Check",
       label: "Is Global",
     },
+    is_quick_entry: {
+      type: "Check",
+      label: "Is Quick Entry",
+    },
   },
   {
     label: "Doctype",

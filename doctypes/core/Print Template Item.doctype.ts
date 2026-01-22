@@ -11,7 +11,7 @@ export default $doctype<"zodula__Print Template Item">({
     type: {
         type: "Select",
         label: "Type",
-        options: "field\ntext\nimage\nline\nreference\ncustom_html\ncontainer",
+        options: "field\ntext\nimage\nline\nreference\ncustom_html\nanchor",
         required: 1,
         in_list_view: 1
     },
@@ -67,6 +67,26 @@ export default $doctype<"zodula__Print Template Item">({
         options: "top\nmiddle\nbottom",
         default: "middle"
     },
+    style_font_size: {
+        type: "Float",
+        label: "Font Size (px)",
+        description: "Font size in pixels for text/field/reference elements"
+    },
+    style_font_weight: {
+        type: "Text",
+        label: "Font Weight",
+        description: "CSS font-weight value (e.g., normal, bold, 600)"
+    },
+    style_font_style: {
+        type: "Text",
+        label: "Font Style",
+        description: "CSS font-style value (e.g., normal, italic)"
+    },
+    style_text_decoration: {
+        type: "Text",
+        label: "Text Decoration",
+        description: "CSS text-decoration value (e.g., underline, line-through)"
+    },
     field_name: {
         type: "Text",
         label: "Field Name",
@@ -98,6 +118,12 @@ export default $doctype<"zodula__Print Template Item">({
         label: "Height",
         default: "30"
     },
+    code: {
+        type: "Text",
+        label: "Code",
+        description: "Stable identifier for anchoring (not auto-generated id)",
+        required: 0
+    },
     idx: {
         type: "Integer",
         label: "Index",
@@ -112,10 +138,11 @@ export default $doctype<"zodula__Print Template Item">({
     anchor_config: {
         type: "JSON",
         label: "Anchor Configuration",
-        description: "For anchored elements: anchorTo (element ID), anchorPosition (top/bottom/left/right), anchorOffset (pixels)"
+        description: "For anchored elements: anchorTo (element ID), anchorPosition (top-left only), anchorOffset (pixels)"
     }
 }, {
     label: "Print Template Item",
     search_fields: "type\nvalue",
-    display_field: "type"
+    display_field: "type",
+    naming_series: "{{code}}"
 })

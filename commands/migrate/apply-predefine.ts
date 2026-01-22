@@ -132,6 +132,7 @@ async function upsertFieldsBatch(
       width: fieldSchema.width || null,
       fetch_from: fieldSchema.fetch_from || null,
       organization: "system",
+      in_quick_entry: fieldSchema.in_quick_entry ? 1 : 0 || null,
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Field">>;
 
@@ -445,6 +446,7 @@ async function upsertDoctype(
       only_fixtures: doctype.config.only_fixtures ? 1 : 0,
       is_child_doctype: doctype.config.is_child_doctype ? 1 : 0,
       is_global: doctype.config.is_global ? 1 : 0,
+      is_quick_entry: doctype.config.is_quick_entry ? 1 : 0,
       organization: "system",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype">>;

@@ -72,23 +72,48 @@ const DropdownMenuContent = React.forwardRef<
 ))
 DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName
 
+type DropdownMenuItemProps = React.ComponentPropsWithoutRef<
+  typeof DropdownMenuPrimitive.Item
+> & {
+  inset?: boolean
+  href?: string
+  target?: React.HTMLAttributeAnchorTarget
+  rel?: string
+}
+
 const DropdownMenuItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & {
-    inset?: boolean
+  DropdownMenuItemProps
+>(({ className = "", inset, href, target, rel, children, ...props }, ref) => {
+  const itemClasses = cn(
+    "zd:relative zd:flex zd:gap-2 zd:cursor-pointer zd:select-none zd:items-center zd:rounded-sm zd:px-2 zd:py-1.5 zd:outline-none zd:transition-colors zd:focus:bg-accent zd:focus:text-accent-foreground zd:data-[disabled]:pointer-events-none zd:data-[disabled]:opacity-50",
+    inset ? "zd:pl-8" : "",
+    "zd:hover:bg-accent zd:hover:text-accent-foreground",
+    className
+  )
+
+  if (href) {
+    return (
+      <DropdownMenuPrimitive.Item asChild {...props}>
+        <a
+          ref={ref as React.Ref<HTMLAnchorElement>}
+          href={href}
+          target={target}
+          rel={rel}
+          className={itemClasses}
+        >
+          {children}
+        </a>
+      </DropdownMenuPrimitive.Item>
+    )
   }
->(({ className = "", inset, ...props }, ref) => (
-  <DropdownMenuPrimitive.Item
-    ref={ref}
-    className={cn(
-      "zd:relative zd:flex zd:gap-2 zd:cursor-pointer zd:select-none zd:items-center zd:rounded-sm zd:px-2 zd:py-1.5 zd:outline-none zd:transition-colors zd:focus:bg-accent zd:focus:text-accent-foreground zd:data-[disabled]:pointer-events-none zd:data-[disabled]:opacity-50",
-      inset ? "zd:pl-8" : "",
-      "zd:hover:bg-accent zd:hover:text-accent-foreground",
-      className
-    )}
-    {...props}
-  />
-))
+
+  return (
+    <DropdownMenuPrimitive.Item ref={ref} className={itemClasses} {...props}>
+      {children}
+    </DropdownMenuPrimitive.Item>
+  )
+})
 DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName
 
 const DropdownMenuCheckboxItem = React.forwardRef<

@@ -173,7 +173,7 @@ export const Navbar = ({ children }: NavbarProps) => {
         >
           <div className="zd:relative zd:group zd:flex zd:items-center zd:gap-2 zd:flex-1">
             <Link
-              to={`/desk`}
+              to={`/desk/${org}`}
               className={cn(
                 "zd:text-xl zd:font-bold zd:flex zd:items-center zd:gap-2  zd:w-10 zd:h-10"
               )}
@@ -228,7 +228,7 @@ export const Navbar = ({ children }: NavbarProps) => {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuLabel className="zd:text-sm zd:flex zd:flex-col">
+                  <DropdownMenuLabel className="zd:text-sm zd:flex zd:flex-col zd:min-w-48">
                     <span>{user?.name || user?.email}</span>
                     <span className="zd:text-xs zd:text-muted-foreground zd:truncate zd:max-w-40">
                       {" "}
@@ -241,6 +241,9 @@ export const Navbar = ({ children }: NavbarProps) => {
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={toggleFullWidth}>
                     {t("Toggle Full Width")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem href="/desk">
+                    {t("Change Organization")}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={handleAboutZodula}>
                     {t("About")}

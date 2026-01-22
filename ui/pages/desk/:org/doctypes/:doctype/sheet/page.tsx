@@ -279,7 +279,7 @@ export default function DoctypeSheetPage() {
                     <DropdownMenuTrigger asChild>
                         <Button
                             variant="outline"
-                            className="zd:flex zd:items-center zd:gap-2"
+                            className="zd:flex zd:items-center zd:gap-2 zd:px-3 zd:py-0.5"
                         >
                             <Grid3x3 className="zd:h-4 zd:w-4" />
                             {t("Sheet View")}
@@ -289,7 +289,7 @@ export default function DoctypeSheetPage() {
                     <DropdownMenuContent align="end">
                         <DropdownMenuItem
                             onClick={handleSwitchToListView}
-                            className="zd:flex zd:items-center zd:gap-2"
+                            className="zd:flex zd:items-center zd:gap-2 zd:px-3 zd:py-0.5"
                         >
                             <List className="zd:h-4 zd:w-4" />
                             {t("List View")}

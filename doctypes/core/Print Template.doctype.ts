@@ -57,6 +57,11 @@ export default $doctype<"zodula__Print Template">({
     default_lang: {
         type: "Reference",
         reference: "zodula__Language"
+    },
+    guided_background: {
+        type: "File",
+        label: "Guided Background",
+        description: "Background image to guide template layout on physical paper (displayed with opacity)"
     }
 }, {
     label: "Print Template",

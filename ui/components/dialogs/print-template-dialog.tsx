@@ -4,6 +4,7 @@ import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
 import { Loader2, Printer } from "lucide-react";
 import { FormControl } from "../ui/form-control";
+import { useRouter } from "../router";
 
 interface PrintTemplateDialogProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ interface PrintTemplateDialogProps {
   initialData?: {
     doctype: Zodula.DoctypeName;
     docIds: string[];
+    org: string;
   };
 }
 
@@ -66,42 +68,15 @@ export function PrintTemplateDialog({
     }
   }, [letterHeads]);
 
-  const handlePrint = async () => {
-    if (!initialData?.docIds) return;
-
-    setIsPrinting(true);
-    try {
-      // Find the selected template
-      const template = printTemplates?.find((t) => t.id === selectedTemplate);
-
-      // Construct print URL
-      const printUrl = `/api/action/zodula.print.pdf?${initialData.docIds.map((id) => `ids=${id}`).join("&")}&lang=${lang}&doctype=${initialData.doctype}${selectedTemplate ? `&print_template=${selectedTemplate}` : ""}${selectedLetterHead ? `&letter_head=${selectedLetterHead}` : ""}&t=${new Date().getTime()}`;
-
-      // Open print window
-      const printWindow = window.open(
-        printUrl,
-        "_blank",
-        "width=800,height=600,scrollbars=yes,resizable=yes"
-      );
-
-      if (printWindow) {
-        printWindow.focus();
-        // Close dialog after opening print window
-        onClose({
-          templateId: selectedTemplate || "",
-          templateName: template?.name || "",
-        });
-      }
-    } catch (error) {
-      console.error("Error opening print window:", error);
-    } finally {
-      setIsPrinting(false);
-    }
-  };
-
   const handleClose = () => {
     onClose(null);
   };
+  
+  const template = printTemplates?.find((t) => t.id === selectedTemplate);
+  const printUrl =
+    initialData?.docIds && initialData?.doctype
+      ? `/api/action/zodula.print.pdf?${initialData.docIds.map((id) => `ids=${id}`).join("&")}&lang=${lang}&doctype=${initialData.doctype}${selectedTemplate ? `&print_template=${selectedTemplate}` : ""}${selectedLetterHead ? `&letter_head=${selectedLetterHead}` : ""}&t=${new Date().getTime()}`
+      : undefined;
 
   return (
     <div className="zd:flex zd:flex-col zd:gap-4 zd:p-1">
@@ -120,6 +95,7 @@ export function PrintTemplateDialog({
             onChange={(fieldName, value) => {
               setLang(value);
             }}
+            org={initialData?.org}
           />
           <FormControl
             label="Letter Head"
@@ -133,6 +109,7 @@ export function PrintTemplateDialog({
               setSelectedLetterHead(value);
             }}
             value={selectedLetterHead}
+            org={initialData?.org}
           />
           <FormControl
             label="Print Template"
@@ -145,6 +122,7 @@ export function PrintTemplateDialog({
             onChange={(fieldName, value) => {
               setSelectedTemplate(value);
             }}
+            org={initialData?.org}
             value={selectedTemplate}
           />
         </div>
@@ -154,21 +132,24 @@ export function PrintTemplateDialog({
             Cancel
           </Button>
           <Button
-            onClick={handlePrint}
-            disabled={isPrinting}
+            href={printUrl}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => {
+              if (printUrl) {
+                onClose({
+                  templateId: selectedTemplate || "",
+                  templateName: template?.name || "",
+                });
+              }
+            }}
+            disabled={!printUrl}
             className="zd:min-w-[100px]"
           >
-            {isPrinting ? (
-              <>
-                <Loader2 className="zd:h-4 zd:w-4 zd:mr-2 zd:animate-spin" />
-                Printing...
-              </>
-            ) : (
-              <>
-                <Printer className="zd:h-4 zd:w-4 zd:mr-2" />
-                {selectedTemplate ? "Print" : "Default Print"}
-              </>
-            )}
+            <>
+              <Printer className="zd:h-4 zd:w-4 zd:mr-2" />
+              {selectedTemplate ? "Print" : "Default Print"}
+            </>
           </Button>
         </div>
       </div>

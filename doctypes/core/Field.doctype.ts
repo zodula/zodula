@@ -151,6 +151,10 @@ export default $doctype({
     width: {
         type: "Integer",
         label: "Width"
+    },
+    in_quick_entry: {
+        type: "Check",
+        label: "In Quick Entry"
     }
 
 }, {

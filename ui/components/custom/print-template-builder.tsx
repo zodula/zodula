@@ -10,18 +10,33 @@ import { PrintTemplateElementHover } from "./print-template-element-hover";
 import { cn } from "../../lib/utils";
 import { BASE_URL } from "@/zodula/client/utils";
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
+import { PAGE_FORMATS, generateTemplateFromTabs as generateTemplateFromTabsUtil, type PrintTemplateElement as SharedPrintTemplateElement } from "@/zodula/client/code-utils";
 import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
+import { useDoc } from "@/zodula/ui/hooks/use-doc";
 import { useDnd } from "@/zodula/ui/hooks/use-dnd";
+import { confirm } from "../ui/popit";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "../ui/dropdown-menu";
 import { 
   Hash, Type, Image, Minus, Grid3x3, LayoutGrid, 
   GripVertical, X, Maximize2, ZoomIn, ZoomOut,
   AlignLeft, AlignCenter, AlignRight, Eye, Undo, Redo,
-  ArrowUp, ArrowDown, Code, Settings, ChevronRight, ChevronLeft
+  ArrowUp, ArrowDown, Code, Settings, ChevronRight, ChevronLeft,
+  Bold, Italic, Underline, Strikethrough,
+  Wand2,
+  Anchor
 } from "lucide-react";
 
 export interface PrintTemplateElement {
   id: string;
-  type: "field" | "text" | "image" | "line" | "reference" | "custom_html" | "container";
+  code?: string; // Code for anchoring (stable identifier, not auto-generated id)
+  type: "field" | "text" | "image" | "line" | "reference" | "custom_html" | "anchor";
   value?: string | File;
   align?: "left" | "center" | "right";
   verticalAlign?: "top" | "middle" | "bottom";
@@ -34,9 +49,9 @@ export interface PrintTemplateElement {
   label?: string; // Label text to display
   labelPosition?: "left" | "right" | "top" | "bottom"; // Position of label relative to value
   // Anchor support - element can be anchored to another element
-  anchorTo?: string; // ID of element to anchor to
-  anchorPosition?: "top" | "bottom" | "left" | "right" | "inside"; // Position relative to anchored element
-  anchorOffset?: number | { x: number; y: number }; // Offset in pixels from anchor position (number for top/bottom/left/right, {x, y} for inside)
+  anchorTo?: string; // Code of element to anchor to (not id, as id is auto-generated)
+  anchorPosition?: "top-left"; // Position relative to anchored element (only top-left supported)
+  anchorOffset?: number | { x: number; y: number }; // Offset in pixels from anchor position (supports both number and {x, y})
   // Table configuration for Reference Table fields
   tableConfig?: {
     columns?: Array<{
@@ -51,6 +66,8 @@ export interface PrintTemplateElement {
   style?: {
     fontSize?: number;
     fontWeight?: string;
+    fontStyle?: string;
+    textDecoration?: string;
     color?: string;
     backgroundColor?: string;
     border?: string;
@@ -77,6 +94,9 @@ interface PrintTemplateBuilderProps {
   format?: "A4" | "A3" | "A5" | "Letter" | "Legal" | "Tabloid" | "Custom";
   customWidth?: number; // in mm
   customHeight?: number; // in mm
+  guidedBackground?: string | File; // Guided background image URL or File
+  onGuidedBackgroundChange?: (background: string | File | null) => void; // Callback when guided background changes
+  templateId?: string; // Template ID for file uploads
 }
 
 const TOOLS = [
@@ -86,18 +106,10 @@ const TOOLS = [
   { type: "line", icon: Minus, label: "Line" },
   { type: "reference", icon: Hash, label: "Reference" },
   { type: "custom_html", icon: LayoutGrid, label: "Custom HTML" },
-  { type: "container", icon: Grid3x3, label: "Container" },
+  { type: "anchor", icon: Grid3x3, label: "Anchor" },
 ] as const;
 
-// Page format dimensions in mm
-const PAGE_FORMATS: Record<string, { width: number; height: number }> = {
-  A4: { width: 210, height: 297 },
-  A3: { width: 297, height: 420 },
-  A5: { width: 148, height: 210 },
-  Letter: { width: 216, height: 279 },
-  Legal: { width: 216, height: 356 },
-  Tabloid: { width: 279, height: 432 },
-};
+// Re-export PAGE_FORMATS for backward compatibility (now imported from code-utils)
 
 // Table Customization Panel Component
 function TableCustomizationPanel({
@@ -389,8 +401,18 @@ export function PrintTemplateBuilder({
   format = "A4",
   customWidth,
   customHeight,
+  guidedBackground,
+  onGuidedBackgroundChange,
+  templateId,
 }: PrintTemplateBuilderProps) {
   const { t } = useTranslation();
+  
+  // Fetch doctype configuration for template generation
+  const { doc: doctypeDoc } = useDoc({
+    doctype: "zodula__Doctype",
+    id: doctype || "",
+    fields: ["tabs", "label"],
+  }, [doctype]);
   const [selectedElements, setSelectedElements] = useState<Set<string>>(new Set());
   const [showGrid, setShowGrid] = useState(true);
   const [snapToGrid, setSnapToGrid] = useState(true);
@@ -400,7 +422,7 @@ export function PrintTemplateBuilder({
   const canvasRef = useRef<HTMLDivElement>(null);
   const paperRef = useRef<HTMLDivElement>(null);
   const [draggedElementId, setDraggedElementId] = useState<string | null>(null);
-  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number; elementX: number; elementY: number } | null>(null);
+  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number; elementX: number; elementY: number; visualX: number; visualY: number; initialOffsetX?: number; initialOffsetY?: number } | null>(null);
   const [dragCurrentPos, setDragCurrentPos] = useState<{ x: number; y: number } | null>(null);
   const [resizingElementId, setResizingElementId] = useState<string | null>(null);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
@@ -410,10 +432,13 @@ export function PrintTemplateBuilder({
   const [history, setHistory] = useState<PrintTemplateElement[][]>([[]]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const objectUrlsRef = useRef<Map<string, string>>(new Map());
+  const guidedBackgroundUrlRef = useRef<string | null>(null);
+  const guidedBackgroundIsFileRef = useRef<boolean>(false);
   const [hoveredAnchorElementId, setHoveredAnchorElementId] = useState<string | null>(null);
   const [selectingAnchorFor, setSelectingAnchorFor] = useState<string | null>(null); // Element ID for which we're selecting an anchor
   const [tableSettingsTab, setTableSettingsTab] = useState<string>("general"); // Top-level tab for table settings
   const [showSidebar, setShowSidebar] = useState(true); // Sidebar visibility state
+  const [isDragging, setIsDragging] = useState(false); // Flag to prevent anchor recalculation during drag
 
   // Check if setting anchorTo would create a loop
   const wouldCreateLoop = useCallback((elementId: string, anchorToId: string, allElements: PrintTemplateElement[]): boolean => {
@@ -438,7 +463,13 @@ export function PrintTemplateBuilder({
       
       // Also check the potential new anchor
       if (currentId === anchorToId) {
-        const anchorElement = allElements.find(el => el.id === anchorToId);
+        // Find anchor element by code (preferred) or id (fallback)
+        const anchorElement = allElements.find(el => {
+          if (el.code) {
+            return el.code === anchorToId;
+          }
+          return el.id === anchorToId;
+        });
         if (anchorElement?.anchorTo === elementId) return true; // Would create cycle
         if (anchorElement?.anchorTo && hasCycle(anchorElement.anchorTo)) return true;
       }
@@ -463,7 +494,14 @@ export function PrintTemplateBuilder({
     }
     visited.add(element.id);
     
-    const anchorElement = allElements.find(el => el.id === element.anchorTo);
+    // Find anchor element by code (preferred) or id (fallback for backward compatibility)
+    const anchorElement = allElements.find(el => {
+      if (el.code) {
+        return el.code === element.anchorTo;
+      }
+      // Fallback to id for backward compatibility
+      return el.id === element.anchorTo;
+    });
     if (!anchorElement) {
       return { x: element.transform?.x || 0, y: element.transform?.y || 0 };
     }
@@ -474,36 +512,18 @@ export function PrintTemplateBuilder({
     const anchorY = anchorPos.y;
     const anchorWidth = anchorElement.transform?.width || 0;
     const anchorHeight = anchorElement.transform?.height || 0;
-    const offset = element.anchorOffset || 0;
-    const position = element.anchorPosition || "bottom";
+    const elementWidth = element.transform?.width || 0;
+    const elementHeight = element.transform?.height || 0;
     
-    let newX = element.transform?.x || 0;
-    let newY = element.transform?.y || 0;
+    // Normalize offset to {x, y} format
+    const offset = element.anchorOffset || { x: 0, y: 0 };
+    const offsetX = typeof offset === "object" ? (offset.x || 0) : 0;
+    const offsetY = typeof offset === "object" ? (offset.y || 0) : (offset || 0);
     
-    switch (position) {
-      case "top":
-        newX = anchorX;
-        newY = anchorY - (element.transform?.height || 0) - (typeof offset === "number" ? offset : 0);
-        break;
-      case "bottom":
-        newX = anchorX;
-        newY = anchorY + anchorHeight + (typeof offset === "number" ? offset : 0);
-        break;
-      case "left":
-        newX = anchorX - (element.transform?.width || 0) - (typeof offset === "number" ? offset : 0);
-        newY = anchorY;
-        break;
-      case "right":
-        newX = anchorX + anchorWidth + (typeof offset === "number" ? offset : 0);
-        newY = anchorY;
-        break;
-      case "inside":
-        const offsetX = typeof offset === "object" ? offset.x : 0;
-        const offsetY = typeof offset === "object" ? offset.y : 0;
-        newX = anchorX + offsetX;
-        newY = anchorY + offsetY;
-        break;
-    }
+    // Only support top-left alignment
+    // Element's top-left corner positioned relative to anchor's top-left corner
+    const newX = anchorX + offsetX;
+    const newY = anchorY + offsetY;
     
     return { x: newX, y: newY };
   }, []);
@@ -511,16 +531,25 @@ export function PrintTemplateBuilder({
   // Update all anchored elements when layout changes
   const updateAnchoredElements = useCallback((elements: PrintTemplateElement[]): PrintTemplateElement[] => {
     // Build dependency graph to process anchors in correct order (topological sort)
+    // Use code for dependency tracking, fallback to id
     const elementMap = new Map<string, PrintTemplateElement>();
+    const codeToIdMap = new Map<string, string>(); // Map code to id for dependency tracking
     const dependencies = new Map<string, string[]>();
     
     elements.forEach(el => {
       elementMap.set(el.id, el);
+      if (el.code) {
+        codeToIdMap.set(el.code, el.id);
+      }
       if (el.anchorTo) {
         if (!dependencies.has(el.id)) {
           dependencies.set(el.id, []);
         }
-        dependencies.get(el.id)!.push(el.anchorTo);
+        // Find the anchor element by code or id
+        const anchorElement = elements.find(a => (a.code && a.code === el.anchorTo) || (!a.code && a.id === el.anchorTo));
+        if (anchorElement) {
+          dependencies.get(el.id)!.push(anchorElement.id);
+        }
       }
     });
     
@@ -681,6 +710,15 @@ export function PrintTemplateBuilder({
       : [],
   }, [selectedFieldConfig?.reference, selectedFieldConfig?.type]);
 
+  // Calculate page dimensions (used by template generator and other functions)
+  const pageDimensions = useMemo(() => {
+    if (format === "Custom" && typeof customWidth === "number" && typeof customHeight === "number" && customWidth > 0 && customHeight > 0) {
+      return { width: customWidth, height: customHeight };
+    }
+    const selectedFormat = PAGE_FORMATS[format || "A4"];
+    return selectedFormat || PAGE_FORMATS.A4;
+  }, [format, customWidth, customHeight]);
+
   // Define snapValue first since it's used by other callbacks
   const snapValue = useCallback((value: number) => {
     if (!snapToGrid) return value;
@@ -697,11 +735,170 @@ export function PrintTemplateBuilder({
     setHistoryIndex((prev) => Math.min(prev + 1, 49));
   }, [historyIndex]);
 
+  // Track if template generation is in progress to prevent multiple simultaneous calls
+  const [isGenerating, setIsGenerating] = useState(false);
+  
+  // Helper function to generate code using timestamp + random hex
+  const generateCode = useCallback((prefix: string = "") => {
+    const timestamp = Date.now();
+    const randomHex = Math.random().toString(16).substring(2, 10); // 8 hex characters
+    const code = `${timestamp}_${randomHex}`;
+    return prefix ? `${prefix}_${code}` : code;
+  }, []);
+
+  // Generate template from doctype tabs
+  const generateTemplateFromTabs = useCallback(async () => {
+    if (!doctypeDoc?.tabs || !fields.length || !doctype) return;
+    if (isGenerating) {
+      console.warn("Template generation already in progress, skipping...");
+      return;
+    }
+    
+    // Confirm before replacing existing layout
+    if (layout.length > 0) {
+      const confirmed = await confirm({
+        title: t("Replace Layout"),
+        message: t("This will replace the current layout. Continue?"),
+        confirmText: t("Replace"),
+        cancelText: t("Cancel"),
+        variant: "warning",
+      });
+      if (!confirmed) return;
+    }
+    
+    setIsGenerating(true);
+    try {
+      const tabs = typeof doctypeDoc.tabs === 'string' 
+        ? JSON.parse(doctypeDoc.tabs) 
+        : doctypeDoc.tabs;
+      
+      if (!Array.isArray(tabs) || tabs.length === 0) {
+        setIsGenerating(false);
+        return;
+      }
+      
+      // Cache for fetched child fields to prevent duplicate API calls
+      const childFieldsCache = new Map<string, Array<{ field: string; order: number; required?: boolean; in_list_view?: boolean }>>();
+      
+      // Helper function to fetch child fields for a Reference Table
+      const fetchChildFields = async (referenceDoctype: string): Promise<Array<{ field: string; order: number; required?: boolean; in_list_view?: boolean }>> => {
+        // Check cache first
+        if (childFieldsCache.has(referenceDoctype)) {
+          return childFieldsCache.get(referenceDoctype)!;
+        }
+        
+        try {
+          // The reference doctype name should be used as-is (may contain spaces like "zerp__Invoice Item")
+          // Build filter query parameters in the format the API expects: filters[0][0]=doctype&filters[0][1]==&filters[0][2]=referenceDoctype
+          const filterParams = new URLSearchParams();
+          filterParams.append('filters[0][0]', 'doctype');
+          filterParams.append('filters[0][1]', '=');
+          filterParams.append('filters[0][2]', referenceDoctype);
+          
+          const url = `${BASE_URL}/api/resources/zodula__Field?${filterParams.toString()}&sort=idx&order=asc&limit=10000`;
+          
+          const response = await fetch(url);
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Failed to fetch child fields:", response.status, response.statusText, errorText);
+            return [];
+          }
+          
+          const data = await response.json();
+          
+          // API returns {docs: [...], count, limit, page} format, not a direct array
+          const fieldsArray = Array.isArray(data) ? data : (data.docs || []);
+          
+          if (Array.isArray(fieldsArray) && fieldsArray.length > 0) {
+            // Standard fields that should be excluded from child table fields
+            const standardFieldNames = new Set([
+              "id",
+              "organization",
+              "owner",
+              "created_at",
+              "updated_at",
+              "created_by",
+              "updated_by",
+              "doc_status",
+              "idx",
+              "vector"
+            ]);
+            
+            // Filter to only include fields that belong to the reference doctype
+            const fields = fieldsArray
+              .filter((field: any) => {
+                const fieldDoctype = field.doctype || "";
+                const fieldName = field.name || "";
+                return fieldDoctype === referenceDoctype && !standardFieldNames.has(fieldName);
+              })
+              .map((field: any, idx: number) => ({
+                field: field.name || "",
+                order: idx,
+                required: field.required === 1 || field.required === true,
+                in_list_view: field.in_list_view === 1 || field.in_list_view === true
+              }))
+              .filter((col: any) => col.field); // Filter out empty field names
+            
+            // Cache the result
+            childFieldsCache.set(referenceDoctype, fields);
+            return fields;
+          }
+        } catch (error) {
+          console.error("Error fetching child fields:", error);
+        }
+        return [];
+      };
+      
+      // Use the extracted function from code-utils
+      const doctypeLabel = doctypeDoc?.label || doctype;
+      const newElements = await generateTemplateFromTabsUtil({
+        tabs,
+        fields: fields
+          .filter(f => f.name) // Filter out fields without names
+          .map(f => ({
+            name: f.name!,
+            label: f.label || undefined,
+            type: f.type,
+            reference: f.reference || undefined,
+          })),
+        pageDimensions: pageDimensions || { width: 210, height: 297 },
+        doctypeLabel,
+        fetchChildFields,
+      });
+      
+      // Update anchored elements to calculate final positions
+      const updatedElements = updateAnchoredElements(newElements);
+      
+      // Count headers to debug
+      const headerCount = updatedElements.filter(el => el.type === "text" && el.value === doctypeLabel).length;
+      if (headerCount > 1) {
+        console.error(`WARNING: Generated ${headerCount} headers! Expected only 1. Elements:`, updatedElements.map(el => ({ type: el.type, value: el.value, code: el.code })));
+      }
+      
+      // Apply the new layout (replace existing, don't append)
+      onChange(updatedElements);
+      addToHistory(updatedElements);
+      setSelectedElements(new Set());
+      
+      console.log(`Generated ${updatedElements.length} elements (${headerCount} header(s) + ${updatedElements.length - headerCount} other elements)`);
+    } catch (error) {
+      console.error("Error generating template from tabs:", error);
+      alert(t("Failed to generate template. Please check doctype configuration."));
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [doctypeDoc, fields, pageDimensions, onChange, addToHistory, t, doctype, updateAnchoredElements, isGenerating]);
+
   const handleAddElement = useCallback((type: string, x?: number, y?: number) => {
     if (readonly) return;
-    const height = type === "line" ? snapSize : 30; // Line elements use grid size as height
+    const height = type === "line" ? snapSize : type === "anchor" ? 40 : type === "field" ? 50 : 30; // Line elements use grid size as height, anchor elements minimum 40x40, field elements minimum 50px
+    const width = type === "anchor" ? 40 : 200; // Anchor elements minimum 40x40
+    // Generate code for the element using timestamp + random hex
+    const code = generateCode(type);
     const newElement: PrintTemplateElement = {
       id: `element_${Date.now()}`,
+      code: code,
       type: type as any,
       value: type === "text" ? "New Text" : type === "custom_html" ? "" : "",
       align: "left",
@@ -709,7 +906,7 @@ export function PrintTemplateBuilder({
       transform: { 
         x: x !== undefined ? snapValue(x) : 0, 
         y: y !== undefined ? snapValue(y) : 0, 
-        width: 200, 
+        width: width, 
         height: height
       },
       ...(type === "reference" ? {
@@ -723,7 +920,7 @@ export function PrintTemplateBuilder({
     addToHistory(newLayout);
     // Select the new element
     setSelectedElements(new Set([newElement.id]));
-  }, [layout, onChange, readonly, snapValue, snapSize, addToHistory]);
+  }, [layout, onChange, readonly, snapValue, snapSize, addToHistory, generateCode]);
 
   // Handle keyboard delete
   useEffect(() => {
@@ -760,17 +957,39 @@ export function PrintTemplateBuilder({
     setSelectedElements(new Set());
   }, [layout, onChange, readonly, addToHistory]);
 
-  const handleUpdateElement = useCallback((id: string, updates: Partial<PrintTemplateElement>, skipHistory = false) => {
+  const handleUpdateElement = useCallback((id: string, updates: Partial<PrintTemplateElement>, skipHistory = false, skipAnchorRecalc = false) => {
     if (readonly) return;
     
     let newLayout = layout.map((el) => {
       if (el.id === id) {
         const updated = { ...el, ...updates };
+        
+        // If anchor settings changed, reset transform x/y to 0 (will be calculated from anchor)
+        const anchorChanged = updates.anchorTo !== undefined || updates.anchorPosition !== undefined || updates.anchorOffset !== undefined;
+        const wasAnchored = el.anchorTo !== undefined;
+        const isNowAnchored = updates.anchorTo !== undefined ? updates.anchorTo !== null : wasAnchored;
+        
+        if (anchorChanged && isNowAnchored) {
+          // Reset position when anchor settings change - it will be recalculated
+          updated.transform = {
+            ...(el.transform || { x: 0, y: 0, width: 200, height: 30 }),
+            x: 0,
+            y: 0,
+            ...(updates.transform ? {
+              width: updates.transform.width ?? el.transform?.width ?? 200,
+              height: Math.max(
+                updates.transform.height ?? el.transform?.height ?? 30
+              ),
+            } : {}),
+          };
+        } else if (updates.transform) {
         // Ensure transform is properly merged
-        if (updates.transform) {
           updated.transform = {
             ...(el.transform || { x: 0, y: 0, width: 200, height: 30 }),
             ...updates.transform,
+            height: Math.max(
+              updates.transform.height ?? el.transform?.height ?? 30
+            ),
           };
         }
         return updated;
@@ -779,10 +998,11 @@ export function PrintTemplateBuilder({
     });
     
     // If anchor settings changed or an element moved, update all anchored elements
+    // Skip anchor recalculation during drag to prevent loops
     const anchorChanged = updates.anchorTo !== undefined || updates.anchorPosition !== undefined || updates.anchorOffset !== undefined;
     const transformChanged = updates.transform?.x !== undefined || updates.transform?.y !== undefined;
     
-    if (anchorChanged || transformChanged) {
+    if ((anchorChanged || transformChanged) && !skipAnchorRecalc && !isDragging) {
       // Update all anchored elements (including nested)
       newLayout = updateAnchoredElements(newLayout);
     }
@@ -791,7 +1011,7 @@ export function PrintTemplateBuilder({
       addToHistory(newLayout);
     }
     onChange(newLayout);
-  }, [layout, onChange, readonly, addToHistory, updateAnchoredElements]);
+  }, [layout, onChange, readonly, addToHistory, updateAnchoredElements, isDragging]);
 
   const handleUndo = useCallback(() => {
     if (historyIndex > 0 && history[historyIndex - 1]) {
@@ -842,12 +1062,26 @@ export function PrintTemplateBuilder({
     const paperRect = paperRef.current.getBoundingClientRect();
     const scale = zoom / 100;
     
-    // Calculate position relative to the paper (accounting for scale and scroll)
+    // Get scroll offsets
     const scrollLeft = canvasRef.current.scrollLeft;
     const scrollTop = canvasRef.current.scrollTop;
     
-    const x = (e.clientX - paperRect.left + scrollLeft) / scale;
-    const y = (e.clientY - paperRect.top + scrollTop) / scale;
+    // Reverse the calculation from hover element:
+    // hover: x = (element.x * scale) + paperRect.left - canvasRect.left + scrollLeft
+    // So: element.x = (x - paperRect.left + canvasRect.left - scrollLeft) / scale
+    // Where x is mouse position in canvas scrollable space
+    
+    // Mouse position in canvas scrollable coordinate system
+    const mouseXInCanvas = e.clientX - canvasRect.left + scrollLeft;
+    const mouseYInCanvas = e.clientY - canvasRect.top + scrollTop;
+    
+    // Paper's position in canvas scrollable coordinate system
+    const paperXInCanvas = paperRect.left - canvasRect.left + scrollLeft;
+    const paperYInCanvas = paperRect.top - canvasRect.top + scrollTop;
+    
+    // Position relative to paper (unscaled coordinates)
+    const x = (mouseXInCanvas - paperXInCanvas) / scale;
+    const y = (mouseYInCanvas - paperYInCanvas) / scale;
     
     return { x: Math.max(0, x), y: Math.max(0, y) };
   }, [zoom]);
@@ -859,11 +1093,31 @@ export function PrintTemplateBuilder({
     
     const pos = getCanvasPosition(e);
     setDraggedElementId(element.id);
+    setIsDragging(true);
+    // Clear hover when dragging starts
+    setHoveredAnchorElementId(null);
+    
+    // Calculate current visual position (for anchored elements, this is the calculated position)
+    const currentVisualPos = element.anchorTo 
+      ? calculateAnchorPosition(element, layout)
+      : { x: element.transform?.x || 0, y: element.transform?.y || 0 };
+    
+    // Store initial offset if anchored
+    const initialOffset = element.anchorTo 
+      ? (typeof element.anchorOffset === "object" 
+          ? element.anchorOffset 
+          : { x: 0, y: typeof element.anchorOffset === "number" ? element.anchorOffset : 0 })
+      : null;
+    
     setDragStartPos({
       x: pos.x,
       y: pos.y,
       elementX: element.transform?.x || 0,
       elementY: element.transform?.y || 0,
+      visualX: currentVisualPos.x,
+      visualY: currentVisualPos.y,
+      initialOffsetX: initialOffset?.x || 0,
+      initialOffsetY: initialOffset?.y || 0,
     });
     setDragCurrentPos({ x: pos.x, y: pos.y });
     
@@ -871,48 +1125,114 @@ export function PrintTemplateBuilder({
     if (!selectedElements.has(element.id)) {
       setSelectedElements(new Set([element.id]));
     }
-  }, [readonly, getCanvasPosition, selectedElements]);
+  }, [readonly, getCanvasPosition, selectedElements, layout, calculateAnchorPosition]);
 
-  // Handle element drag
+  // Handle element drag - update directly without triggering anchor recalculation
   const handleElementDrag = useCallback((e: MouseEvent) => {
     if (!draggedElementId || !dragStartPos || !paperRef.current) return;
+    
+    const element = layout.find(el => el.id === draggedElementId);
+    if (!element) return;
     
     const pos = getCanvasPosition(e as any);
     setDragCurrentPos({ x: pos.x, y: pos.y });
     
-    // Calculate new position
+    // Calculate delta from mouse movement
     const deltaX = pos.x - dragStartPos.x;
     const deltaY = pos.y - dragStartPos.y;
     
+    // Update layout directly without triggering anchor recalculation during drag
+    let newLayout = layout.map((el) => {
+      if (el.id === draggedElementId) {
+        if (el.anchorTo) {
+          // Anchored element - need to calculate offset change based on anchor alignment
+          // The new visual position should be: startVisualPos + delta
+          const newVisualX = dragStartPos.visualX + deltaX;
+          const newVisualY = dragStartPos.visualY + deltaY;
+          
+          // Find anchor element to calculate offset (by code or id)
+          const anchorElement = layout.find(a => {
+            if (a.code) {
+              return a.code === el.anchorTo;
+            }
+            // Fallback to id for backward compatibility
+            return a.id === el.anchorTo;
+          });
+          if (!anchorElement) {
+            // Fallback: just add delta to offset
+            const initialOffsetX = dragStartPos.initialOffsetX ?? 0;
+            const initialOffsetY = dragStartPos.initialOffsetY ?? 0;
+            return {
+              ...el,
+              anchorOffset: { 
+                x: snapValue(initialOffsetX + deltaX), 
+                y: snapValue(initialOffsetY + deltaY) 
+              },
+            };
+          }
+          
+          // Calculate anchor's visual position (might be anchored itself)
+          const anchorVisualPos = calculateAnchorPosition(anchorElement, layout);
+          const anchorWidth = anchorElement.transform?.width || 0;
+          const anchorHeight = anchorElement.transform?.height || 0;
+          const elementWidth = el.transform?.width || 0;
+          const elementHeight = el.transform?.height || 0;
+          
+          // Only support top-left alignment
+          // Offset is simply the difference between new visual position and anchor position
+          const newOffsetX = newVisualX - anchorVisualPos.x;
+          const newOffsetY = newVisualY - anchorVisualPos.y;
+          
+          return {
+            ...el,
+            anchorOffset: { 
+              x: snapValue(newOffsetX), 
+              y: snapValue(newOffsetY) 
+            },
+          };
+        } else {
+          // Not anchored - update position directly
     const newX = snapValue(dragStartPos.elementX + deltaX);
     const newY = snapValue(dragStartPos.elementY + deltaY);
     
-    // Update element position in real-time (skip history during drag)
-    handleUpdateElement(draggedElementId, {
+          return {
+            ...el,
       transform: {
-        ...(layout.find(el => el.id === draggedElementId)?.transform || { x: 0, y: 0, width: 200, height: 30 }),
+              ...(el.transform || { x: 0, y: 0, width: 200, height: 30 }),
         x: newX,
         y: newY,
       },
-    }, true); // Skip history during drag
-  }, [draggedElementId, dragStartPos, getCanvasPosition, snapValue, handleUpdateElement, layout]);
+          };
+        }
+      }
+      return el;
+    });
+    
+    // Update anchored elements positions without triggering full recalculation
+    // Only update the dragged element's visual position
+    if (element.anchorTo) {
+      newLayout = updateAnchoredElements(newLayout);
+    }
+    
+    // Update layout directly (skip history and anchor recalculation flag)
+    onChange(newLayout);
+  }, [draggedElementId, dragStartPos, getCanvasPosition, snapValue, layout, onChange, updateAnchoredElements, calculateAnchorPosition]);
 
   // Handle element drag end
   const handleElementDragEnd = useCallback(() => {
-    // Add to history when drag ends
+    setIsDragging(false);
+    
+    // Finalize layout with proper anchor recalculation
     if (draggedElementId) {
-      const currentLayout = layout.map((el) => {
-        if (el.id === draggedElementId) {
-          return { ...el };
-        }
-        return el;
-      });
+      const currentLayout = updateAnchoredElements(layout);
       addToHistory(currentLayout);
+      onChange(currentLayout);
     }
+    
     setDraggedElementId(null);
     setDragStartPos(null);
     setDragCurrentPos(null);
-  }, [draggedElementId, layout, addToHistory]);
+  }, [draggedElementId, layout, addToHistory, onChange, updateAnchoredElements]);
 
   // Handle resize start
   const handleResizeStart = useCallback((e: React.MouseEvent, element: PrintTemplateElement, handle: string) => {
@@ -949,22 +1269,26 @@ export function PrintTemplateBuilder({
     let newWidth = resizeStartPos.elementWidth;
     let newHeight = resizeStartPos.elementHeight;
 
+    // Minimum size constraints
+    const minWidth = element.type === "anchor" ? 40 : 20;
+    const minHeight = element.type === "anchor" ? 40 : 20;
+
     // Handle different resize handles
     if (resizeHandle.includes('n')) { // North (top)
       const heightChange = -deltaY;
-      newHeight = Math.max(20, resizeStartPos.elementHeight + heightChange);
+      newHeight = Math.max(minHeight, resizeStartPos.elementHeight + heightChange);
       newY = resizeStartPos.elementY - (newHeight - resizeStartPos.elementHeight);
     }
     if (resizeHandle.includes('s')) { // South (bottom)
-      newHeight = Math.max(20, resizeStartPos.elementHeight + deltaY);
+      newHeight = Math.max(minHeight, resizeStartPos.elementHeight + deltaY);
     }
     if (resizeHandle.includes('w')) { // West (left)
       const widthChange = -deltaX;
-      newWidth = Math.max(20, resizeStartPos.elementWidth + widthChange);
+      newWidth = Math.max(minWidth, resizeStartPos.elementWidth + widthChange);
       newX = resizeStartPos.elementX - (newWidth - resizeStartPos.elementWidth);
     }
     if (resizeHandle.includes('e')) { // East (right)
-      newWidth = Math.max(20, resizeStartPos.elementWidth + deltaX);
+      newWidth = Math.max(minWidth, resizeStartPos.elementWidth + deltaX);
     }
 
     // Apply grid snapping
@@ -1122,6 +1446,44 @@ export function PrintTemplateBuilder({
     }
   }, [selectionBox, readonly, draggedElementId, resizingElementId, getCanvasPosition, layout]);
 
+  // Handle guided background URL
+  useEffect(() => {
+    if (guidedBackground) {
+      if (guidedBackground instanceof File) {
+        // Create object URL for File
+        if (guidedBackgroundUrlRef.current && guidedBackgroundIsFileRef.current) {
+          URL.revokeObjectURL(guidedBackgroundUrlRef.current);
+        }
+        guidedBackgroundUrlRef.current = URL.createObjectURL(guidedBackground);
+        guidedBackgroundIsFileRef.current = true;
+      } else {
+        // Clean up previous file URL if any
+        if (guidedBackgroundUrlRef.current && guidedBackgroundIsFileRef.current) {
+          URL.revokeObjectURL(guidedBackgroundUrlRef.current);
+        }
+        // Use string URL directly
+        guidedBackgroundUrlRef.current = guidedBackground;
+        guidedBackgroundIsFileRef.current = false;
+      }
+    } else {
+      // Clean up previous file URL if any
+      if (guidedBackgroundUrlRef.current && guidedBackgroundIsFileRef.current) {
+        URL.revokeObjectURL(guidedBackgroundUrlRef.current);
+      }
+      guidedBackgroundUrlRef.current = null;
+      guidedBackgroundIsFileRef.current = false;
+    }
+    
+    return () => {
+      // Clean up object URL if it was created from File
+      if (guidedBackgroundUrlRef.current && guidedBackgroundIsFileRef.current) {
+        URL.revokeObjectURL(guidedBackgroundUrlRef.current);
+        guidedBackgroundUrlRef.current = null;
+        guidedBackgroundIsFileRef.current = false;
+      }
+    };
+  }, [guidedBackground]);
+
   // Clean up object URLs on unmount
   useEffect(() => {
     return () => {
@@ -1129,17 +1491,11 @@ export function PrintTemplateBuilder({
         URL.revokeObjectURL(url);
       });
       objectUrlsRef.current.clear();
+      if (guidedBackgroundUrlRef.current && guidedBackgroundIsFileRef.current) {
+        URL.revokeObjectURL(guidedBackgroundUrlRef.current);
+      }
     };
   }, []);
-
-  // Calculate page dimensions
-  const pageDimensions = useMemo(() => {
-    if (format === "Custom" && typeof customWidth === "number" && typeof customHeight === "number" && customWidth > 0 && customHeight > 0) {
-      return { width: customWidth, height: customHeight };
-    }
-    const selectedFormat = PAGE_FORMATS[format || "A4"];
-    return selectedFormat || PAGE_FORMATS.A4;
-  }, [format, customWidth, customHeight]);
 
   // Calculate dynamic page height based on elements
   const dynamicPageHeight = useMemo(() => {
@@ -1236,8 +1592,34 @@ export function PrintTemplateBuilder({
           // Show table preview for Reference Table (like it will appear in PDF)
           const childFields = element.fields || [];
           const tableConfig = element.tableConfig || {};
-          const columns = tableConfig.columns || childFields.map((f, idx) => ({ field: f, order: idx }));
-          const sortedColumns = [...columns].sort((a, b) => (a.order || 0) - (b.order || 0));
+          // Ensure columns format is correct: { field: string, order?: number, width?: number }[]
+          // Use tableConfig.columns if available and valid, otherwise create from fields array
+          let columns: Array<{ field: string; order?: number; width?: number }> = [];
+          
+          if (tableConfig.columns && Array.isArray(tableConfig.columns) && tableConfig.columns.length > 0) {
+            // Use existing columns, but ensure they have field property
+            columns = tableConfig.columns.filter((col: any) => col && col.field && typeof col.field === "string");
+          }
+          
+          // If no valid columns from tableConfig, create from fields array
+          if (columns.length === 0 && childFields.length > 0) {
+            columns = childFields.map((f, idx) => ({ field: f, order: idx }));
+          }
+          
+          const sortedColumns = [...columns]
+            .filter((col: any) => col && col.field && typeof col.field === "string") // Filter out invalid columns
+            .sort((a, b) => (a.order || 0) - (b.order || 0));
+          
+          // Debug: log to help diagnose child fields issue
+          if (sortedColumns.length === 0) {
+            console.warn("Reference Table has no valid columns:", { 
+              childFields, 
+              tableConfig, 
+              columns,
+              elementFields: element.fields,
+              elementTableConfig: element.tableConfig
+            });
+          }
           const showHeader = tableConfig.showHeader !== false;
           const showBorder = tableConfig.showBorder !== false;
           const rowHeight = tableConfig.rowHeight || 20;
@@ -1246,6 +1628,14 @@ export function PrintTemplateBuilder({
           const getFieldLabel = (fieldName: string) => {
             const field = fields.find((f) => f.name === fieldName);
             return field?.label || fieldName;
+          };
+          
+          // Font styles for table cells
+          const tableTextStyle: React.CSSProperties = {
+            fontSize: element.style?.fontSize ? `${element.style.fontSize}px` : undefined,
+            fontWeight: element.style?.fontWeight,
+            fontStyle: element.style?.fontStyle,
+            textDecoration: element.style?.textDecoration,
           };
           
           // Calculate column widths to match element width
@@ -1257,7 +1647,7 @@ export function PrintTemplateBuilder({
           
           content = (
             <div className={cn("zd:h-full zd:w-full zd:overflow-hidden", alignClasses.vertical[verticalAlign as keyof typeof alignClasses.vertical])}>
-              {childFields.length > 0 ? (
+              {sortedColumns.length > 0 ? (
                 <table 
                   className="zd:text-xs"
                   style={{ 
@@ -1294,10 +1684,11 @@ export function PrintTemplateBuilder({
                                 height: `${rowHeight}px`,
                                 border: showBorder ? "1px solid #000" : "none",
                                 padding: "2px",
-                                fontWeight: "bold",
+                                fontWeight: element.style?.fontWeight || "bold",
                                 backgroundColor: "#f0f0f0",
                                 overflow: "hidden",
-                                textOverflow: "ellipsis"
+                                textOverflow: "ellipsis",
+                                ...tableTextStyle,
                               }}
                             >
                               {getFieldLabel(col.field)}
@@ -1338,10 +1729,11 @@ export function PrintTemplateBuilder({
                                 border: showBorder ? "1px solid #000" : "none",
                                 padding: "2px",
                                 overflow: "hidden",
-                                textOverflow: "ellipsis"
+                                textOverflow: "ellipsis",
+                                ...tableTextStyle,
                               }}
                             >
-                              <span className="zd:text-muted-foreground">Sample</span>
+                              <span className="zd:text-muted-foreground" style={tableTextStyle}>Sample</span>
                             </td>
                           )
                         })}
@@ -1377,21 +1769,61 @@ export function PrintTemplateBuilder({
           const labelText = element.label || "";
           const labelPos = element.labelPosition || "left";
           
+          const textStyle: React.CSSProperties = {
+            fontSize: element.style?.fontSize ? `${element.style.fontSize}px` : undefined,
+            fontWeight: element.style?.fontWeight,
+            fontStyle: element.style?.fontStyle,
+            textDecoration: element.style?.textDecoration,
+          };
+          
           const renderFieldContent = () => (
-            <span className={cn("zd:text-sm zd:font-mono", alignClasses.horizontal[horizontalAlign as keyof typeof alignClasses.horizontal])}>
+            <span
+              className={cn(
+                "zd:text-sm zd:font-mono zd:block zd:w-full",
+                alignClasses.horizontal[horizontalAlign as keyof typeof alignClasses.horizontal]
+              )}
+              style={textStyle}
+            >
               {`{{${fieldName}}}`}
             </span>
           );
           
+          const horizontalItems = {
+            left: "zd:items-start",
+            center: "zd:items-center",
+            right: "zd:items-end",
+          } as const;
+          
           const renderLabel = () => labelText ? (
-            <span className="zd:text-xs zd:text-muted-foreground zd:whitespace-nowrap">{labelText}</span>
+            <span
+              className={cn(
+                "zd:text-xs zd:text-muted-foreground zd:whitespace-nowrap zd:block zd:w-full",
+                alignClasses.horizontal[horizontalAlign as keyof typeof alignClasses.horizontal]
+              )}
+              style={textStyle}
+            >
+              {labelText}
+            </span>
           ) : null;
+          
+          const verticalColumn = {
+            top: "zd:justify-start",
+            middle: "zd:justify-center",
+            bottom: "zd:justify-end",
+          } as const;
           
           if (labelPos === "top" || labelPos === "bottom") {
             content = (
-              <div className={cn("zd:flex zd:flex-col zd:gap-1 zd:p-0 zd:h-full", alignClasses.vertical[verticalAlign as keyof typeof alignClasses.vertical])}>
+              <div className={cn("zd:flex zd:flex-col zd:gap-1 zd:p-0 zd:h-full")}>
                 {labelPos === "top" && renderLabel()}
+                <div
+                  className={cn(
+                    "zd:flex zd:flex-1 zd:min-h-0",
+                    alignClasses.vertical[verticalAlign as keyof typeof alignClasses.vertical]
+                  )}
+                >
                 {renderFieldContent()}
+                </div>
                 {labelPos === "bottom" && renderLabel()}
               </div>
             );
@@ -1411,7 +1843,15 @@ export function PrintTemplateBuilder({
       case "text":
         content = (
           <div className={cn("zd:p-0 zd:h-full zd:flex", alignClasses.vertical[verticalAlign as keyof typeof alignClasses.vertical])}>
-            <span className={cn("zd:text-sm zd:w-full", alignClasses.horizontal[horizontalAlign as keyof typeof alignClasses.horizontal])}>
+            <span
+              className={cn("zd:text-sm zd:w-full", alignClasses.horizontal[horizontalAlign as keyof typeof alignClasses.horizontal])}
+              style={{
+                fontSize: element.style?.fontSize ? `${element.style.fontSize}px` : undefined,
+                fontWeight: element.style?.fontWeight,
+                fontStyle: element.style?.fontStyle,
+                textDecoration: element.style?.textDecoration,
+              }}
+            >
               {typeof element.value === "string" ? element.value : "Text"}
             </span>
           </div>
@@ -1505,21 +1945,61 @@ export function PrintTemplateBuilder({
         const labelText = element.label || "";
         const labelPos = element.labelPosition || "left";
         
+        const textStyle: React.CSSProperties = {
+          fontSize: element.style?.fontSize ? `${element.style.fontSize}px` : undefined,
+          fontWeight: element.style?.fontWeight,
+          fontStyle: element.style?.fontStyle,
+          textDecoration: element.style?.textDecoration,
+        };
+        
         const renderReferenceContent = () => (
-          <span className={cn("zd:text-sm zd:font-mono", alignClasses.horizontal[horizontalAlign as keyof typeof alignClasses.horizontal])}>
+          <span
+            className={cn(
+              "zd:text-sm zd:font-mono zd:block zd:w-full zd:flex-1 zd:min-w-0",
+              alignClasses.horizontal[horizontalAlign as keyof typeof alignClasses.horizontal]
+            )}
+            style={textStyle}
+          >
             {displayText}
           </span>
         );
         
+        const horizontalItems = {
+          left: "zd:items-start",
+          center: "zd:items-center",
+          right: "zd:items-end",
+        } as const;
+        
         const renderLabel = () => labelText ? (
-          <span className="zd:text-xs zd:text-muted-foreground zd:whitespace-nowrap">{labelText}</span>
+          <span
+            className={cn(
+              "zd:text-xs zd:text-muted-foreground zd:whitespace-nowrap zd:block zd:w-full",
+              alignClasses.horizontal[horizontalAlign as keyof typeof alignClasses.horizontal]
+            )}
+            style={textStyle}
+          >
+            {labelText}
+          </span>
         ) : null;
+        
+        const verticalColumn = {
+          top: "zd:justify-start",
+          middle: "zd:justify-center",
+          bottom: "zd:justify-end",
+        } as const;
         
         if (labelPos === "top" || labelPos === "bottom") {
           content = (
-            <div className={cn("zd:flex zd:flex-col zd:gap-1 zd:p-0 zd:h-full", alignClasses.vertical[verticalAlign as keyof typeof alignClasses.vertical])}>
+            <div className={cn("zd:flex zd:flex-col zd:gap-1 zd:p-0 zd:h-full")}>
               {labelPos === "top" && renderLabel()}
+              <div
+                className={cn(
+                  "zd:flex zd:flex-1 zd:min-h-0",
+                  alignClasses.vertical[verticalAlign as keyof typeof alignClasses.vertical]
+                )}
+              >
               {renderReferenceContent()}
+              </div>
               {labelPos === "bottom" && renderLabel()}
             </div>
           );
@@ -1548,11 +2028,12 @@ export function PrintTemplateBuilder({
           </div>
         );
         break;
-      case "container":
+      case "anchor":
         content = (
-          <div className={cn("zd:h-full zd:w-full zd:border-2 zd:border-dashed zd:border-primary/50 zd:rounded zd:bg-primary/5 zd:flex zd:items-center zd:justify-center")}>
-            <div className="zd:text-xs zd:text-primary zd:font-medium">
-              Container
+          <div className={cn("zd:h-full zd:w-full zd:border-2 zd:border-dashed zd:border-blue/50 zd:rounded zd:bg-blue/5 zd:flex zd:items-center zd:justify-center")}>
+            <div className="zd:text-xs zd:text-primary zd:font-medium zd:flex zd:flex-col zd:items-center zd:gap-1">
+              <Anchor className="zd:w-4 zd:h-4" />
+              <span>Anchor Point</span>
             </div>
           </div>
         );
@@ -1563,64 +2044,61 @@ export function PrintTemplateBuilder({
 
     const isResizing = resizingElementId === element.id;
     const isAnchored = element.anchorTo !== undefined && element.anchorTo !== null;
-    // Check if this element is the anchor target for any selected element
+    // Check if this element is the anchor target for any selected element (by code or id)
     const isAnchorTarget = Array.from(selectedElements).some(selectedId => {
       const selectedElement = layout.find(el => el.id === selectedId);
-      return selectedElement?.anchorTo === element.id;
+      if (!selectedElement?.anchorTo) return false;
+      // Match by code (preferred) or id (fallback)
+      return (element.code && element.code === selectedElement.anchorTo) || 
+             (!element.code && element.id === selectedElement.anchorTo);
     });
 
     return (
       <div
         key={element.id}
+        data-element-id={element.id}
         className={cn(
           "zd:absolute zd:group",
-          isSelected && "zd:border zd:border-primary",
+          isSelected && "zd:border zd:border-blue-500",
           isAnchored && "zd:opacity-90", // Visual indicator that element is anchored
-          isAnchorTarget && "zd:border-2 zd:border-dashed zd:border-primary/70 zd:rounded-lg" // Show dashed border when selected element anchors to this
+          isAnchorTarget && "zd:border-2 zd:border-dashed zd:border-blue-500/70 zd:rounded-lg" // Show dashed border when selected element anchors to this
         )}
         style={{
           ...elementStyle,
-          cursor: readonly || isAnchored ? "default" : elementStyle.cursor,
+          cursor: readonly ? "default" : elementStyle.cursor,
+        }}
+        onMouseEnter={(e) => {
+          // Show hover effect in anchor selection mode (not dragging)
+          if (selectingAnchorFor && !isDragging && element.id !== selectingAnchorFor) {
+            setHoveredAnchorElementId(element.id);
+          }
+        }}
+        onMouseLeave={(e) => {
+          // Clear hover effect when leaving the element
+          if (selectingAnchorFor) {
+            // Use a small delay to allow child element hover to work
+            const timeoutId = setTimeout(() => {
+              setHoveredAnchorElementId(null);
+            }, 50);
+            (e.currentTarget as any).__hoverTimeout = timeoutId;
+          }
         }}
         onMouseDown={(e) => {
           if (!readonly && !(e.target as HTMLElement).closest('.resize-handle')) {
-            // If we're in anchor selection mode, handle anchor selection
+            // In anchor selection mode we only prevent drag/select; anchor is set on click
             if (selectingAnchorFor) {
               e.preventDefault();
               e.stopPropagation();
-              // Ensure only the element we're anchoring remains selected, deselect the clicked target element
-              setSelectedElements(new Set([selectingAnchorFor]));
-              if (element.id !== selectingAnchorFor) {
-                // Check for loops before setting anchor
-                if (wouldCreateLoop(selectingAnchorFor, element.id, layout)) {
-                  alert(t("Cannot anchor: This would create a circular dependency"));
-                  setSelectingAnchorFor(null);
-                  return;
-                }
-                const selectedElement = layout.find(el => el.id === selectingAnchorFor);
-                if (selectedElement) {
-                  handleUpdateElement(selectingAnchorFor, { 
-                    anchorTo: element.id,
-                    anchorPosition: selectedElement.anchorPosition || "bottom",
-                    anchorOffset: selectedElement.anchorPosition === "inside" 
-                      ? (typeof selectedElement.anchorOffset === "object" ? selectedElement.anchorOffset : { x: 0, y: 0 })
-                      : (typeof selectedElement.anchorOffset === "number" ? selectedElement.anchorOffset : 10)
-                  });
-                }
-              }
-              setSelectingAnchorFor(null);
               return;
             }
             
-            // Normal drag behavior
-            if (!isAnchored) {
+            // Normal drag behavior - allow dragging even if anchored (will update offset)
             // Prevent image drag if clicking on image
             if ((e.target as HTMLElement).tagName === 'IMG') {
               e.preventDefault();
             }
             handleElementDragStart(e, element);
           }
-        }
         }}
         onDragStart={(e) => {
           // Prevent default drag behavior for images
@@ -1630,6 +2108,36 @@ export function PrintTemplateBuilder({
           }
         }}
         onClick={(e) => {
+          // Anchor selection mode: single click sets anchor
+          if (selectingAnchorFor) {
+            e.preventDefault();
+            e.stopPropagation();
+            // Keep original element selected
+            setSelectedElements(new Set([selectingAnchorFor]));
+            if (element.id !== selectingAnchorFor) {
+              if (wouldCreateLoop(selectingAnchorFor, element.id, layout)) {
+                alert(t("Cannot anchor: This would create a circular dependency"));
+                setSelectingAnchorFor(null);
+                setHoveredAnchorElementId(null);
+                return;
+              }
+              const selectedElement = layout.find(el => el.id === selectingAnchorFor);
+              if (selectedElement) {
+                const currentOffset = typeof selectedElement.anchorOffset === "object" 
+                  ? selectedElement.anchorOffset 
+                  : { x: 0, y: typeof selectedElement.anchorOffset === "number" ? selectedElement.anchorOffset : 10 };
+                const anchorCode = element.code || element.id;
+                handleUpdateElement(selectingAnchorFor, { 
+                  anchorTo: anchorCode,
+                  anchorPosition: "top-left",
+                  anchorOffset: currentOffset
+                });
+              }
+            }
+            setSelectingAnchorFor(null);
+            setHoveredAnchorElementId(null);
+            return;
+          }
           // Don't select if clicking on delete button
           if ((e.target as HTMLElement).closest('button[title="Delete Element"]')) {
             return;
@@ -1642,21 +2150,50 @@ export function PrintTemplateBuilder({
         {/* Selection highlight border */}
         {isSelected && !isDragging && !isResizing && (
           <>
-            <div className="zd:absolute zd:inset-0 zd:border-1 zd:border-primary zd:pointer-events-none" />
-            <div className="zd:absolute zd:inset-0 zd:bg-primary/30 zd:pointer-events-none" />
+            <div className="zd:absolute zd:inset-0 zd:ring-1 zd:ring-blue-500 zd:pointer-events-none" />
+            <div className="zd:absolute zd:inset-0 zd:bg-blue-500/30 zd:pointer-events-none" />
           </>
         )}
         
         {/* Dragging highlight */}
         {(isDragging || isResizing) && (
           <>
-            <div className="zd:absolute zd:inset-0 zd:border-1 zd:border-primary zd:pointer-events-none" />
-            <div className="zd:absolute zd:inset-0 zd:bg-primary/40 zd:pointer-events-none" />
+            <div className="zd:absolute zd:inset-0 zd:ring-1 zd:ring-blue-500 zd:pointer-events-none" />
+            <div className="zd:absolute zd:inset-0 zd:bg-blue-500/40 zd:pointer-events-none" />
+          </>
+        )}
+
+        {/* Green ring hover indicator for anchor selection mode */}
+        {selectingAnchorFor && hoveredAnchorElementId === element.id && !isDragging && element.id !== selectingAnchorFor && (
+          <>
+            <div 
+              className="zd:absolute zd:inset-0 zd:ring-2 zd:ring-green-500 zd:rounded-lg zd:pointer-events-none zd:z-[100]"
+              style={{ 
+                boxShadow: '0 0 0 2px rgba(34, 197, 94, 0.5), 0 0 10px rgba(34, 197, 94, 0.3)',
+              }}
+            />
+            <div 
+              className="zd:absolute zd:-inset-1 zd:ring-2 zd:ring-green-500 zd:rounded-lg zd:pointer-events-none zd:z-[100] zd:animate-pulse"
+            />
           </>
         )}
 
         {/* Content */}
-        <div className="zd:h-full zd:w-full zd:relative zd:overflow-hidden">
+        <div 
+          className="zd:h-full zd:w-full zd:relative zd:overflow-hidden"
+          onMouseEnter={(e) => {
+            // Also handle hover on content div to catch events from child elements
+            if (selectingAnchorFor && !isDragging && element.id !== selectingAnchorFor) {
+              // Clear any pending timeout
+              const parent = e.currentTarget.parentElement;
+              if (parent && (parent as any).__hoverTimeout) {
+                clearTimeout((parent as any).__hoverTimeout);
+                delete (parent as any).__hoverTimeout;
+              }
+              setHoveredAnchorElementId(element.id);
+            }
+          }}
+        >
           {content}
         </div>
 
@@ -1665,61 +2202,41 @@ export function PrintTemplateBuilder({
           <>
             {/* Corner handles - smaller */}
             <div
-              className="resize-handle zd:absolute zd:top-0 zd:left-0 zd:-translate-x-1/2 zd:-translate-y-1/2 zd:w-2 zd:h-2 zd:bg-primary zd:border zd:border-background zd:cursor-nwse-resize zd:z-50"
+              className="resize-handle zd:absolute zd:top-0 zd:left-0 zd:-translate-x-1/2 zd:-translate-y-1/2 zd:w-2 zd:h-2 zd:bg-blue-500 zd:cursor-nwse-resize zd:z-50"
               onMouseDown={(e) => handleResizeStart(e, element, 'nw')}
             />
             <div
-              className="resize-handle zd:absolute zd:top-0 zd:right-0 zd:translate-x-1/2 zd:-translate-y-1/2 zd:w-2 zd:h-2 zd:bg-primary zd:border zd:border-background zd:cursor-nesw-resize zd:z-50"
+              className="resize-handle zd:absolute zd:top-0 zd:right-0 zd:translate-x-1/2 zd:-translate-y-1/2 zd:w-2 zd:h-2 zd:bg-blue-500 zd:cursor-nesw-resize zd:z-50"
               onMouseDown={(e) => handleResizeStart(e, element, 'ne')}
             />
             <div
-              className="resize-handle zd:absolute zd:bottom-0 zd:left-0 zd:-translate-x-1/2 zd:translate-y-1/2 zd:w-2 zd:h-2 zd:bg-primary zd:border zd:border-background zd:cursor-nesw-resize zd:z-50"
+              className="resize-handle zd:absolute zd:bottom-0 zd:left-0 zd:-translate-x-1/2 zd:translate-y-1/2 zd:w-2 zd:h-2 zd:bg-blue-500 zd:cursor-nesw-resize zd:z-50"
               onMouseDown={(e) => handleResizeStart(e, element, 'sw')}
             />
             <div
-              className="resize-handle zd:absolute zd:bottom-0 zd:right-0 zd:translate-x-1/2 zd:translate-y-1/2 zd:w-2 zd:h-2 zd:bg-primary zd:border zd:border-background zd:cursor-nwse-resize zd:z-50"
+              className="resize-handle zd:absolute zd:bottom-0 zd:right-0 zd:translate-x-1/2 zd:translate-y-1/2 zd:w-2 zd:h-2 zd:bg-blue-500 zd:cursor-nwse-resize zd:z-50"
               onMouseDown={(e) => handleResizeStart(e, element, 'se')}
             />
             {/* Edge handles - smaller and centered */}
             <div
-              className="resize-handle zd:absolute zd:top-0 zd:left-1/2 zd:-translate-x-1/2 zd:-translate-y-1/2 zd:w-2 zd:h-2 zd:bg-primary zd:border zd:border-background zd:cursor-ns-resize zd:z-50"
+              className="resize-handle zd:absolute zd:top-0 zd:left-1/2 zd:-translate-x-1/2 zd:-translate-y-1/2 zd:w-2 zd:h-2 zd:bg-blue-500 zd:cursor-ns-resize zd:z-50"
               onMouseDown={(e) => handleResizeStart(e, element, 'n')}
             />
             <div
-              className="resize-handle zd:absolute zd:bottom-0 zd:left-1/2 zd:-translate-x-1/2 zd:translate-y-1/2 zd:w-2 zd:h-2 zd:bg-primary zd:border zd:border-background zd:cursor-ns-resize zd:z-50"
+              className="resize-handle zd:absolute zd:bottom-0 zd:left-1/2 zd:-translate-x-1/2 zd:translate-y-1/2 zd:w-2 zd:h-2 zd:bg-blue-500 zd:cursor-ns-resize zd:z-50"
               onMouseDown={(e) => handleResizeStart(e, element, 's')}
             />
             <div
-              className="resize-handle zd:absolute zd:left-0 zd:top-1/2 zd:-translate-x-1/2 zd:-translate-y-1/2 zd:w-2 zd:h-2 zd:bg-primary zd:border zd:border-background zd:cursor-ew-resize zd:z-50"
+              className="resize-handle zd:absolute zd:left-0 zd:top-1/2 zd:-translate-x-1/2 zd:-translate-y-1/2 zd:w-2 zd:h-2 zd:bg-blue-500 zd:cursor-ew-resize zd:z-50"
               onMouseDown={(e) => handleResizeStart(e, element, 'w')}
             />
             <div
-              className="resize-handle zd:absolute zd:right-0 zd:top-1/2 zd:translate-x-1/2 zd:-translate-y-1/2 zd:w-2 zd:h-2 zd:bg-primary zd:border zd:border-background zd:cursor-ew-resize zd:z-50"
+              className="resize-handle zd:absolute zd:right-0 zd:top-1/2 zd:translate-x-1/2 zd:-translate-y-1/2 zd:w-2 zd:h-2 zd:bg-blue-500 zd:cursor-ew-resize zd:z-50"
               onMouseDown={(e) => handleResizeStart(e, element, 'e')}
             />
           </>
         )}
 
-        {/* Delete button - Above element */}
-        {isSelected && !readonly && !isDragging && !isResizing && (
-          <Button
-            variant="destructive"
-            size="sm"
-            className="zd:absolute zd:-top-8 zd:left-1/2 zd:-translate-x-1/2 zd:z-30"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleDeleteElement(element.id);
-            }}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            title="Delete Element"
-          >
-            <X className="zd:w-3.5 zd:h-3.5" />
-          </Button>
-        )}
 
         {/* Drag handle indicator */}
         {!readonly && !isSelected && (
@@ -1771,10 +2288,10 @@ export function PrintTemplateBuilder({
           {/* Snap Settings */}
           <div className="zd:flex zd:items-center zd:gap-2">
             <Checkbox
-              checked={snapToGrid}
+                checked={snapToGrid}
               onCheckedChange={(checked) => setSnapToGrid(checked === true)}
               label="Snap"
-            />
+              />
             <div className="zd:w-px zd:h-4 zd:bg-border" />
             <Select
               value={String(snapSize)}
@@ -1790,6 +2307,45 @@ export function PrintTemplateBuilder({
 
           {/* Divider */}
           <div className="zd:w-px zd:h-4 zd:bg-border" />
+
+          {/* Template Generator */}
+          {!readonly && doctype && (
+            <>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    title={t("Generate Template from Doctype Tabs")}
+                  >
+                    <Wand2 className="zd:w-4 zd:h-4" />
+                    <span>{t("Generate")}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuLabel>{t("Template Generator")}</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={generateTemplateFromTabs}
+                    disabled={!doctypeDoc?.tabs || !fields.length || isGenerating}
+                  >
+                    <Wand2 className="zd:w-4 zd:h-4 zd:mr-2" />
+                    {t("Generate from Doctype Tabs")}
+                  </DropdownMenuItem>
+                  {(!doctypeDoc?.tabs || !fields.length) && (
+                    <div className="zd:px-2 zd:py-1.5 zd:text-xs zd:text-muted-foreground">
+                      {!doctypeDoc?.tabs 
+                        ? t("Doctype has no tabs configured")
+                        : !fields.length 
+                        ? t("No fields available")
+                        : ""}
+                    </div>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <div className="zd:w-px zd:h-4 zd:bg-border" />
+            </>
+          )}
 
           {/* History Controls */}
           {!readonly && (
@@ -1864,6 +2420,47 @@ export function PrintTemplateBuilder({
             </Button>
           </div>
           
+          {/* Settings (Guided Background) */}
+          {!readonly && onGuidedBackgroundChange && (
+            <>
+              <div className="zd:w-px zd:h-4 zd:bg-border" />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    title={t("Settings")}
+                  >
+                    <Settings className="zd:w-4 zd:h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>{t("Guided Background")}</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <div className="zd:px-2 zd:py-2">
+                    <FormControl
+                      field={{
+                        type: "File",
+                        name: "guided_background",
+                        doctype: "zodula__Print Template",
+                        accept: "image/*",
+                      }}
+                      fieldKey="guided_background"
+                      value={guidedBackground}
+                      onChange={(fieldName, value) => {
+                        if (onGuidedBackgroundChange) {
+                          onGuidedBackgroundChange(value as string | File | null);
+                        }
+                      }}
+                      docId={templateId}
+                      hideFormControl={true}
+                    />
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          )}
+          
           {/* Sidebar Toggle */}
           {!readonly && (
             <>
@@ -1893,24 +2490,58 @@ export function PrintTemplateBuilder({
         >
           {/* Anchor Selection Mode Indicator */}
           {selectingAnchorFor && (
-            <div className="zd:fixed zd:top-20 zd:left-1/2 zd:-translate-x-1/2 zd:z-[1000] zd:bg-primary zd:text-primary-foreground zd:px-4 zd:py-2 zd:rounded-lg zd:shadow-lg zd:border zd:border-primary">
+            <div className="zd:fixed zd:top-20 zd:left-1/2 zd:-translate-x-1/2 zd:z-[1000] zd:bg-primary zd:text-primary-foreground zd:px-4 zd:py-2 zd:rounded-lg zd:shadow-lg zd:border zd:ring-blue-500">
               <p className="zd:text-sm zd:font-medium">
                 {t("Anchor Selection Mode: Click on an element to anchor to it")}
+                {hoveredAnchorElementId && ` (Hovering: ${hoveredAnchorElementId.substring(0, 8)}...)`}
               </p>
             </div>
           )}
           
           {/* Element Hover Indicator for Anchor Selection */}
-          <PrintTemplateElementHover
-            elementId={hoveredAnchorElementId}
-            layout={layout}
-            zoom={zoom}
-            paperRef={paperRef}
-            canvasRef={canvasRef}
-          />
+          {selectingAnchorFor && !isDragging && hoveredAnchorElementId && (
+            <PrintTemplateElementHover
+              elementId={hoveredAnchorElementId}
+              layout={layout}
+              zoom={zoom}
+              paperRef={paperRef}
+              canvasRef={canvasRef}
+            />
+          )}
           
           <div
+          onMouseMove={(e) => {
+            // Track hover in anchor selection mode at canvas level
+            if (selectingAnchorFor && !isDragging) {
+              const target = e.target as HTMLElement;
+              // Find the element that contains this target
+              const elementDiv = target.closest('[data-element-id]') as HTMLElement;
+              if (elementDiv) {
+                const elementId = elementDiv.getAttribute('data-element-id');
+                if (elementId && elementId !== selectingAnchorFor) {
+                  setHoveredAnchorElementId(elementId);
+                } else {
+                  setHoveredAnchorElementId(null);
+                }
+              } else {
+                setHoveredAnchorElementId(null);
+              }
+            }
+          }}
           onMouseDown={(e) => {
+            // If we're in anchor selection mode, don't start selection box
+            if (selectingAnchorFor) {
+              // Only cancel if clicking on actual canvas background (not on an element)
+              const target = e.target as HTMLElement;
+              if (target === e.currentTarget || 
+                  target === paperRef.current || 
+                  (paperRef.current && target.closest('.zd\\:relative') === paperRef.current)) {
+                // Cancel anchor selection if clicking on canvas background
+                setSelectingAnchorFor(null);
+                setHoveredAnchorElementId(null);
+              }
+              return;
+            }
             // Start selection box if clicking on canvas background (not on an element)
             if (!readonly && !draggedTool && !draggedElementId && !resizingElementId) {
               const target = e.target as HTMLElement;
@@ -1961,6 +2592,7 @@ export function PrintTemplateBuilder({
               if (selectingAnchorFor) {
                 if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains("zd:relative")) {
                   setSelectingAnchorFor(null);
+                  setHoveredAnchorElementId(null);
                 }
                 return;
               }
@@ -1976,10 +2608,24 @@ export function PrintTemplateBuilder({
               }
             }}
           >
+            {/* Guided Background */}
+            {guidedBackgroundUrlRef.current && (
+              <div
+                className="zd:absolute zd:inset-0 zd:pointer-events-none zd:z-0"
+                style={{
+                  backgroundImage: `url(${guidedBackgroundUrlRef.current})`,
+                  backgroundSize: "100% 100%",
+                  backgroundPosition: "top left",
+                  backgroundRepeat: "no-repeat",
+                  opacity: 0.3,
+                }}
+              />
+            )}
+            
             {/* Selection box */}
             {selectionBox && (
               <div
-                className="zd:absolute zd:border-1 zd:border-primary zd:bg-primary/20 zd:pointer-events-none zd:z-[101]"
+                className="zd:absolute zd:ring-1 zd:ring-blue-500 zd:bg-blue-500/20 zd:pointer-events-none zd:z-[101]"
                 style={{
                   left: `${Math.min(selectionBox.startX, selectionBox.endX)}px`,
                   top: `${Math.min(selectionBox.startY, selectionBox.endY)}px`,
@@ -2093,6 +2739,34 @@ export function PrintTemplateBuilder({
               Array.from(selectedElements).map((id) => {
                 const element = layout.find((el) => el.id === id);
                 if (!element) return null;
+                
+                const mergeStyleUpdate = (styleUpdates: Partial<PrintTemplateElement["style"]> = {}) => {
+                  const newStyle = { ...(element.style || {}) };
+                  Object.entries(styleUpdates as Record<string, any>).forEach(([key, value]) => {
+                    if (value === undefined || value === null || value === "") {
+                      delete (newStyle as any)[key];
+                    } else {
+                      (newStyle as any)[key] = value;
+                    }
+                  });
+                  handleUpdateElement(id, { style: newStyle });
+                };
+                
+                const currentStyle = element.style || {};
+                // Check if it's a reference table field
+                const isReferenceTableField = element.type === "field" && selectedFieldConfig?.type === "Reference Table";
+                const isTextualElement = element.type === "text" || element.type === "field" || element.type === "reference" || isReferenceTableField;
+                
+                const toggleDecoration = (decoration: "underline" | "line-through") => {
+                  const parts = new Set((currentStyle.textDecoration || "").split(" ").filter(Boolean));
+                  if (parts.has(decoration)) {
+                    parts.delete(decoration);
+                  } else {
+                    parts.add(decoration);
+                  }
+                  const next = Array.from(parts).join(" ");
+                  mergeStyleUpdate({ textDecoration: next || undefined });
+                };
 
               return (
                 <div key={id} className="zd:space-y-3">
@@ -2341,6 +3015,59 @@ export function PrintTemplateBuilder({
                   </div>
                 </div>
 
+                {isTextualElement && (
+                  <div className="zd:space-y-2">
+                    <label className="zd:text-sm zd:font-medium">{t("Text Style")}</label>
+                    <div className="zd:flex zd:items-center zd:gap-2">
+                      <Input
+                        type="number"
+                        value={currentStyle.fontSize ?? ""}
+                        onChange={(e) => {
+                          const value = Number(e.target.value);
+                          mergeStyleUpdate({ fontSize: Number.isFinite(value) && value > 0 ? value : undefined });
+                        }}
+                        placeholder={t("Font size")}
+                        className="zd:w-24"
+                      />
+                      <span className="zd:text-xs zd:text-muted-foreground">px</span>
+                    </div>
+                    <div className="zd:flex zd:flex-wrap zd:gap-2">
+                      <Button
+                        variant={(currentStyle.fontWeight || "") === "bold" ? "solid" : "outline"}
+                        size="sm"
+                        onClick={() => mergeStyleUpdate({ fontWeight: currentStyle.fontWeight === "bold" ? undefined : "bold" })}
+                        title={t("Bold")}
+                      >
+                        <Bold className="zd:w-4 zd:h-4" />
+                      </Button>
+                      <Button
+                        variant={(currentStyle.fontStyle || "") === "italic" ? "solid" : "outline"}
+                        size="sm"
+                        onClick={() => mergeStyleUpdate({ fontStyle: currentStyle.fontStyle === "italic" ? undefined : "italic" })}
+                        title={t("Italic")}
+                      >
+                        <Italic className="zd:w-4 zd:h-4" />
+                      </Button>
+                      <Button
+                        variant={(currentStyle.textDecoration || "").split(" ").includes("underline") ? "solid" : "outline"}
+                        size="sm"
+                        onClick={() => toggleDecoration("underline")}
+                        title={t("Underline")}
+                      >
+                        <Underline className="zd:w-4 zd:h-4" />
+                      </Button>
+                      <Button
+                        variant={(currentStyle.textDecoration || "").split(" ").includes("line-through") ? "solid" : "outline"}
+                        size="sm"
+                        onClick={() => toggleDecoration("line-through")}
+                        title={t("Strike-through")}
+                      >
+                        <Strikethrough className="zd:w-4 zd:h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {element.transform && (
                   <div className="zd:space-y-1">
                     <label className="zd:text-sm zd:font-medium">{t("Position & Size")}</label>
@@ -2416,49 +3143,58 @@ export function PrintTemplateBuilder({
                     <div className="zd:space-y-1">
                       <label className="zd:text-xs zd:text-muted-foreground">{t("Anchor To")}</label>
                       <div className="zd:flex zd:gap-2">
-                        <Button
-                          variant={selectingAnchorFor === id ? "solid" : element.anchorTo ? "subtle" : "outline"}
-                          size="sm"
-                          className="zd:flex-1"
-                          onClick={() => {
-                            if (selectingAnchorFor === id) {
-                              // Cancel selection mode
-                              setSelectingAnchorFor(null);
-                            } else if (element.anchorTo) {
-                              // Clear anchor
+                        <Select
+                          value={element.anchorTo || ""}
+                          onChange={(value) => {
+                            if (value === "") {
                               handleUpdateElement(id, { 
                                 anchorTo: null as any,
                                 anchorPosition: null as any,
                                 anchorOffset: null as any
                               });
                             } else {
-                              // Enter selection mode
-                              setSelectingAnchorFor(id);
+                              // Check for loops before setting anchor
+                              if (wouldCreateLoop(id, value, layout)) {
+                                alert(t("Cannot anchor: This would create a circular dependency"));
+                                return;
+                              }
+                              const currentOffset = typeof element.anchorOffset === "object" 
+                                ? element.anchorOffset 
+                                : { x: 0, y: typeof element.anchorOffset === "number" ? element.anchorOffset : 10 };
+                              handleUpdateElement(id, { 
+                                anchorTo: value,
+                                anchorPosition: "top-left",
+                                anchorOffset: currentOffset
+                              });
                             }
                           }}
-                        >
-                          {selectingAnchorFor === id
-                            ? t("Click element to anchor...")
-                            : element.anchorTo
-                            ? `${layout.find(el => el.id === element.anchorTo)?.type || "Element"} (${element.anchorTo.substring(0, 8)}...)`
-                            : t("Click to Select Element")}
-                        </Button>
-                        {element.anchorTo && (
+                          options={[
+                            { value: "", label: t("None") },
+                            ...layout
+                              .filter(el => el.id !== id) // Exclude self
+                              .map(el => ({
+                                value: el.code || el.id, // Use code (preferred) or id (fallback)
+                                label: `${el.type === "anchor" ? "📍 " : ""}${el.type}${typeof el.value === "string" && el.value ? `: ${el.value.substring(0, 20)}` : ""}${el.code ? ` (${el.code})` : ` (${el.id.substring(0, 8)}...)`}`,
+                              }))
+                          ]}
+                          className="zd:flex-1"
+                        />
                           <Button
-                            variant="ghost"
+                          variant={selectingAnchorFor === id ? "solid" : "outline"}
                             size="sm"
                             onClick={() => {
-                              handleUpdateElement(id, { 
-                                anchorTo: null as any,
-                                anchorPosition: null as any,
-                                anchorOffset: null as any
-                              });
+                            if (selectingAnchorFor === id) {
+                              setSelectingAnchorFor(null);
+                              setHoveredAnchorElementId(null);
+                            } else {
+                              setSelectingAnchorFor(id);
+                              setHoveredAnchorElementId(null);
+                            }
                             }}
-                            title={t("Clear anchor")}
+                          title={t("Click on canvas to select anchor")}
                           >
-                            <X className="zd:w-4 zd:h-4" />
+                          <Eye className="zd:w-4 zd:h-4" />
                           </Button>
-                        )}
                       </div>
                       {selectingAnchorFor === id && (
                         <p className="zd:text-xs zd:text-muted-foreground zd:italic">
@@ -2471,60 +3207,39 @@ export function PrintTemplateBuilder({
                       <>
                         <div className="zd:space-y-1">
                           <label className="zd:text-xs zd:text-muted-foreground">{t("Position")}</label>
-                          <div className="zd:grid zd:grid-cols-2 zd:gap-2">
-                            <Button
-                              variant={element.anchorPosition === "top" ? "solid" : "outline"}
-                              size="sm"
-                              className="zd:flex-col zd:gap-1"
-                              onClick={() => handleUpdateElement(id, { anchorPosition: "top" })}
-                              title={t("Top")}
-                            >
-                              <ArrowUp className="zd:w-4 zd:h-4" />
-                              <span className="zd:text-xs">{t("Top")}</span>
-                            </Button>
-                            <Button
-                              variant={element.anchorPosition === "bottom" ? "solid" : "outline"}
-                              size="sm"
-                              className="zd:flex-col zd:gap-1"
-                              onClick={() => handleUpdateElement(id, { anchorPosition: "bottom" })}
-                              title={t("Bottom")}
-                            >
-                              <ArrowDown className="zd:w-4 zd:h-4" />
-                              <span className="zd:text-xs">{t("Bottom")}</span>
-                            </Button>
-                            <Button
-                              variant={element.anchorPosition === "left" ? "solid" : "outline"}
-                              size="sm"
-                              className="zd:flex-col zd:gap-1"
-                              onClick={() => handleUpdateElement(id, { anchorPosition: "left" })}
-                              title={t("Left")}
-                            >
-                              <AlignLeft className="zd:w-4 zd:h-4" />
-                              <span className="zd:text-xs">{t("Left")}</span>
-                            </Button>
-                            <Button
-                              variant={element.anchorPosition === "right" ? "solid" : "outline"}
-                              size="sm"
-                              className="zd:flex-col zd:gap-1"
-                              onClick={() => handleUpdateElement(id, { anchorPosition: "right" })}
-                              title={t("Right")}
-                            >
-                              <AlignRight className="zd:w-4 zd:h-4" />
-                              <span className="zd:text-xs">{t("Right")}</span>
-                            </Button>
-                          </div>
+                          <p className="zd:text-xs zd:text-muted-foreground zd:italic">
+                            {t("Top-Left (relative to anchor's top-left corner)")}
+                          </p>
                         </div>
                         
                         <div className="zd:space-y-1">
                           <label className="zd:text-xs zd:text-muted-foreground">{t("Offset (px)")}</label>
+                          <div className="zd:grid zd:grid-cols-2 zd:gap-2">
+                            <div>
+                              <label className="zd:text-xs zd:text-muted-foreground">X</label>
                           <Input
                             type="number"
-                            value={typeof element.anchorOffset === "number" ? element.anchorOffset : 10}
-                            onChange={(e) => handleUpdateElement(id, { anchorOffset: Number(e.target.value) || 10 })}
-                            min="0"
-                          />
+                                value={typeof element.anchorOffset === "object" ? element.anchorOffset.x : 0}
+                                onChange={(e) => {
+                                  const currentOffset = typeof element.anchorOffset === "object" ? element.anchorOffset : { x: 0, y: typeof element.anchorOffset === "number" ? element.anchorOffset : 0 };
+                                  handleUpdateElement(id, { anchorOffset: { x: Number(e.target.value) || 0, y: currentOffset.y } });
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <label className="zd:text-xs zd:text-muted-foreground">Y</label>
+                              <Input
+                                type="number"
+                                value={typeof element.anchorOffset === "object" ? element.anchorOffset.y : (typeof element.anchorOffset === "number" ? element.anchorOffset : 0)}
+                                onChange={(e) => {
+                                  const currentOffset = typeof element.anchorOffset === "object" ? element.anchorOffset : { x: 0, y: typeof element.anchorOffset === "number" ? element.anchorOffset : 0 };
+                                  handleUpdateElement(id, { anchorOffset: { x: currentOffset.x, y: Number(e.target.value) || 0 } });
+                                }}
+                              />
+                            </div>
+                          </div>
                           <p className="zd:text-xs zd:text-muted-foreground zd:mt-1">
-                            {t("Distance from anchored element")}
+                            {t("Distance from anchored element (X and Y offsets)")}
                           </p>
                         </div>
                       </>

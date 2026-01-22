@@ -1264,7 +1264,7 @@ export function SheetView({
       {/* Sheet View Grid */}
       <div
         ref={scrollContainerRef}
-        className="zd:flex-1 zd:overflow-auto zd:border zd:border-border zd:rounded-lg zd:bg-background"
+        className="zd:flex-1 zd:overflow-auto zd:rounded-lg zd:bg-background"
         style={{ maxHeight: "calc(100vh - 300px)" }}
         onClick={(e) => {
           // Don't clear selection if we just finished dragging
@@ -1283,7 +1283,7 @@ export function SheetView({
         <div className="zd:inline-block">
           <table
             ref={tableRef}
-            className="zd:text-sm zd:border-collapse"
+            className="zd:text-sm zd:border"
             style={{ width: "max-content" }}
           >
             <thead className="zd:sticky zd:top-0 zd:z-20 zd:bg-muted">

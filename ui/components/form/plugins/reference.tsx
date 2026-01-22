@@ -7,6 +7,11 @@ import { useParams } from "react-router";
 import { zodula } from "@/zodula/client";
 import { cn } from "../../../lib/utils";
 import { Input } from "../../ui/input";
+import { popup } from "../../ui/popit";
+import { QuickEntryDialog } from "../../dialogs/quick-entry-dialog";
+import { useDoc } from "../../../hooks/use-doc";
+import { useDocList } from "../../../hooks/use-doc-list";
+import { useOrganization } from "../../../hooks/use-organization";
 
 const ReferenceInput = (props: {
   fieldOptions: Zodula.Field;
@@ -19,9 +24,11 @@ const ReferenceInput = (props: {
   formData?: any;
   fieldPath?: string;
   autocomplete?: "on" | "off";
+  org?: string;
 }) => {
   const router = useRouter();
-  const { org } = useParams();
+  const { org } = router.params;
+  const organizationId = props.org || org || "";
   const [options, setOptions] = useState<
     { id: string; title: string; subtitle: string; doc: any }[]
   >([]);
@@ -29,6 +36,30 @@ const ReferenceInput = (props: {
     useState<Zodula.SelectDoctype<"zodula__Doctype"> | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const isVirtual = props.fieldOptions.type === "Virtual Reference";
+  
+  const referenceDoctype = zodula.utils.getFieldValueFromDoc(
+    props.fieldOptions.reference as string,
+    props.formData,
+    props.fieldOptions
+  ) as Zodula.DoctypeName | undefined;
+
+  // Get doctype metadata to check if it's quick entry
+  const { doc: referenceDoctypeDoc } = useDoc({
+    doctype: "zodula__Doctype",
+    id: referenceDoctype
+  }, [referenceDoctype]);
+
+  // Get fields for the reference doctype
+  const { docs: referenceFields } = useDocList({
+    doctype: "zodula__Field",
+    limit: 1000000,
+    sort: "idx",
+    order: "asc",
+    q: "",
+    filters: referenceDoctype ? [
+      ["doctype", "=", referenceDoctype]
+    ] : []
+  }, [referenceDoctype]);
   const filters = useMemo(() => {
     try {
       return JSON.parse(props.fieldOptions.filters || "[]");
@@ -155,12 +186,6 @@ const ReferenceInput = (props: {
     search(props.value || "");
   }, [props.value, isFocused, doctype]);
 
-  const referenceDoctype = zodula.utils.getFieldValueFromDoc(
-    props.fieldOptions.reference as string,
-    props.formData,
-    props.fieldOptions
-  );
-
   const actions = useMemo(() => {
     let _actions: SelectAction[] = [];
     if (filters?.length > 0) {
@@ -185,20 +210,48 @@ const ReferenceInput = (props: {
       _actions.push({
         label: "Create",
         icon: <PlusIcon />,
-        onClick: () => {
+        onClick: async () => {
           if (!referenceDoctype) return;
-          router.push(`/desk/${org}/doctypes/${referenceDoctype}/form`, {
-            state: {
-              cbUrl: window.location.pathname,
-              fromField: props.fieldPath || props.fieldKey,
-              fromDoc: props.formData,
-            },
-          });
+          
+          // Unfocus the input when opening dialog
+          setIsFocused(false);
+          
+          // Check if doctype is quick entry
+          const isQuickEntry = referenceDoctypeDoc?.is_quick_entry === 1;
+          
+          if (isQuickEntry) {
+            // Use quick entry dialog
+            const result = await popup(QuickEntryDialog, undefined, {
+              doctype: referenceDoctype,
+              fields: referenceFields as any,
+              org: organizationId
+            });
+            
+            if (result?.id) {
+              // Set the created document ID as the value
+              if (props.multiple) {
+                const newValue = appendValue(props.value || "", result.id);
+                props.onChange?.(newValue);
+              } else {
+                props.onChange?.(result.id);
+              }
+            }
+          } else {
+            // Navigate to full form
+            setIsFocused(false);
+            router.push(`/desk/${organizationId}/doctypes/${referenceDoctype}/form`, {
+              state: {
+                cbUrl: window.location.pathname,
+                fromField: props.fieldPath || props.fieldKey,
+                fromDoc: props.formData,
+              },
+            });
+          }
         },
       });
     }
     return _actions;
-  }, [doctype, props.fieldOptions.reference, referenceDoctype]);
+  }, [doctype, props.fieldOptions.reference, referenceDoctype, referenceDoctypeDoc, referenceFields, organizationId, props.multiple, props.value, props.onChange, props.fieldPath, props.fieldKey, props.formData, router, setIsFocused]);
   return (
     <Select
       autocomplete={props.autocomplete}
@@ -255,7 +308,7 @@ const ReferenceInput = (props: {
         <>
           {!!props.value && !props.multiple && (
             <Link
-              to={`/desk/${org}/doctypes/${referenceDoctype || ""}/form/${props.value || ""}`}
+              to={`/desk/${organizationId}/doctypes/${referenceDoctype || ""}/form/${props.value || ""}`}
               className="no-print"
             >
               <ArrowRight />

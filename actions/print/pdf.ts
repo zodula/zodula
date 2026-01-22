@@ -2,18 +2,9 @@ import { z } from "bxo"
 import puppeteer from "puppeteer"
 import path from "path"
 import { getFieldValueFromDoc } from "@/zodula/client/utils"
+import { PAGE_FORMATS, generateTemplateFromTabs, type PrintTemplateElement } from "@/zodula/client/code-utils"
 // @ts-ignore - binba may not have type definitions
 import { Template } from "binba"
-
-// Page format dimensions in mm
-const PAGE_FORMATS: Record<string, { width: number; height: number }> = {
-  A4: { width: 210, height: 297 },
-  A3: { width: 297, height: 420 },
-  A5: { width: 148, height: 210 },
-  Letter: { width: 216, height: 279 },
-  Legal: { width: 216, height: 356 },
-  Tabloid: { width: 279, height: 432 },
-}
 
 function mmToPx(mm: number): number {
   return (mm * 96) / 25.4 // 96 DPI
@@ -61,7 +52,13 @@ function calculateAnchorPosition(
   }
   visited.add(item.id)
   
-  const anchorItem = allItems.find((i: any) => i.id === anchorConfig.anchorTo)
+  // Find anchor element by code first (preferred), then by id (fallback for backward compatibility)
+  const anchorItem = allItems.find((i: any) => {
+    if (i.code && anchorConfig.anchorTo === i.code) return true
+    if (anchorConfig.anchorTo === i.id) return true
+    return false
+  })
+  
   if (!anchorItem) {
     return { x: item.transform_x || 0, y: item.transform_y || 0 }
   }
@@ -71,42 +68,137 @@ function calculateAnchorPosition(
   const anchorX = anchorPos.x
   const anchorY = anchorPos.y
   const anchorWidth = anchorItem.transform_width || 0
-  // Use measured height if available, otherwise use transform_height
   const anchorHeight = measuredHeights?.get(anchorItem.id) || anchorItem.transform_height || 0
   const offset = anchorConfig.anchorOffset || 0
-  const position = anchorConfig.anchorPosition || "bottom"
+  const position = anchorConfig.anchorPosition || "top-left"
   
   let newX = item.transform_x || 0
   let newY = item.transform_y || 0
   
-  switch (position) {
-    case "top":
-      const itemHeight = measuredHeights?.get(item.id) || item.transform_height || 0
-      newX = anchorX
-      newY = anchorY - itemHeight - (typeof offset === "number" ? offset : 0)
-      break
-    case "bottom":
-      newX = anchorX
-      newY = anchorY + anchorHeight + (typeof offset === "number" ? offset : 0)
-      break
-    case "left":
-      const itemWidth = item.transform_width || 0
-      newX = anchorX - itemWidth - (typeof offset === "number" ? offset : 0)
-      newY = anchorY
-      break
-    case "right":
-      newX = anchorX + anchorWidth + (typeof offset === "number" ? offset : 0)
-      newY = anchorY
-      break
-    case "inside":
-      const offsetX = typeof offset === "object" ? offset.x : 0
-      const offsetY = typeof offset === "object" ? offset.y : 0
-      newX = anchorX + offsetX
-      newY = anchorY + offsetY
-      break
+  // Support "top-left" position (simplified anchor system)
+  // The builder calculates: newY = anchorY + offsetY
+  // For same-row: offsetY = 0 (stays at same Y level)
+  // For new-row: offsetY = anchorHeight + fieldSpacing (already includes anchorHeight)
+  if (position === "top-left") {
+    const offsetX = typeof offset === "object" ? offset.x : (typeof offset === "number" ? offset : 0)
+    let offsetY = typeof offset === "object" ? offset.y : (typeof offset === "number" ? offset : 0)
+    
+    // If we have measured heights and the offset includes the anchor height (for new rows),
+    // we need to adjust the offset to account for the measured anchor height
+    // The stored offset was calculated as: originalAnchorHeight + spacing
+    // We need to recalculate as: measuredAnchorHeight + spacing
+    if (measuredHeights && offsetY > 0) {
+      const originalAnchorHeight = anchorItem.transform_height || 0
+      const measuredAnchorHeight = measuredHeights.get(anchorItem.id) || originalAnchorHeight
+      
+      // If the offset is greater than the original anchor height, it likely includes spacing
+      // This indicates a new-row element
+      if (offsetY > originalAnchorHeight && originalAnchorHeight > 0) {
+        // Extract spacing: offsetY = originalAnchorHeight + spacing
+        const spacing = offsetY - originalAnchorHeight
+        // Recalculate with measured height: measuredAnchorHeight + spacing
+        offsetY = measuredAnchorHeight + spacing
+      }
+    }
+    
+    newX = anchorX + offsetX
+    newY = anchorY + offsetY
+  } else {
+    // Legacy support for other positions
+    switch (position) {
+      case "top":
+        const itemHeight = measuredHeights?.get(item.id) || item.transform_height || 0
+        newX = anchorX
+        newY = anchorY - itemHeight - (typeof offset === "number" ? offset : 0)
+        break
+      case "bottom":
+        newX = anchorX
+        newY = anchorY + anchorHeight + (typeof offset === "number" ? offset : 0)
+        break
+      case "left":
+        const itemWidth = item.transform_width || 0
+        newX = anchorX - itemWidth - (typeof offset === "number" ? offset : 0)
+        newY = anchorY
+        break
+      case "right":
+        newX = anchorX + anchorWidth + (typeof offset === "number" ? offset : 0)
+        newY = anchorY
+        break
+      case "inside":
+        const offsetX = typeof offset === "object" ? offset.x : 0
+        const offsetY = typeof offset === "object" ? offset.y : 0
+        newX = anchorX + offsetX
+        newY = anchorY + offsetY
+        break
+    }
   }
   
   return { x: newX, y: newY }
+}
+
+// Convert PrintTemplateElement to item format for PDF rendering
+function elementToItem(element: PrintTemplateElement, idx: number): any {
+  const item: any = {
+    id: element.id,
+    type: element.type,
+    value: typeof element.value === "string" ? element.value : "",
+    align: element.align || "left",
+    vertical_align: element.verticalAlign || "middle",
+    transform_x: element.transform?.x || 0,
+    transform_y: element.transform?.y || 0,
+    transform_width: element.transform?.width || 200,
+    transform_height: element.transform?.height || 30,
+    idx: idx,
+  }
+  
+  // Style fields
+  if (element.style?.fontSize !== undefined) {
+    item.style_font_size = element.style.fontSize
+  }
+  if (element.style?.fontWeight !== undefined) {
+    item.style_font_weight = element.style.fontWeight
+  }
+  if (element.style?.fontStyle !== undefined) {
+    item.style_font_style = element.style.fontStyle
+  }
+  if (element.style?.textDecoration !== undefined) {
+    item.style_text_decoration = element.style.textDecoration
+  }
+  
+  // Field-specific values
+  if (element.type === "field") {
+    item.field_name = typeof element.value === "string" ? element.value : ""
+    if (element.fields && Array.isArray(element.fields)) {
+      item.fields = JSON.stringify(element.fields)
+    }
+    if (element.tableConfig) {
+      item.table_config = JSON.stringify(element.tableConfig)
+    }
+    item.label = element.label || ""
+    item.label_position = element.labelPosition || "left"
+  } else if (element.type === "reference") {
+    item.reference_doctype = element.referenceDoctype || ""
+    item.reference_id_filter = element.referenceIdFilter || ""
+    item.reference_field = element.referenceField || ""
+    item.label = element.label || ""
+    item.label_position = element.labelPosition || "left"
+  }
+  
+  // Anchor configuration
+  if (element.anchorTo !== undefined || element.anchorPosition !== undefined || element.anchorOffset !== undefined) {
+    item.anchor_config = JSON.stringify({
+      anchorTo: element.anchorTo ?? null,
+      anchorPosition: element.anchorPosition ?? null,
+      anchorOffset: element.anchorOffset ?? null
+    })
+  }
+  
+  // Code field
+  if (element.code) {
+    item.code = element.code
+  }
+  
+  return item
 }
 
 // Calculate actual height for an item (especially for reference tables)
@@ -146,7 +238,7 @@ function calculateItemHeight(
           if (showHeader) {
             totalHeight += rowHeight
             if (showBorder) {
-              totalHeight += 1 // Top border of table
+              totalHeight += 1
             }
           }
           
@@ -155,24 +247,17 @@ function calculateItemHeight(
           
           // Row borders (between rows)
           if (showBorder) {
-            totalHeight += parentFieldValue.length * 1 // Border between each row
+            totalHeight += parentFieldValue.length * 1
             if (showHeader) {
-              totalHeight += 1 // Border between header and first row
+              totalHeight += 1
             }
           }
           
-          // Padding (2px top + 2px bottom = 4px total, but we account for it in row height)
-          // The rowHeight already includes padding, so we don't need to add extra
-          
-          console.log(`[PDF] Table height calculation for ${item.id}: ${parentFieldValue.length} rows, rowHeight=${rowHeight}px, showHeader=${showHeader}, showBorder=${showBorder}, calculated=${totalHeight}px, original=${transform_height}px`)
-          
-          // Use the maximum of calculated height and original height
           return Math.max(totalHeight, transform_height)
         }
       }
     } catch (e) {
       console.error(`[PDF] Error calculating height for item ${item.id}:`, e)
-      // If parsing fails, return transform_height
     }
   }
   
@@ -185,7 +270,8 @@ async function renderTemplateItem(
   baseUrl: string,
   sessionContext?: any,
   allItems?: any[],
-  measuredHeights?: Map<string, number>
+  measuredHeights?: Map<string, number>,
+  finalPositions?: Map<string, { x: number; y: number }>
 ): Promise<string> {
   const {
     type,
@@ -201,6 +287,8 @@ async function renderTemplateItem(
     transform_height = 30,
     style_font_size,
     style_font_weight,
+    style_font_style,
+    style_text_decoration,
     style_color,
     style_background_color,
     style_border,
@@ -213,10 +301,14 @@ async function renderTemplateItem(
     fields,
   } = item
 
-  // Calculate actual position (accounting for anchors)
+  // Use final position if available (from measurement), otherwise calculate
   let actualX = transform_x
   let actualY = transform_y
-  if (allItems) {
+  if (finalPositions?.has(item.id)) {
+    const pos = finalPositions.get(item.id)!
+    actualX = pos.x
+    actualY = pos.y
+  } else if (allItems) {
     const anchorPos = calculateAnchorPosition(item, allItems, new Set(), measuredHeights)
     actualX = anchorPos.x
     actualY = anchorPos.y
@@ -227,17 +319,14 @@ async function renderTemplateItem(
 
   const style: string[] = []
   style.push(`position: absolute`)
-  // Convert pixels to mm (builder stores coordinates in pixels, PDF needs mm)
   style.push(`left: ${pxToMm(actualX)}mm`)
   style.push(`top: ${pxToMm(actualY)}mm`)
   style.push(`width: ${pxToMm(transform_width)}mm`)
-  // Use measured height if available, otherwise use transform_height
+  
   const isReferenceTable = type === "field" && fields
   if (!isReferenceTable) {
     style.push(`height: ${pxToMm(actualHeight)}mm`)
   } else {
-    // For reference tables, use min-height and let content determine height
-    // But if we have a measured height, use it
     if (measuredHeights?.has(item.id)) {
       style.push(`height: ${pxToMm(actualHeight)}mm`)
     } else {
@@ -268,6 +357,8 @@ async function renderTemplateItem(
   // Custom styles
   if (style_font_size) style.push(`font-size: ${style_font_size}px`)
   if (style_font_weight) style.push(`font-weight: ${style_font_weight}`)
+  if (style_font_style) style.push(`font-style: ${style_font_style}`)
+  if (style_text_decoration) style.push(`text-decoration: ${style_text_decoration}`)
   if (style_color) style.push(`color: ${style_color}`)
   if (style_background_color) style.push(`background-color: ${style_background_color}`)
   if (style_border) style.push(`border: ${style_border}`)
@@ -277,9 +368,32 @@ async function renderTemplateItem(
   let content = ""
 
   switch (type) {
-    case "text":
-      content = value || ""
+    case "text": {
+      // Build alignment styles for text
+      let textAlignStyle = ""
+      if (align === "center") {
+        textAlignStyle = "text-align: center;"
+      } else if (align === "right") {
+        textAlignStyle = "text-align: right;"
+      } else {
+        textAlignStyle = "text-align: left;"
+      }
+      
+      // Build vertical alignment for container
+      let containerAlignStyle = ""
+      if (vertical_align === "middle") {
+        containerAlignStyle = "align-items: center;"
+      } else if (vertical_align === "top") {
+        containerAlignStyle = "align-items: flex-start;"
+      } else if (vertical_align === "bottom") {
+        containerAlignStyle = "align-items: flex-end;"
+      }
+      
+      const inlineTextStyle = `${style_font_size ? `font-size: ${style_font_size}px;` : ""}${style_font_weight ? `font-weight: ${style_font_weight};` : ""}${style_font_style ? `font-style: ${style_font_style};` : ""}${style_text_decoration ? `text-decoration: ${style_text_decoration};` : ""}`
+      
+      content = `<div style="width: 100%; height: 100%; display: flex; ${containerAlignStyle}"><span style="display: block; width: 100%; ${textAlignStyle}${inlineTextStyle}">${value || ""}</span></div>`
       break
+    }
 
     case "field": {
       let fieldValue = field_name ? getFieldValue(doc, field_name) : ""
@@ -289,7 +403,6 @@ async function renderTemplateItem(
         try {
           const childFields = JSON.parse(fields)
           if (Array.isArray(childFields) && childFields.length > 0) {
-            // Get the field value (should be an array of child documents)
             const parentFieldValue = doc[field_name]
             if (Array.isArray(parentFieldValue) && parentFieldValue.length > 0) {
               // Parse table config if available
@@ -311,13 +424,11 @@ async function renderTemplateItem(
               const showBorder = tableConfig?.showBorder !== false
               const rowHeight = tableConfig?.rowHeight || 20
               
-              // Calculate total width of specified columns
               const elementWidthPx = transform_width
               const elementWidthMm = pxToMm(elementWidthPx)
               const specifiedWidths = sortedColumns.filter((col: any) => col.width).map((col: any) => col.width)
               const totalSpecifiedWidth = specifiedWidths.reduce((sum: number, w: number) => sum + w, 0)
-              const columnsWithWidth = sortedColumns.filter((col: any) => col.width).length
-              const columnsWithoutWidth = sortedColumns.length - columnsWithWidth
+              const columnsWithoutWidth = sortedColumns.length - sortedColumns.filter((col: any) => col.width).length
               
               // Build table with configuration
               const tableStyles: string[] = []
@@ -325,42 +436,63 @@ async function renderTemplateItem(
               tableStyles.push("border-collapse: collapse")
               tableStyles.push("table-layout: fixed")
               
-              const borderStyle = showBorder ? "1px solid #000" : "none"
+              // Modern border styling - softer colors
+              const borderColor = "#e5e7eb" // Light gray for modern look
+              const borderStyle = showBorder ? `1px solid ${borderColor}` : "none"
+              const headerBgColor = "#f9fafb" // Very light gray for header
+              const zebraStripeColor = "#fafafa" // Subtle zebra striping
+              
+              // Add outer border to table if borders are enabled
+              if (showBorder) {
+                tableStyles.push(`border: 1px solid ${borderColor}`)
+              }
+              
+              // Font styles for table cells (from element.style)
+              const tableFontStyles: string[] = []
+              if (style_font_size) tableFontStyles.push(`font-size: ${style_font_size}px`)
+              if (style_font_weight) tableFontStyles.push(`font-weight: ${style_font_weight}`)
+              if (style_font_style) tableFontStyles.push(`font-style: ${style_font_style}`)
+              if (style_text_decoration) tableFontStyles.push(`text-decoration: ${style_text_decoration}`)
+              const tableFontStyleStr = tableFontStyles.length > 0 ? `${tableFontStyles.join("; ")};` : ""
               
               // Render rows
-              const rows = parentFieldValue.map((childDoc: any) => {
+              const rows = parentFieldValue.map((childDoc: any, rowIndex: number) => {
                 const cells = sortedColumns.map((col: any) => {
                   const childValue = getFieldValue(childDoc, col.field)
                   const cellStyles: string[] = []
                   
                   // Calculate column width
                   if (col.width) {
-                    // Use specified width, converted to mm
                     cellStyles.push(`width: ${pxToMm(col.width)}mm`)
                   } else if (columnsWithoutWidth > 0) {
-                    // Distribute remaining width equally among unspecified columns
                     const remainingWidth = elementWidthPx - totalSpecifiedWidth
                     const autoWidth = remainingWidth / columnsWithoutWidth
                     cellStyles.push(`width: ${pxToMm(autoWidth)}mm`)
                   } else {
-                    // All columns have width, distribute equally
                     cellStyles.push(`width: ${elementWidthMm / sortedColumns.length}mm`)
                   }
                   
+                  // Modern border styling
                   if (showBorder) {
                     cellStyles.push(`border: ${borderStyle}`)
                   }
-                  // Use min-height for dynamic row height
+                  
+                  // Zebra striping for better readability
+                  if (rowIndex % 2 === 1) {
+                    cellStyles.push(`background-color: ${zebraStripeColor}`)
+                  }
+                  
                   cellStyles.push(`min-height: ${pxToMm(rowHeight)}mm`)
-                  cellStyles.push(`padding: 2px`)
+                  cellStyles.push(`padding: 3px 4px`) // Narrow but slightly more modern padding
                   cellStyles.push(`overflow: hidden`)
                   cellStyles.push(`text-overflow: ellipsis`)
+                  cellStyles.push(`vertical-align: middle`)
+                  if (tableFontStyleStr) {
+                    cellStyles.push(tableFontStyleStr)
+                  }
                   return `<td style="${cellStyles.join("; ")}">${childValue}</td>`
                 }).join("")
                 const rowStyles: string[] = []
-                if (showBorder) {
-                  rowStyles.push(`border-bottom: ${borderStyle}`)
-                }
                 return `<tr style="${rowStyles.join("; ")}">${cells}</tr>`
               }).join("")
               
@@ -370,7 +502,6 @@ async function renderTemplateItem(
                 const headerCells = sortedColumns.map((col: any) => {
                   const headerStyles: string[] = []
                   
-                  // Calculate column width (same logic as cells)
                   if (col.width) {
                     headerStyles.push(`width: ${pxToMm(col.width)}mm`)
                   } else if (columnsWithoutWidth > 0) {
@@ -381,17 +512,25 @@ async function renderTemplateItem(
                     headerStyles.push(`width: ${elementWidthMm / sortedColumns.length}mm`)
                   }
                   
+                  // Modern header border styling
                   if (showBorder) {
                     headerStyles.push(`border: ${borderStyle}`)
+                    headerStyles.push(`border-bottom: 2px solid ${borderColor}`) // Thicker bottom border for header separation
                   }
-                  headerStyles.push(`padding: 2px`)
-                  headerStyles.push(`font-weight: bold`)
-                  headerStyles.push(`background-color: #f0f0f0`)
+                  
+                  headerStyles.push(`padding: 3px 4px`) // Narrow but slightly more modern padding
+                  headerStyles.push(`font-weight: ${style_font_weight || "600"}`) // Use element font weight or default to 600 (semi-bold)
+                  headerStyles.push(`background-color: ${headerBgColor}`)
                   headerStyles.push(`overflow: hidden`)
                   headerStyles.push(`text-overflow: ellipsis`)
+                  headerStyles.push(`vertical-align: middle`)
+                  headerStyles.push(`text-align: left`)
+                  if (tableFontStyleStr) {
+                    headerStyles.push(tableFontStyleStr)
+                  }
                   return `<th style="${headerStyles.join("; ")}">${col.field}</th>`
                 }).join("")
-                headers = `<thead><tr style="border-bottom: ${borderStyle}">${headerCells}</tr></thead>`
+                headers = `<thead><tr>${headerCells}</tr></thead>`
               }
               
               fieldValue = `<table style="${tableStyles.join("; ")}">${headers}<tbody>${rows}</tbody></table>`
@@ -404,16 +543,41 @@ async function renderTemplateItem(
       
       const labelText = label || ""
       
-      if (labelText && label_position === "top") {
-        content = `<div style="display: flex; flex-direction: column;"><span style="font-size: 0.9em; opacity: 0.7;">${labelText}</span><span>${fieldValue}</span></div>`
-      } else if (labelText && label_position === "bottom") {
-        content = `<div style="display: flex; flex-direction: column;"><span>${fieldValue}</span><span style="font-size: 0.9em; opacity: 0.7;">${labelText}</span></div>`
-      } else if (labelText && label_position === "left") {
-        content = `<span style="margin-right: 0.5em; font-size: 0.9em; opacity: 0.7;">${labelText}</span><span>${fieldValue}</span>`
-      } else if (labelText && label_position === "right") {
-        content = `<span>${fieldValue}</span><span style="margin-left: 0.5em; font-size: 0.9em; opacity: 0.7;">${labelText}</span>`
+      // Build alignment styles for content
+      let contentAlignStyle = ""
+      if (align === "center") {
+        contentAlignStyle = "text-align: center;"
+      } else if (align === "right") {
+        contentAlignStyle = "text-align: right;"
       } else {
-        content = fieldValue
+        contentAlignStyle = "text-align: left;"
+      }
+      // Apply same horizontal alignment to labels
+      const labelAlignStyle = contentAlignStyle
+      
+      // Build vertical alignment for container
+      let containerAlignStyle = ""
+      if (vertical_align === "middle") {
+        containerAlignStyle = "align-items: center;"
+      } else if (vertical_align === "top") {
+        containerAlignStyle = "align-items: flex-start;"
+      } else if (vertical_align === "bottom") {
+        containerAlignStyle = "align-items: flex-end;"
+      }
+      
+      const inlineTextStyle = `${style_font_size ? `font-size: ${style_font_size}px;` : ""}${style_font_weight ? `font-weight: ${style_font_weight};` : ""}${style_font_style ? `font-style: ${style_font_style};` : ""}${style_text_decoration ? `text-decoration: ${style_text_decoration};` : ""}`
+      
+      if (labelText && label_position === "top") {
+        content = `<div style="display: flex; flex-direction: column; gap: 2px; width: 100%; height: 100%; ${containerAlignStyle}"><span style="font-size: 0.9em; opacity: 0.7; display: block; width: 100%; ${labelAlignStyle}${inlineTextStyle}">${labelText}</span><span style="display: block; width: 100%; ${contentAlignStyle}${inlineTextStyle}">${fieldValue}</span></div>`
+      } else if (labelText && label_position === "bottom") {
+        content = `<div style="display: flex; flex-direction: column; gap: 2px; width: 100%; height: 100%; ${containerAlignStyle}"><span style="display: block; width: 100%; ${contentAlignStyle}${inlineTextStyle}">${fieldValue}</span><span style="font-size: 0.9em; opacity: 0.7; display: block; width: 100%; ${labelAlignStyle}${inlineTextStyle}">${labelText}</span></div>`
+      } else if (labelText && label_position === "left") {
+        content = `<div style="display: flex; flex-direction: row; align-items: center; gap: 8px; width: 100%; height: 100%; ${containerAlignStyle}"><span style="font-size: 0.9em; opacity: 0.7; white-space: nowrap; ${labelAlignStyle}${inlineTextStyle}">${labelText}</span><span style="flex: 1; min-width: 0; ${contentAlignStyle}${inlineTextStyle}">${fieldValue}</span></div>`
+      } else if (labelText && label_position === "right") {
+        content = `<div style="display: flex; flex-direction: row-reverse; align-items: center; gap: 8px; width: 100%; height: 100%; ${containerAlignStyle}"><span style="font-size: 0.9em; opacity: 0.7; white-space: nowrap; ${labelAlignStyle}${inlineTextStyle}">${labelText}</span><span style="flex: 1; min-width: 0; ${contentAlignStyle}${inlineTextStyle}">${fieldValue}</span></div>`
+      } else {
+        // No label - just apply alignment to content
+        content = `<div style="width: 100%; height: 100%; display: flex; ${containerAlignStyle}"><span style="display: block; width: 100%; ${contentAlignStyle}${inlineTextStyle}">${fieldValue}</span></div>`
       }
       break
     }
@@ -423,7 +587,6 @@ async function renderTemplateItem(
       if (imagePath) {
         let imageUrl = imagePath
         if (!imagePath.startsWith("http") && !imagePath.startsWith("data:")) {
-          // Construct file URL
           imageUrl = `${baseUrl}/files/zodula__Print Template Item/${item.id}/image/${imagePath}`
         }
         content = `<img src="${imageUrl}" style="max-width: 100%; max-height: 100%; object-fit: contain;" />`
@@ -439,14 +602,11 @@ async function renderTemplateItem(
     }
 
     case "reference": {
-      // Fetch referenced document
       let refValue = ""
       if (reference_doctype && reference_field) {
         try {
-          // Parse reference_id_filter (e.g., "{{session.organization}}")
           let refId = reference_id_filter || ""
           if (refId.includes("{{")) {
-            // Replace template variables
             refId = refId.replace(/\{\{session\.(\w+)\}\}/g, (_: string, key: string) => {
               return sessionContext?.[key] || ""
             })
@@ -468,22 +628,46 @@ async function renderTemplateItem(
       
       const labelText = label || ""
       
-      if (labelText && label_position === "top") {
-        content = `<div style="display: flex; flex-direction: column;"><span style="font-size: 0.9em; opacity: 0.7;">${labelText}</span><span>${refValue}</span></div>`
-      } else if (labelText && label_position === "bottom") {
-        content = `<div style="display: flex; flex-direction: column;"><span>${refValue}</span><span style="font-size: 0.9em; opacity: 0.7;">${labelText}</span></div>`
-      } else if (labelText && label_position === "left") {
-        content = `<span style="margin-right: 0.5em; font-size: 0.9em; opacity: 0.7;">${labelText}</span><span>${refValue}</span>`
-      } else if (labelText && label_position === "right") {
-        content = `<span>${refValue}</span><span style="margin-left: 0.5em; font-size: 0.9em; opacity: 0.7;">${labelText}</span>`
+      // Build alignment styles for content
+      let contentAlignStyle = ""
+      if (align === "center") {
+        contentAlignStyle = "text-align: center;"
+      } else if (align === "right") {
+        contentAlignStyle = "text-align: right;"
       } else {
-        content = refValue
+        contentAlignStyle = "text-align: left;"
+      }
+      // Apply same horizontal alignment to labels
+      const labelAlignStyle = contentAlignStyle
+      
+      // Build vertical alignment for container
+      let containerAlignStyle = ""
+      if (vertical_align === "middle") {
+        containerAlignStyle = "align-items: center;"
+      } else if (vertical_align === "top") {
+        containerAlignStyle = "align-items: flex-start;"
+      } else if (vertical_align === "bottom") {
+        containerAlignStyle = "align-items: flex-end;"
+      }
+      
+      const inlineTextStyle = `${style_font_size ? `font-size: ${style_font_size}px;` : ""}${style_font_weight ? `font-weight: ${style_font_weight};` : ""}${style_font_style ? `font-style: ${style_font_style};` : ""}${style_text_decoration ? `text-decoration: ${style_text_decoration};` : ""}`
+      
+      if (labelText && label_position === "top") {
+        content = `<div style="display: flex; flex-direction: column; gap: 2px; width: 100%; height: 100%; ${containerAlignStyle}"><span style="font-size: 0.9em; opacity: 0.7; display: block; width: 100%; ${labelAlignStyle}${inlineTextStyle}">${labelText}</span><span style="display: block; width: 100%; ${contentAlignStyle}${inlineTextStyle}">${refValue}</span></div>`
+      } else if (labelText && label_position === "bottom") {
+        content = `<div style="display: flex; flex-direction: column; gap: 2px; width: 100%; height: 100%; ${containerAlignStyle}"><span style="display: block; width: 100%; ${contentAlignStyle}${inlineTextStyle}">${refValue}</span><span style="font-size: 0.9em; opacity: 0.7; display: block; width: 100%; ${labelAlignStyle}${inlineTextStyle}">${labelText}</span></div>`
+      } else if (labelText && label_position === "left") {
+        content = `<div style="display: flex; flex-direction: row; align-items: center; gap: 8px; width: 100%; height: 100%; ${containerAlignStyle}"><span style="font-size: 0.9em; opacity: 0.7; white-space: nowrap; ${labelAlignStyle}${inlineTextStyle}">${labelText}</span><span style="flex: 1; min-width: 0; ${contentAlignStyle}${inlineTextStyle}">${refValue}</span></div>`
+      } else if (labelText && label_position === "right") {
+        content = `<div style="display: flex; flex-direction: row-reverse; align-items: center; gap: 8px; width: 100%; height: 100%; ${containerAlignStyle}"><span style="font-size: 0.9em; opacity: 0.7; white-space: nowrap; ${labelAlignStyle}${inlineTextStyle}">${labelText}</span><span style="flex: 1; min-width: 0; ${contentAlignStyle}${inlineTextStyle}">${refValue}</span></div>`
+      } else {
+        // No label - just apply alignment to content
+        content = `<div style="width: 100%; height: 100%; display: flex; ${containerAlignStyle}"><span style="display: block; width: 100%; ${contentAlignStyle}${inlineTextStyle}">${refValue}</span></div>`
       }
       break
     }
 
     case "custom_html": {
-      // Use binba to render custom HTML template
       try {
         const template = value || ""
         const rendered = await Template.render(template, { doc, ...doc })
@@ -505,13 +689,10 @@ async function renderTemplateItem(
 export default $action(async (ctx) => {
   const { print_template, doctype, ids: idsParam, lang, letter_head, format = "pdf" } = ctx.query
 
-  // Handle ids as string or array
   const ids = Array.isArray(idsParam) ? idsParam : idsParam ? [idsParam] : []
-
-  // Get base URL
   const baseUrl = ctx.request.url.split("/api")[0] || "http://localhost:3000"
   
-  // Get session context for reference filters
+  // Get session context
   const sessionContext: any = {}
   try {
     const user = await $zodula.session.user(true).catch(() => null)
@@ -522,81 +703,168 @@ export default $action(async (ctx) => {
     // Ignore session errors
   }
 
-  // Fetch print template
-  const template = await $zodula.doctype("zodula__Print Template").get(print_template).bypass(true)
-  if (!template) {
-    return ctx.json({ error: "Print template not found" }, 404)
-  }
-
-  console.log("[PDF] Print template ID:", print_template)
-  console.log("[PDF] Template name:", template.name)
-
-  // Fetch template items - try multiple approaches
+  // Fetch or generate print template
+  let template: any = null
   let items: any[] = []
-  
-  // Approach 1: Direct query
-  try {
-    const result = await $zodula.doctype("zodula__Print Template Item")
-      .select()
-      .where("print_template", "=", print_template)
-      .sort("idx", "asc")
-      .bypass(true)
-    items = result.docs || []
-    console.log("[PDF] Direct query found items:", items.length)
-  } catch (e) {
-    console.error("[PDF] Direct query error:", e)
-  }
+  let pageFormat = "A4"
+  let pageDims: { width: number; height: number } = PAGE_FORMATS.A4 || { width: 210, height: 297 }
+  let pageTitle = ids.length === 1 ? ids[0] : "Document"
 
-  // Approach 2: Try accessing via relationship if direct query fails
-  if (items.length === 0) {
-    try {
-      // Try getting template with items relationship
-      const templateWithItems = await $zodula.doctype("zodula__Print Template")
-        .get(print_template)
-        .fields(["*", "items"] as any)
-        .bypass(true)
-      
-      if (templateWithItems && (templateWithItems as any).items) {
-        items = (templateWithItems as any).items || []
-        console.log("[PDF] Relationship query found items:", items.length)
-      }
-    } catch (e) {
-      console.error("[PDF] Relationship query error:", e)
+  if (print_template) {
+    // Use provided print template
+    template = await $zodula.doctype("zodula__Print Template").get(print_template).bypass(true)
+    if (!template) {
+      return ctx.json({ error: "Print template not found" }, 404)
     }
-  }
 
-  // Approach 3: Try without sort if still no items
-  if (items.length === 0) {
+    // Fetch template items - try multiple approaches
+    // Approach 1: Direct query with sort
     try {
       const result = await $zodula.doctype("zodula__Print Template Item")
         .select()
         .where("print_template", "=", print_template)
+        .sort("idx", "asc")
         .bypass(true)
       items = result.docs || []
-      console.log("[PDF] Query without sort found items:", items.length)
     } catch (e) {
-      console.error("[PDF] Query without sort error:", e)
+      console.error("[PDF] Direct query error:", e)
     }
-  }
 
-  // Debug: Check if any items exist at all for this template
-  if (items.length === 0) {
-    try {
-      const allItems = await $zodula.doctype("zodula__Print Template Item")
-        .select()
-        .limit(10)
-        .bypass(true)
-      console.log("[PDF] Total items in database (sample):", allItems.docs.length)
-      if (allItems.docs.length > 0) {
-        console.log("[PDF] Sample item print_template value:", allItems.docs[0]?.print_template)
-        console.log("[PDF] Looking for print_template:", print_template)
-        // Check if any match
-        const matching = allItems.docs.filter((item: any) => item.print_template === print_template)
-        console.log("[PDF] Matching items found:", matching.length)
+    // Approach 2: Try accessing via relationship if direct query fails
+    if (items.length === 0) {
+      try {
+        const templateWithItems = await $zodula.doctype("zodula__Print Template")
+          .get(print_template)
+          .fields(["*", "items"] as any)
+          .bypass(true)
+        
+        if (templateWithItems && (templateWithItems as any).items) {
+          items = (templateWithItems as any).items || []
+          items.sort((a: any, b: any) => (a.idx || 0) - (b.idx || 0))
+        }
+      } catch (e) {
+        console.error("[PDF] Relationship query error:", e)
       }
-    } catch (e) {
-      console.error("[PDF] Debug query error:", e)
     }
+
+    // Approach 3: Try without sort if still no items
+    if (items.length === 0) {
+      try {
+        const result = await $zodula.doctype("zodula__Print Template Item")
+          .select()
+          .where("print_template", "=", print_template)
+          .bypass(true)
+        items = result.docs || []
+        items.sort((a: any, b: any) => (a.idx || 0) - (b.idx || 0))
+      } catch (e) {
+        console.error("[PDF] Query without sort error:", e)
+      }
+    }
+
+    if (items.length === 0) {
+      return ctx.json({ error: "No template items found. Please add items to the print template." }, 400)
+    }
+
+    // Determine page dimensions from template
+    pageFormat = template.format || "A4"
+    if (pageFormat === "Custom") {
+      pageDims = { width: template.custom_width || 210, height: template.custom_height || 297 }
+    } else {
+      const formatDims = PAGE_FORMATS[pageFormat]
+      pageDims = formatDims || PAGE_FORMATS.A4 || { width: 210, height: 297 }
+    }
+
+    pageTitle =
+      (ids.length === 1 ? ids[0] : null) ||
+      (template as any).title ||
+      template.name ||
+      print_template ||
+      "Document"
+  } else {
+    // Generate default template from doctype tabs
+    if (!doctype) {
+      return ctx.json({ error: "Doctype is required when print_template is not provided" }, 400)
+    }
+
+    // Fetch doctype configuration
+    const doctypeDoc = await $zodula.doctype("zodula__Doctype").get(doctype).bypass(true)
+    if (!doctypeDoc) {
+      return ctx.json({ error: "Doctype not found" }, 404)
+    }
+
+    // Fetch fields for the doctype
+    const { docs: fieldDocs } = await $zodula.doctype("zodula__Field")
+      .select()
+      .where("doctype", "=", doctype)
+      .sort("idx", "asc")
+      .bypass(true)
+
+    const fields = fieldDocs.map((f: any) => ({
+      name: f.name || "",
+      label: f.label || f.name || "",
+      type: f.type || "",
+      reference: f.reference || undefined,
+    })).filter((f: any) => f.name)
+
+    // Parse tabs
+    const tabs = typeof doctypeDoc.tabs === 'string' 
+      ? JSON.parse(doctypeDoc.tabs) 
+      : doctypeDoc.tabs
+
+    if (!Array.isArray(tabs) || tabs.length === 0) {
+      return ctx.json({ error: "Doctype has no tabs configured. Please configure tabs or provide a print_template." }, 400)
+    }
+
+    // Helper function to fetch child fields for reference tables
+    const fetchChildFields = async (referenceDoctype: string): Promise<Array<{ field: string; order: number; required?: boolean; in_list_view?: boolean }>> => {
+      try {
+        const { docs: childFieldDocs } = await $zodula.doctype("zodula__Field")
+          .select()
+          .where("doctype", "=", referenceDoctype)
+          .sort("idx", "asc")
+          .bypass(true)
+
+        const standardFieldNames = new Set([
+          "id", "organization", "owner", "created_at", "updated_at",
+          "created_by", "updated_by", "doc_status", "idx", "vector"
+        ])
+
+        return childFieldDocs
+          .filter((field: any) => {
+            const fieldDoctype = field.doctype || ""
+            const fieldName = field.name || ""
+            return fieldDoctype === referenceDoctype && !standardFieldNames.has(fieldName)
+          })
+          .map((field: any, idx: number) => ({
+            field: field.name || "",
+            order: idx,
+            required: field.required === 1 || field.required === true,
+            in_list_view: field.in_list_view === 1 || field.in_list_view === true
+          }))
+          .filter((col: any) => col.field)
+      } catch (error) {
+        console.error("[PDF] Error fetching child fields:", error)
+        return []
+      }
+    }
+
+    // Generate template elements
+    const doctypeLabel = doctypeDoc.label || doctype
+    const elements = await generateTemplateFromTabs({
+      tabs,
+      fields,
+      pageDimensions: PAGE_FORMATS.A4 || { width: 210, height: 297 },
+      doctypeLabel,
+      fetchChildFields,
+    })
+
+    // Convert elements to items format
+    items = elements.map((element, idx) => elementToItem(element, idx))
+
+    // Use default page format
+    pageFormat = "A4"
+    pageDims = PAGE_FORMATS.A4 || { width: 210, height: 297 }
+    pageTitle = ids.length === 1 ? ids[0] : doctypeLabel || "Document"
   }
 
   // Fetch documents
@@ -611,9 +879,6 @@ export default $action(async (ctx) => {
   if (documents.length === 0) {
     return ctx.json({ error: "No documents found" }, 404)
   }
-
-  console.log("[PDF] Template items count:", items.length)
-  console.log("[PDF] Documents count:", documents.length)
 
   // Fetch letter head if provided
   let letterHead: any = null
@@ -630,12 +895,6 @@ export default $action(async (ctx) => {
     }
   }
 
-  // Determine page dimensions
-  const pageFormat = template.format || "A4"
-  const pageDims: { width: number; height: number } = pageFormat === "Custom"
-    ? { width: template.custom_width || 210, height: template.custom_height || 297 }
-    : (PAGE_FORMATS[pageFormat] ?? { width: 210, height: 297 })
-
   // Generate HTML for each document
   const htmlPages: string[] = []
 
@@ -648,26 +907,108 @@ export default $action(async (ctx) => {
       letterHeadHtml = letterHeadResults.join("")
     }
 
-    // Calculate actual heights of all elements (especially for reference tables)
-    // We calculate directly from data instead of using jsdom since jsdom doesn't do layout
-    const measuredHeights = new Map<string, number>()
-    items.forEach((item) => {
-      // Calculate height based on item type and data
-      const calculatedHeight = calculateItemHeight(item, doc)
-      measuredHeights.set(item.id, calculatedHeight)
-      console.log(`[PDF] Calculated height for item ${item.id} (${item.type}): ${calculatedHeight}px (original: ${item.transform_height}px)`)
+    // NEW APPROACH: Chain-based rendering - process elements in dependency order
+    // Elements without anchors render normally, anchored elements render one by one
+    // measuring height and positioning next element based on measured height
+    // 1. Build dependency chain (topological sort)
+    // 2. Render elements one by one, measure height, then position next element
+    
+    // Build dependency graph
+    const dependencies = new Map<string, string[]>()
+    const itemMap = new Map<string, any>()
+    
+    items.forEach(item => {
+      itemMap.set(item.id, item)
+      // Parse anchor config
+      let anchorConfig: any = null
+      if (item.anchor_config) {
+        if (typeof item.anchor_config === "string") {
+          try {
+            anchorConfig = JSON.parse(item.anchor_config)
+          } catch (e) {
+            // Ignore
+          }
+        } else if (typeof item.anchor_config === "object") {
+          anchorConfig = item.anchor_config
+        }
+      }
+      
+      if (anchorConfig && anchorConfig.anchorTo) {
+        // Find anchor item by code first (preferred), then by id (fallback for backward compatibility)
+        const anchorItem = items.find((i: any) => {
+          if (i.code && i.code === anchorConfig.anchorTo) return true
+          if (anchorConfig.anchorTo === i.id) return true
+          return false
+        })
+        
+        if (anchorItem) {
+          if (!dependencies.has(item.id)) {
+            dependencies.set(item.id, [])
+          }
+          dependencies.get(item.id)!.push(anchorItem.id)
+        }
+      }
     })
     
-    // Render template items with anchor calculations using measured heights
-    const itemPromises = items.map((item) => renderTemplateItem(item, doc, baseUrl, sessionContext, items, measuredHeights))
-    const itemResults = await Promise.all(itemPromises)
-    const itemsHtml = itemResults.join("")
+    // Topological sort: process elements without anchors first
+    const processed = new Set<string>()
+    const orderedItems: any[] = []
+    
+    // Start with elements that have no anchors
+    items.forEach(item => {
+      const anchorConfig = item.anchor_config
+        ? (typeof item.anchor_config === "string" ? JSON.parse(item.anchor_config) : item.anchor_config)
+        : null
+      if (!anchorConfig || !anchorConfig.anchorTo) {
+        processed.add(item.id)
+        orderedItems.push(item)
+      }
+    })
+    
+    // Process anchored elements in dependency order
+    let changed = true
+    while (changed) {
+      changed = false
+      items.forEach(item => {
+        if (processed.has(item.id)) return
+        
+        const deps = dependencies.get(item.id) || []
+        const allDepsProcessed = deps.every(depId => processed.has(depId))
+        
+        if (allDepsProcessed) {
+          processed.add(item.id)
+          orderedItems.push(item)
+          changed = true
+        }
+      })
+    }
+    
+    // Add any remaining items (shouldn't happen, but safety)
+    items.forEach(item => {
+      if (!processed.has(item.id)) {
+        orderedItems.push(item)
+      }
+    })
+    
+    // Render elements one by one in chain order
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    })
 
-    // Build HTML with correct anchor positions
-    const html = `<!DOCTYPE html>
+    try {
+      const page = await browser.newPage()
+      await page.setViewport({
+        width: Math.round((pageDims.width * 96) / 25.4),
+        height: Math.round((pageDims.height * 96) / 25.4),
+      })
+      
+      // Start with base HTML structure
+      let currentHtml = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
+  <title>${pageTitle}</title>
   <style>
     @page {
       size: ${pageDims.width}mm ${pageDims.height}mm;
@@ -694,44 +1035,316 @@ export default $action(async (ctx) => {
       padding: 0;
       overflow: visible;
     }
-    ${template.css || ""}
+    ${template?.css || ""}
     ${letterHead?.css_content || ""}
   </style>
 </head>
 <body>
   <div class="page-container">
     ${letterHeadHtml}
-    ${itemsHtml}
   </div>
 </body>
 </html>`
-
-    console.log("[PDF] Generated HTML length:", html.length)
-    console.log("[PDF] Items HTML length:", itemsHtml.length)
-    console.log("[PDF] Letter head HTML length:", letterHeadHtml.length)
-    
-    // If no content at all, add a debug message
-    if (!itemsHtml && !letterHeadHtml) {
-      console.error("[PDF] Error: No content generated. Items:", items.length, "Letter head items:", letterHeadItems.length)
+      
+      // Render all items with initial calculated positions
+      const initialMeasuredHeights = new Map<string, number>()
+      orderedItems.forEach((item) => {
+        const calculatedHeight = calculateItemHeight(item, doc)
+        initialMeasuredHeights.set(item.id, calculatedHeight)
+      })
+      
+      const initialItemPromises = orderedItems.map((item) => 
+        renderTemplateItem(item, doc, baseUrl, sessionContext, orderedItems, initialMeasuredHeights)
+      )
+      const initialItemResults = await Promise.all(initialItemPromises)
+      const initialItemsHtml = initialItemResults.join("")
+      
+      // Load all items at once and measure all heights in one pass
+      const htmlWithItems = currentHtml.replace('</div>', `${initialItemsHtml}</div>`)
+      try {
+        await page.setContent(htmlWithItems, { 
+          waitUntil: "networkidle0",
+          timeout: 60000 // Increased timeout to 60 seconds
+        })
+        
+        // Wait longer for tables to fully render - tables need more time
+        const hasTables = orderedItems.some(item => {
+          if (item.type === "field" && item.fields) {
+            try {
+              const childFields = typeof item.fields === "string" ? JSON.parse(item.fields) : item.fields
+              return Array.isArray(childFields) && childFields.length > 0
+            } catch (e) {
+              return false
+            }
+          }
+          return false
+        })
+        
+        // Additional wait for tables to ensure they're fully rendered
+        if (hasTables) {
+          await new Promise(resolve => setTimeout(resolve, 300))
+          
+          // Force a layout recalculation by scrolling
+          await page.evaluate(() => {
+            window.scrollTo(0, 0)
+            window.scrollTo(0, document.body.scrollHeight)
+            window.scrollTo(0, 0)
+          })
+          await new Promise(resolve => setTimeout(resolve, 500))
+        }
+        
+      } catch (e) {
+        console.error(`[PDF] Error loading HTML:`, e)
+        throw e
+      }
+      
+      // Measure all element heights in one pass
+      const measuredHeights = new Map<string, number>()
+      let measuredCount = 0
+      let failedCount = 0
+      
+      for (const item of orderedItems) {
+        try {
+          const selector = `[data-item-id="${item.id}"]`
+          const element = await page.$(selector)
+          if (element) {
+            // For tables, check scrollHeight as it's more accurate for content height
+            const isTable = item.type === "field" && item.fields
+            let actualHeightPx = 0
+            
+            if (isTable) {
+              // Get both boundingBox and scrollHeight for tables
+              const boundingBox = await element.boundingBox()
+              const tableInfo = await page.evaluate((itemId) => {
+                const el = document.querySelector(`[data-item-id="${itemId}"]`) as HTMLElement
+                if (el) {
+                  const table = el.querySelector('table') as HTMLTableElement
+                  return {
+                    scrollHeight: el.scrollHeight,
+                    clientHeight: el.clientHeight,
+                    offsetHeight: (el as any).offsetHeight || el.clientHeight,
+                    computedHeight: window.getComputedStyle(el).height,
+                    tableRows: table ? table.rows.length : 0,
+                    tableHeight: table ? ((table as any).offsetHeight || table.clientHeight) : 0
+                  }
+                }
+                return null
+              }, item.id)
+              
+              if (tableInfo) {
+                // Use the maximum of boundingBox height, scrollHeight, or tableHeight
+                const boundingHeight = boundingBox ? Math.round(boundingBox.height) : 0
+                actualHeightPx = Math.max(
+                  boundingHeight,
+                  tableInfo.scrollHeight,
+                  tableInfo.offsetHeight,
+                  tableInfo.tableHeight
+                )
+              } else {
+                const boundingBox = await element.boundingBox()
+                actualHeightPx = boundingBox ? Math.round(boundingBox.height) : (item.transform_height || 30)
+              }
+            } else {
+              const boundingBox = await element.boundingBox()
+              actualHeightPx = boundingBox ? Math.round(boundingBox.height) : (item.transform_height || 30)
+            }
+            
+            const originalHeight = item.transform_height || 30
+            measuredHeights.set(item.id, actualHeightPx)
+            measuredCount++
+            
+            const heightDiff = actualHeightPx - originalHeight
+            let anchorConfig: any = null
+            if (item.anchor_config) {
+              if (typeof item.anchor_config === "string") {
+                try {
+                  anchorConfig = JSON.parse(item.anchor_config)
+                } catch (e) {
+                  // Ignore
+                }
+              } else if (typeof item.anchor_config === "object") {
+                anchorConfig = item.anchor_config
+              }
+            }
+            if (anchorConfig && anchorConfig.anchorTo) {
+            }
+        } else {
+          measuredHeights.set(item.id, item.transform_height || 30)
+          failedCount++
+        }
+      } catch (e) {
+          console.error(`[PDF] ✗ Error measuring item ${item.id}:`, e)
+          measuredHeights.set(item.id, item.transform_height || 30)
+          failedCount++
+        }
+      }
+      
+      measuredHeights.forEach((height, itemId) => {
+        const item = orderedItems.find(i => i.id === itemId)
+        if (item) {
+          const original = item.transform_height || 30
+          const diff = height - original
+        }
+      })
+      
+      const finalPositions = new Map<string, { x: number; y: number }>()
+      for (const item of orderedItems) {
+        const originalPos = { x: item.transform_x || 0, y: item.transform_y || 0 }
+        const pos = calculateAnchorPosition(item, orderedItems, new Set(), measuredHeights)
+        finalPositions.set(item.id, pos)
+        
+        let anchorConfig: any = null
+        if (item.anchor_config) {
+          if (typeof item.anchor_config === "string") {
+            try {
+              anchorConfig = JSON.parse(item.anchor_config)
+            } catch (e) {
+              // Ignore
+            }
+          } else if (typeof item.anchor_config === "object") {
+            anchorConfig = item.anchor_config
+          }
+        }
+        
+        if (anchorConfig && anchorConfig.anchorTo) {
+          const anchorItem = orderedItems.find((i: any) => {
+            if (i.code && anchorConfig.anchorTo === i.code) return true
+            if (anchorConfig.anchorTo === i.id) return true
+            return false
+          })
+          if (anchorItem) {
+            const anchorHeight = measuredHeights.get(anchorItem.id) || anchorItem.transform_height || 0
+            const anchorOriginalHeight = anchorItem.transform_height || 0
+            const anchorHeightDiff = anchorHeight - anchorOriginalHeight
+            
+            const xDiff = pos.x - originalPos.x
+            const yDiff = pos.y - originalPos.y
+          }
+        } else {
+          const xDiff = pos.x - originalPos.x
+          const yDiff = pos.y - originalPos.y
+          }
+        }
+      
+      const finalItemPromises = orderedItems.map((item) => 
+        renderTemplateItem(item, doc, baseUrl, sessionContext, orderedItems, measuredHeights, finalPositions)
+      )
+      const finalItemResults = await Promise.all(finalItemPromises)
+      const finalItemsHtml = finalItemResults.join("")
+      
+      // Final HTML with all items and measured heights
+      currentHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${pageTitle}</title>
+  <style>
+    @page {
+      size: ${pageDims.width}mm ${pageDims.height}mm;
+      margin: 0;
     }
-    
-    htmlPages.push(html)
+    * {
+      box-sizing: border-box;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      position: relative;
+    }
+    .page-container {
+      position: relative;
+      width: ${pageDims.width}mm;
+      min-height: ${pageDims.height}mm;
+      margin: 0;
+      padding: 0;
+      overflow: visible;
+    }
+    ${template?.css || ""}
+    ${letterHead?.css_content || ""}
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    ${letterHeadHtml}
+    ${finalItemsHtml}
+  </div>
+</body>
+</html>`
+      
+      await page.close()
+      htmlPages.push(currentHtml)
+    } catch (error) {
+      console.error("[PDF] Error during chain rendering:", error)
+      // Fall back to simple rendering without measurement
+      const fallbackMeasuredHeights = new Map<string, number>()
+      items.forEach((item) => {
+        fallbackMeasuredHeights.set(item.id, item.transform_height || 30)
+      })
+      const fallbackItemPromises = items.map((item) => 
+        renderTemplateItem(item, doc, baseUrl, sessionContext, items, fallbackMeasuredHeights)
+      )
+      const fallbackItemResults = await Promise.all(fallbackItemPromises)
+      const fallbackItemsHtml = fallbackItemResults.join("")
+      
+      htmlPages.push(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${pageTitle}</title>
+  <style>
+    @page {
+      size: ${pageDims.width}mm ${pageDims.height}mm;
+      margin: 0;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      position: relative;
+    }
+    .page-container {
+      position: relative;
+      width: ${pageDims.width}mm;
+      min-height: ${pageDims.height}mm;
+      margin: 0;
+      padding: 0;
+      overflow: visible;
+    }
+    ${template?.css || ""}
+    ${letterHead?.css_content || ""}
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    ${letterHeadHtml}
+    ${fallbackItemsHtml}
+  </div>
+</body>
+</html>`)
+    } finally {
+      await browser.close()
+    }
   }
 
   // If format is HTML, return HTML (useful for debugging)
   if (format === "html") {
     return new Response(htmlPages[0] || "", {
-    headers: {
+      headers: {
         "Content-Type": "text/html; charset=utf-8",
       },
     })
-  }
-
-  // Debug: Log if no items found
-  if (items.length === 0) {
-    console.warn("[PDF] Warning: No template items found for template:", print_template)
-    // Return error if no items
-    return ctx.json({ error: "No template items found. Please add items to the print template." }, 400)
   }
 
   // Generate PDF using Puppeteer
@@ -746,32 +1359,32 @@ export default $action(async (ctx) => {
     for (const html of htmlPages) {
       const page = await browser.newPage()
       
-      // Set viewport to match page size
       await page.setViewport({
-        width: Math.round((pageDims.width * 96) / 25.4), // Convert mm to pixels
+        width: Math.round((pageDims.width * 96) / 25.4),
         height: Math.round((pageDims.height * 96) / 25.4),
       })
       
-      await page.setContent(html, { waitUntil: "domcontentloaded" })
-      
-      // Wait a bit for any async content to load
+      await page.setContent(html, { waitUntil: "networkidle0" })
       await new Promise(resolve => setTimeout(resolve, 500))
-      
-      // Debug: Take a screenshot to see what's rendered (optional, can be removed)
-      // await page.screenshot({ path: '/tmp/debug-pdf.png', fullPage: true })
       
       const pdfBuffer = await page.pdf({
         format: pageFormat === "Custom" ? undefined : (pageFormat as any),
         width: pageFormat === "Custom" ? `${pageDims.width}mm` : undefined,
         height: pageFormat === "Custom" ? `${pageDims.height}mm` : undefined,
         margin: {
-          top: `${template.margin_top || 10}mm`,
-          right: `${template.margin_right || 10}mm`,
-          bottom: `${template.margin_bottom || 10}mm`,
-          left: `${template.margin_left || 10}mm`,
+          top: `${template?.margin_top || 10}mm`,
+          right: `${template?.margin_right || 10}mm`,
+          bottom: `${template?.margin_bottom || 10}mm`,
+          left: `${template?.margin_left || 10}mm`,
         },
         printBackground: true,
         preferCSSPageSize: false,
+        displayHeaderFooter: true,
+        headerTemplate: `
+        <title>
+          ${ids.length > 1 ? `${print_template}_${new Date().getTime()}` : ids[0]}
+        </title>
+        `,
       })
       pdfBuffers.push(Buffer.from(pdfBuffer))
       await page.close()
@@ -779,12 +1392,12 @@ export default $action(async (ctx) => {
 
     await browser.close()
 
-    // Combine multiple PDFs if needed (for now, just return first)
     const pdfBuffer = pdfBuffers[0] || Buffer.from("")
 
     return new Response(pdfBuffer as any, {
       headers: {
         "Content-Type": "application/pdf",
+        "Content-Disposition": `filename="${ids.length > 1 ? `${print_template}_${new Date().getTime()}` : ids[0]}.pdf"`
       },
     })
   } catch (error: any) {
@@ -793,7 +1406,7 @@ export default $action(async (ctx) => {
   }
 }, {
   query: z.object({
-    print_template: z.string(),
+    print_template: z.string().optional(),
     doctype: z.string(),
     ids: z.union([z.string(), z.array(z.string())]),
     lang: z.string().nullable().optional(),

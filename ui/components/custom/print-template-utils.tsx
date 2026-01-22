@@ -19,6 +19,20 @@ export function elementToItemPayload(
     idx: idx,
   };
   
+  // Style fields (font size/weight/style/decoration)
+  if (element.style?.fontSize !== undefined) {
+    (payload as any).style_font_size = element.style.fontSize;
+  }
+  if (element.style?.fontWeight !== undefined) {
+    (payload as any).style_font_weight = element.style.fontWeight;
+  }
+  if (element.style?.fontStyle !== undefined) {
+    (payload as any).style_font_style = element.style.fontStyle;
+  }
+  if (element.style?.textDecoration !== undefined) {
+    (payload as any).style_text_decoration = element.style.textDecoration;
+  }
+  
   // Set field-specific values
   if (element.type === "field") {
     payload.field_name = typeof element.value === "string" ? element.value : "";
@@ -51,6 +65,11 @@ export function elementToItemPayload(
       anchorPosition: element.anchorPosition ?? null,
       anchorOffset: element.anchorOffset ?? null
     });
+  }
+  
+  // Add code field if present
+  if (element.code) {
+    (payload as any).code = element.code;
   }
   
   return payload;
@@ -125,9 +144,30 @@ export function itemToElement(
       x: item.transform_x || 0,
       y: item.transform_y || 0,
       width: item.transform_width || 200,
-      height: item.transform_height || 30,
+      height: (() => {
+        const h = item.transform_height || 30;
+        return h;
+      })(),
     },
+    style: {},
   };
+  
+  // Populate style from stored fields
+  if (item.style_font_size !== undefined) {
+    element.style = { ...(element.style || {}), fontSize: item.style_font_size as any };
+  }
+  if ((item as any).style_font_weight !== undefined) {
+    element.style = { ...(element.style || {}), fontWeight: (item as any).style_font_weight };
+  }
+  if ((item as any).style_font_style !== undefined) {
+    element.style = { ...(element.style || {}), fontStyle: (item as any).style_font_style };
+  }
+  if ((item as any).style_text_decoration !== undefined) {
+    element.style = { ...(element.style || {}), textDecoration: (item as any).style_text_decoration };
+  }
+  if (element.style && Object.keys(element.style).length === 0) {
+    delete (element as any).style;
+  }
   
   // Parse fields for Reference Table/Extend types
   if (item.fields && typeof item.fields === "string") {

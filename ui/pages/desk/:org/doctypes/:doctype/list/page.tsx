@@ -23,6 +23,7 @@ import { useTranslation } from "@/zodula/ui/hooks/use-translation";
 import ErrorView from "@/zodula/ui/views/error-view";
 import { Button } from "@/zodula/ui/components/ui/button";
 import { useParams } from "react-router";
+import { QuickEntryDialog } from "@/zodula/ui/components/dialogs/quick-entry-dialog";
 
 export default function DoctypeListPage() {
     const { params, push, replace, search, location } = useRouter()
@@ -106,8 +107,21 @@ export default function DoctypeListPage() {
     }, [fields]);
 
     const isSubmittable = doctypeDoc?.is_submittable === 1;
+    const isQuickEntry = doctypeDoc?.is_quick_entry === 1;
 
-    const handleCreate = () => {
+    const handleCreate = async () => {
+        if (isQuickEntry) {
+            const result = await popup(QuickEntryDialog, undefined, {
+                doctype,
+                fields: fields as any,
+                org: org || ""
+            });
+            if (result?.id) {
+                setSelected(new Set());
+                reload();
+            }
+            return;
+        }
         push(`/desk/${org}/doctypes/${doctype}/form`, {
             state: {
                 resetForm: true
@@ -290,7 +304,7 @@ export default function DoctypeListPage() {
                     <DropdownMenuContent align="end">
                         <DropdownMenuItem
                             onClick={handleSwitchToSheetView}
-                            className="zd:flex zd:items-center zd:gap-2"
+                            className="zd:flex zd:items-center zd:gap-2 zd:px-3 zd:py-0.5"
                         >
                             <Grid3x3 className="zd:h-4 zd:w-4" />
                             {t("Sheet View")}

@@ -68,11 +68,13 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
   
   const [layout, setLayout] = useState<PrintTemplateElement[]>([]);
   const [css, setCss] = useState("");
+  const [guidedBackground, setGuidedBackground] = useState<string | File | null>(null);
   
   // Track initial state for change detection
   const initialFormDataRef = useRef(formData);
   const initialLayoutRef = useRef<PrintTemplateElement[]>([]);
   const initialCssRef = useRef("");
+  const initialGuidedBackgroundRef = useRef<string | File | null>(null);
   
   // Get doctypes for selection (only for Print Template)
   const { docs: doctypes } = useDocList({
@@ -121,6 +123,18 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
         newFormData.margin_right = doc.margin_right || 10;
         newFormData.margin_bottom = doc.margin_bottom || 10;
         newFormData.margin_left = doc.margin_left || 10;
+        
+        // Load guided background
+        if (doc.guided_background && docId) {
+          import("@/zodula/client/utils").then(({ BASE_URL }) => {
+            const bgUrl = `${BASE_URL}/files/zodula__Print Template/${docId}/guided_background/${doc.guided_background}`;
+            setGuidedBackground(bgUrl);
+            initialGuidedBackgroundRef.current = bgUrl;
+          });
+        } else {
+          setGuidedBackground(null);
+          initialGuidedBackgroundRef.current = null;
+        }
       } else {
         setCss(doc.css_content || "");
       }
@@ -165,6 +179,8 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
       initialLayoutRef.current = [];
       setCss("");
       initialCssRef.current = "";
+      setGuidedBackground(null);
+      initialGuidedBackgroundRef.current = null;
     }
   }, [doc, docId, isPrintTemplate]);
 
@@ -182,9 +198,10 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
     const formChanged = JSON.stringify(formData) !== JSON.stringify(initialFormDataRef.current);
     const layoutChanged = JSON.stringify(layout) !== JSON.stringify(initialLayoutRef.current);
     const cssChanged = !isPrintTemplate && css !== initialCssRef.current;
+    const guidedBackgroundChanged = isPrintTemplate && guidedBackground !== initialGuidedBackgroundRef.current;
     
-    return formChanged || layoutChanged || cssChanged;
-  }, [formData, layout, css, docId, isPrintTemplate]);
+    return formChanged || layoutChanged || cssChanged || guidedBackgroundChanged;
+  }, [formData, layout, css, guidedBackground, docId, isPrintTemplate]);
 
   const handleSave = async () => {
     if (!formData.name) {
@@ -206,6 +223,11 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
           payload.css_content = css || "";
         }
         
+        // Handle guided background if it's a File (new upload)
+        if (isPrintTemplate && guidedBackground instanceof File) {
+          payload.guided_background = guidedBackground;
+        }
+        
         await zodula.doc.update_doc(doctype, docId, payload);
 
         // Save items
@@ -221,11 +243,14 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
           const currentItemIds = new Set(currentItems.map((item) => item.id));
           const newItemIds = new Set(layout.map((el) => el.id));
 
-          // Delete removed items
-          const itemsToDelete = currentItems.filter((item) => !newItemIds.has(item.id));
+          // Delete removed items (only items that have been saved to the database have an id)
+          const itemsToDelete = currentItems.filter((item) => item.id && !newItemIds.has(item.id));
           if (itemsToDelete.length > 0) {
-            for (const item of itemsToDelete) {
-              await zodula.doc.delete_doc(itemDoctype, item.id);
+            // Use bulk delete if multiple items, otherwise single delete
+            if (itemsToDelete.length === 1) {
+              await zodula.doc.delete_doc(itemDoctype, itemsToDelete[0].id);
+            } else {
+              await zodula.doc.delete_docs(itemDoctype, itemsToDelete.map(item => item.id).filter(id => id));
             }
           }
 
@@ -274,6 +299,12 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
           for (const { id: itemId, payload } of itemsToUpdate) {
             await zodula.doc.update_doc(itemDoctype, itemId, payload);
           }
+          
+          // If layout is empty, ensure all items are deleted and state is updated
+          if (layout.length === 0 && currentItems.length > 0) {
+            // All items should have been deleted above, but ensure state is cleared
+            setLayout([]);
+          }
         }
 
         await reload();
@@ -283,6 +314,11 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
         const payload: any = { ...formData };
         if (!isPrintTemplate) {
           payload.css_content = css || "";
+        }
+        
+        // Handle guided background if it's a File (new upload)
+        if (isPrintTemplate && guidedBackground instanceof File) {
+          payload.guided_background = guidedBackground;
         }
         
         const created = await zodula.doc.create_doc(doctype, payload);
@@ -439,6 +475,11 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
               format={formData.format}
               customWidth={formData.format === "Custom" ? formData.custom_width : undefined}
               customHeight={formData.format === "Custom" ? formData.custom_height : undefined}
+              guidedBackground={guidedBackground || undefined}
+              onGuidedBackgroundChange={(background) => {
+                setGuidedBackground(background);
+              }}
+              templateId={docId}
             />
           </div>
         ) : (

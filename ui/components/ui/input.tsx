@@ -74,9 +74,6 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           "zd:disabled:cursor-not-allowed",
           "zd:min-w-0 zd:border",
           disabled ? "zd:bg-muted/50 zd:cursor-not-allowed" : "zd:bg-muted",
-          readOnly
-            ? "zd:bg-muted/50 zd:cursor-[default] zd:text-muted-foreground"
-            : "zd:bg-muted",
           className ?? ""
         )}
       >
@@ -88,7 +85,10 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           name={name}
           id={id}
           type={type === "password" && showPassword ? "text" : type}
-          className="zd:flex-1 zd:min-w-0!"
+          className={cn(
+            "zd:flex-1 zd:min-w-0!",
+            readOnly ? "zd:cursor-default zd:text-muted-foreground" : "",
+          )}
           placeholder={getPlaceholder()}
           disabled={disabled}
           readOnly={readOnly}

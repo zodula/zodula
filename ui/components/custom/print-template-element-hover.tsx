@@ -67,7 +67,7 @@ export function PrintTemplateElementHover({
     <div
       ref={hoverRef}
       className={cn(
-        "zd:absolute zd:pointer-events-none zd:z-[200] zd:border-2 zd:border-dashed zd:border-primary/70 zd:rounded-lg zd:bg-primary/5 zd:transition-all"
+        "zd:absolute zd:pointer-events-none zd:z-[200] zd:border-2 zd:border-green-500 zd:rounded-lg zd:bg-green-500/10 zd:transition-all zd:shadow-lg"
       )}
       style={{
         display: elementId ? 'block' : 'none',

@@ -36,16 +36,22 @@ const buttonVariants = cva(
   }
 );
 
-interface ButtonProps
-  extends Omit<React.ComponentProps<"button">, "onClick">,
-    VariantProps<typeof buttonVariants> {
+type ButtonBaseProps = {
   asChild?: boolean;
   loading?: boolean;
   size?: "default" | "sm" | "lg";
   children?: React.ReactNode;
-  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => any | Promise<any>;
+  onClick?: (event: React.MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => any | Promise<any>;
   hideLoading?: boolean;
-}
+  href?: string;
+  target?: string;
+  rel?: string;
+};
+
+type ButtonProps = ButtonBaseProps &
+  Omit<React.ComponentProps<"button">, "onClick" | "children"> &
+  Omit<React.ComponentProps<"a">, "onClick" | "children"> &
+  VariantProps<typeof buttonVariants>;
 
 function Button({
   className,
@@ -57,14 +63,20 @@ function Button({
   onClick,
   disabled,
   hideLoading = false,
+  href,
+  target,
+  rel,
   ...props
 }: ButtonProps) {
   const [isLoading, setIsLoading] = React.useState(false);
-  const Comp = asChild ? Slot : "button";
+  const Comp = asChild ? Slot : href ? "a" : "button";
 
   const handleClick = React.useCallback(
-    async (event: React.MouseEvent<HTMLButtonElement>) => {
-      if (loading || isLoading || disabled) return;
+    async (event: React.MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {
+      if (loading || isLoading || disabled) {
+        event.preventDefault();
+        return;
+      }
 
       if (onClick) {
         try {
@@ -89,8 +101,13 @@ function Button({
     <Comp
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
-      disabled={isDisabled}
+      disabled={!href ? isDisabled : undefined}
+      aria-disabled={isDisabled || undefined}
       onClick={handleClick}
+      href={href}
+      target={href ? target : undefined}
+      rel={href ? rel : undefined}
+      role={!asChild && href ? "button" : undefined}
       {...props}
     >
       {isButtonLoading && !hideLoading && (
