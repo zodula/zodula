@@ -27,7 +27,7 @@ export function extendFile() {
             const roles = await zodula.session.roles()
             const doc = await zodula.doctype(doctype as Zodula.DoctypeName).get(docId!)
             const doctypeConfig = loader.from("doctype").get(doctype as Zodula.DoctypeName)
-            const { can, userPermissionCan } = await ZodulaDoctypeHelper.checkPermission(
+            const { can } = await ZodulaDoctypeHelper.checkPermission(
                 doctype as Zodula.DoctypeName,
                 "can_get",
                 doc,
@@ -39,7 +39,7 @@ export function extendFile() {
                 }
             )
             
-            if (!can || !userPermissionCan) {
+            if (!can) {
                 return ctx.json("You are not authorized to access this file", 403)
             }
             const filePath = path.join(process.cwd(), ".zodula_data", "files", url)

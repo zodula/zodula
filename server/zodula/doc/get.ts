@@ -48,13 +48,25 @@ export class ZodulaDoctypeGetter<
       const doctype = loader.from("doctype").get(this.doctypeName);
       const relatives = doctype.relatives;
       const session = new ZodulaSession();
+      const organization = await session.organization(true);
+      const isGlobal = doctype.config.is_global === 1;
       if (!this.options.bypass) {
         const user = await session.user(true);
         const old = (await db.get(
-          `SELECT * FROM "${doctype?.name}" WHERE "id" = '${this.id}'`
+          `SELECT * FROM "${doctype?.name}" WHERE "id" = '${this.id}' AND (${isGlobal ? "1=1" : `("organization" = "${organization}" OR "organization" = "system")`})`    
         )) as any;
+
+        // Validate organization access
+        await ZodulaDoctypeHelper.validateOrganization(
+          this.doctypeName,
+          session,
+          "get this document",
+          old,
+          this.options.bypass
+        );
+
         const roles = await zodula.session.roles();
-        const { can, userPermissionCan } =
+        const { can } =
           await ZodulaDoctypeHelper.checkPermission(
             this.doctypeName,
             "can_select",
@@ -67,18 +79,14 @@ export class ZodulaDoctypeGetter<
             }
           );
 
-        if (!can) {
+        if (
+          !can &&
+          !["zodula__Organization", "zodula__Organization Role"].includes(
+            this.doctypeName
+          )
+        ) {
           throw new ErrorWithCode(
             `You do not have permission to get ${this.doctypeName}/${this.id}`,
-            {
-              status: 403,
-            }
-          );
-        }
-
-        if (!userPermissionCan) {
-          throw new ErrorWithCode(
-            `You do not have User Permission to get ${this.doctypeName} document with id ${this.id}.`,
             {
               status: 403,
             }
@@ -94,9 +102,10 @@ export class ZodulaDoctypeGetter<
                   !relatives.some((relative) => relative.alias === field)
               )
           : ["*"];
-      const result = (await db.get(
-        `SELECT ${fields.join(",")} FROM "${doctype?.name}" WHERE "id" = '${this.id}'`
+      let result = (await db.get(
+        `SELECT ${fields.join(",")} FROM "${doctype?.name}" WHERE "id" = '${this.id}' AND (${isGlobal ? "1=1" : `("organization" = "${organization}" OR "organization" = "system")`})`
       )) as any;
+
       if (relatives.length > 0 && result) {
         for (const relative of relatives.filter(
           (relative) => relative.type !== "Reference"
@@ -120,6 +129,23 @@ export class ZodulaDoctypeGetter<
           }
         }
       }
+
+      // Apply permission level permissions to filter fields
+      if (!this.options.bypass && result) {
+        const roles = await zodula.session.roles();
+        const user = await session.user(true);
+        const isOwn = result.owner === user.id;
+        result = await ZodulaDoctypeHelper.applyPermLevelPermission(
+          this.doctypeName,
+          result,
+          roles,
+          this.options.bypass,
+          isOwn
+        );
+      }
+
+      console.log(`[GET][${this.doctypeName}] ${result}`)
+
       return this.options.unsafe
         ? result
         : ZodulaDoctypeHelper.formatDocResult(result, doctype.schema);

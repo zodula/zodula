@@ -466,22 +466,31 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
 
         {/* Builder */}
         {isPrintTemplate ? (
-          <div className="zd:flex-1 zd:overflow-hidden">
-            <PrintTemplateBuilder
-              layout={layout}
-              onChange={setLayout}
-              doctype={formData.doctype}
-              fields={fields as any}
-              format={formData.format}
-              customWidth={formData.format === "Custom" ? formData.custom_width : undefined}
-              customHeight={formData.format === "Custom" ? formData.custom_height : undefined}
-              guidedBackground={guidedBackground || undefined}
-              onGuidedBackgroundChange={(background) => {
-                setGuidedBackground(background);
-              }}
-              templateId={docId}
-            />
-          </div>
+          formData.doctype ? (
+            <div className="zd:flex-1 zd:overflow-hidden">
+              <PrintTemplateBuilder
+                layout={layout}
+                onChange={setLayout}
+                doctype={formData.doctype}
+                fields={fields as any}
+                format={formData.format}
+                customWidth={formData.format === "Custom" ? formData.custom_width : undefined}
+                customHeight={formData.format === "Custom" ? formData.custom_height : undefined}
+                guidedBackground={guidedBackground || undefined}
+                onGuidedBackgroundChange={(background) => {
+                  setGuidedBackground(background);
+                }}
+                templateId={docId}
+              />
+            </div>
+          ) : (
+            <div className="zd:flex-1 zd:flex zd:items-center zd:justify-center zd:bg-muted/30">
+              <div className="zd:text-center zd:text-muted-foreground">
+                <p className="zd:text-lg zd:mb-2">{t("Select a doctype to start building")}</p>
+                <p className="zd:text-sm">{t("Choose a doctype from the dropdown above to begin creating your print template")}</p>
+              </div>
+            </div>
+          )
         ) : (
           <div className="zd:flex zd:flex-col zd:flex-1 zd:overflow-hidden">
             <div className="zd:flex-1 zd:overflow-hidden">

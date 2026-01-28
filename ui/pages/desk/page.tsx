@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "@/zodula/ui/components/router";
-import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
+import { useAction } from "@/zodula/ui/hooks/use-action";
 import { useDoc } from "@/zodula/ui/hooks/use-doc";
 import { useAuth } from "@/zodula/ui/hooks/use-auth";
 import { Button } from "@/zodula/ui/components/ui/button";
@@ -21,16 +21,15 @@ export default function DeskPage() {
   });
   const { t } = useTranslation();
 
-  // Load organizations
-  const { docs: organizations, reload: reloadOrganizations } = useDocList(
-    {
-      doctype: "zodula__Organization",
-      limit: 10000,
-      sort: "updated_at",
-      order: "desc",
-    },
+  // Load organizations using action
+  const { data: organizationsResponse, reload: reloadOrganizations } = useAction(
+    "zodula.org.list",
+    {},
     []
   );
+
+  // Extract organizations from response
+  const organizations: Zodula.SelectDoctype<"zodula__Organization">[] = organizationsResponse?.data || [];
 
   // Get selected organization from localStorage
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);

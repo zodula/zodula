@@ -46,6 +46,15 @@ export class ZodulaDoctypeCancel<
     // Validate document exists and can be cancelled
     this.validateDocument(old);
 
+    // Validate organization access
+    await ZodulaDoctypeHelper.validateOrganization(
+      this.doctypeName,
+      this.session,
+      "cancel this document",
+      old,
+      this.options.bypass
+    );
+
     // Check if doctype is submittable
     if (doctype?.schema.is_submittable !== 1) {
       throw new ErrorWithCode(
@@ -56,7 +65,7 @@ export class ZodulaDoctypeCancel<
 
     // Check permissions
     const roles = await zodula.session.roles();
-    const { can, userPermissionCan } =
+    const { can } =
       await ZodulaDoctypeHelper.checkPermission(
         this.doctypeName,
         "can_cancel",
@@ -72,15 +81,6 @@ export class ZodulaDoctypeCancel<
     if (!can) {
       throw new ErrorWithCode(
         `You do not have permission to cancel this document`,
-        {
-          status: 403,
-        }
-      );
-    }
-
-    if (!userPermissionCan) {
-      throw new ErrorWithCode(
-        `You do not have User Permission to cancel ${this.doctypeName} document with id ${this.id}`,
         {
           status: 403,
         }

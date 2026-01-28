@@ -47,11 +47,12 @@ export class ZodulaSession {
     const organizationRoles = await db
       .select("*")
       .from("zodula__Organization Role")
-      .where("user", "=", user.id)
-      .where("organization", "=", organization)
+      .where("userId", "=", user.id)
+      .where("organizationId", "=", organization)
       .execute();
+      
     return organizationRoles.map(
-      (organizationRole) => organizationRole.organization
+      (organizationRole) => organizationRole.roleId
     );
   }
 

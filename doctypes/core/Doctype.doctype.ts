@@ -54,10 +54,6 @@ export default $doctype(
       type: "Check",
       label: "Is System Generated",
     },
-    require_user_permission: {
-      type: "Check",
-      label: "Require User Permission",
-    },
 
     tabs: {
       type: "JSON",

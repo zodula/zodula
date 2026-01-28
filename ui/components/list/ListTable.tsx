@@ -171,6 +171,7 @@ export function ListTable<TDoc extends Record<string, any>>({
                 {columns.map((col, index) => {
                   const isDisplayed = index === 0;
                   const Render = col.render as any;
+                  const isUndefined = doc[col.key] === undefined;
                   return (
                     <td
                       key={String(col.key)}
@@ -181,7 +182,11 @@ export function ListTable<TDoc extends Record<string, any>>({
                           : ""
                       )}
                     >
-                      <Render {...doc} />
+                      {(isUndefined || !Render) ? (
+                        <span className="zd:text-muted-foreground zd:italic">{!Render ? "" : "Hidden"}</span>
+                      ) : (
+                        <Render {...doc} />
+                      )}
                     </td>
                   );
                 })}

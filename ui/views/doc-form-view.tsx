@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Link, useRouter } from "@/zodula/ui/components/router";
 import { useDoc } from "@/zodula/ui/hooks/use-doc";
 import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
@@ -99,7 +99,7 @@ export function DocFormView({
   const [isLoading, setIsLoading] = useState(false);
   const { org } = useParams();
   // ===== AUTH & TRANSLATION =====
-  const { roles } = useAuth();
+  const { roles, user } = useAuth();
   const { t } = useTranslation();
 
   // ===== DOCTYPE & DOC DATA =====
@@ -169,11 +169,47 @@ export function DocFormView({
     [doctypeDoc]
   );
 
+  // ===== FIELD-LEVEL PERMISSIONS =====
+  const { docs: doctypePermissions } = useDocList(
+    {
+      doctype: "zodula__Doctype Permission",
+      limit: 1000000,
+      filters: [["doctype", "=", doctype]],
+    },
+    [doctype, roles]
+  );
+
+  // Map field-level permissions: field name -> permission record
+  const fieldPermissions = useMemo(() => {
+    if (!doctypePermissions || !fields || !roles) {
+      return new Map<string, Zodula.SelectDoctype<"zodula__Doctype Permission">>();
+    }
+
+    // Include Authenticated and Anonymous roles (matching server-side logic)
+    const allRoles = [
+      ...roles,
+      "Anonymous",
+      user ? "Authenticated" : undefined,
+    ].filter(Boolean) as string[];
+
+    return ClientFieldHelper.getFieldLevelPermissions(
+      doctypePermissions,
+      fields.map((f) => ({ name: f.name, perm_level: f.perm_level || undefined })),
+      allRoles
+    );
+  }, [doctypePermissions, fields, roles, user]);
+
+  // Check if user owns the document
+  const isOwn = useMemo(() => {
+    return doc?.owner === (user?.id || null);
+  }, [doc?.owner, user?.id]);
+
   // ===== FORM LOGIC =====
   const formFields = useMemo(() => {
     if (!fields || !doctypeDoc) return {};
 
     const processedFields: Record<string, any> = {};
+    const isSystemAdmin = roles?.includes("System Admin") || false;
 
     fields.forEach((field) => {
       if (field.doctype === doctype) {
@@ -184,36 +220,67 @@ export function DocFormView({
           Object.keys(ClientFieldHelper.standardFields()).includes(field.name)
         )
           return {};
+
+        // Check field-level permissions
+        const { canGet, canUpdate } = ClientFieldHelper.checkPermLevelForField(
+          fieldPermissions,
+          field.name,
+          field.perm_level || undefined,
+          isOwn,
+          false, // bypass
+          isSystemAdmin
+        );
+
+        // Skip field if user can't get it
+        if (!canGet) {
+          return;
+        }
+
+        // Determine if field should be readonly based on permissions
+        const fieldReadonly = !canUpdate || field.readonly === 1;
+
         processedFields[field.name] = {
           ...field,
           label: t(field.label || field.name || ""),
+          // Set readonly based on update permission
+          readonly: fieldReadonly ? 1 : (field.readonly || 0),
         };
       }
     });
 
     return processedFields;
-  }, [fields, doctypeDoc, t]);
+  }, [fields, doctypeDoc, t, fieldPermissions, isOwn, roles, user]);
 
   const formId = useMemo(() => {
     return mode === "create" ? `new-${doctype}` : `edit-${doctype}-${id}`;
   }, [doctype, id, mode]);
 
-  const { formData, handleChange, setValues, reset } = useForm({
+  const { formData, handleChange, setValues, reset, getFormData } = useForm({
     formId: `${mode === "create" ? "create" : "edit"}-${doctype}-${formId}`,
-    initialValues: mode === "create" ? undefined : doc || undefined,
+    initialValues: undefined, // Don't pass doc here to avoid recomputation issues
     fields: formFields,
   });
 
   // ===== FORM EFFECTS =====
+  // Track previous doc ID to prevent unnecessary updates
+  const prevDocIdRef = React.useRef<string | undefined>(undefined);
+  
   React.useEffect(() => {
     if (mode === "edit" && doc) {
-      const valuesToSet = { ...doc };
-      if (prefill) {
-        Object.assign(valuesToSet, prefill);
+      // Only set values if form is empty or if doc ID changed (new document loaded)
+      // This prevents overwriting user input while typing
+      const currentDocId = doc.id;
+      
+      if (prevDocIdRef.current !== currentDocId) {
+        const valuesToSet = { ...doc };
+        if (prefill) {
+          Object.assign(valuesToSet, prefill);
+        }
+        setValues(valuesToSet);
+        prevDocIdRef.current = currentDocId;
       }
-      setValues(valuesToSet);
     }
-  }, [doc, setValues, prefill, formId, mode]);
+  }, [doc?.id, setValues, prefill, formId, mode]);
 
   React.useEffect(() => {
     if (mode === "create" && fields && doctypeDoc) {
@@ -340,7 +407,9 @@ export function DocFormView({
 
   const handleUpdate = async () => {
     try {
+      console.log("DEBUG: handleUpdate called");
       const payload = getUpdatePayload();
+      console.log("DEBUG: handleUpdate - payload:", payload);
       await zodula.doc.update_doc(doctype, id || "", payload);
       reload();
     } finally {
@@ -366,7 +435,9 @@ export function DocFormView({
   };
 
   const handleSave = async () => {
+    console.log("DEBUG: handleSave called");
     const payload = getUpdatePayload();
+    console.log("DEBUG: handleSave - payload:", payload);
     const updatedDoc = await zodula.doc.update_doc(doctype, id || "", payload);
 
     if (updatedDoc.id !== id && !isSingle) {
@@ -402,9 +473,13 @@ export function DocFormView({
   const handleCreate = async () => {
     setIsLoading(true);
     try {
+      // Get the latest form data directly from the store to ensure we have the most recent values
+      // This ensures we capture all user input, not just the memoized formData
+      const latestFormData = getFormData();
+      
       const createdDoc = await zodula.doc.create_doc(
         doctype as Zodula.DoctypeName,
-        formData
+        latestFormData
       );
       if (createdDoc) {
         if (cbUrl) {
@@ -459,30 +534,75 @@ export function DocFormView({
     }
   };
 
+  // Helper function to compare values (handles different types)
+  const valuesAreEqual = (val1: any, val2: any): boolean => {
+    // Handle null/undefined
+    if (val1 == null && val2 == null) return true;
+    if (val1 == null || val2 == null) return false;
+    
+    // Handle arrays and objects
+    if (typeof val1 === 'object' && typeof val2 === 'object') {
+      return JSON.stringify(val1) === JSON.stringify(val2);
+    }
+    
+    // Handle primitive types
+    return val1 === val2;
+  };
+
   // Helper function to get changed fields and standard fields
   const getUpdatePayload = () => {
-    if (!doc) return formData;
+    if (!doc) {
+      // For create mode, get latest form data
+      const latestFormData = getFormData();
+      console.log("DEBUG: getUpdatePayload (create mode) - latestFormData:", latestFormData);
+      return latestFormData;
+    }
+
+    // Get latest form data to ensure we have all current values
+    const latestFormData = getFormData();
+    console.log("DEBUG: getUpdatePayload - doc:", doc);
+    console.log("DEBUG: getUpdatePayload - formData (memoized):", formData);
+    console.log("DEBUG: getUpdatePayload - latestFormData (from store):", latestFormData);
 
     const standardFieldNames = Object.keys(ClientFieldHelper.standardFields());
     const changedFields: Record<string, any> = {};
 
     // Include all standard fields
     standardFieldNames.forEach((fieldName) => {
-      if (formData[fieldName] !== undefined) {
-        changedFields[fieldName] = formData[fieldName];
+      if (latestFormData[fieldName] !== undefined) {
+        changedFields[fieldName] = latestFormData[fieldName];
       }
     });
+
+    // Get all field names from both doc and latestFormData to ensure we check everything
+    const allFieldNames = new Set([
+      ...Object.keys(latestFormData),
+      ...Object.keys(doc as any)
+    ]);
 
     // Include only changed non-standard fields
-    Object.keys(formData).forEach((fieldName) => {
-      if (
-        !standardFieldNames.includes(fieldName) &&
-        formData[fieldName] !== (doc as any)[fieldName]
-      ) {
-        changedFields[fieldName] = formData[fieldName];
+    allFieldNames.forEach((fieldName) => {
+      if (standardFieldNames.includes(fieldName)) {
+        return; // Skip standard fields (already handled above)
+      }
+
+      const oldValue = (doc as any)[fieldName];
+      const newValue = latestFormData[fieldName];
+      
+      // Check if value has changed
+      if (!valuesAreEqual(oldValue, newValue)) {
+        console.log(`DEBUG: Field "${fieldName}" changed:`, {
+          old: oldValue,
+          new: newValue,
+          oldType: typeof oldValue,
+          newType: typeof newValue
+        });
+        changedFields[fieldName] = newValue;
       }
     });
 
+    console.log("DEBUG: getUpdatePayload - changedFields:", changedFields);
+    console.log("DEBUG: getUpdatePayload - changedFields count:", Object.keys(changedFields).length);
     return changedFields;
   };
 
@@ -654,7 +774,7 @@ export function DocFormView({
   );
 
   // ===== RENDER COMPONENTS =====
-  const primaryButtonRender = () => {
+  const primaryButtonRender = useCallback(() => {
     if (mode === "create") {
       return (
         <Button
@@ -682,7 +802,7 @@ export function DocFormView({
           <SaveIcon />
         </Button>
       );
-    } else if (doc?.doc_status === 0) {
+    } else if (doc?.doc_status == 0) {
       return (
         <Button onClick={handleSave} className="zd:h-8" disabled={!isDirty}>
           <SaveIcon />
@@ -690,7 +810,8 @@ export function DocFormView({
         </Button>
       );
     }
-  };
+    console.log("primaryButtonRender", mode, isLoading, isDirty, doc);
+  }, [mode, isLoading, isDirty, doc?.doc_status]);
 
   // ===== LOADING & ERROR STATES =====
   if (mode === "edit" && loading) {

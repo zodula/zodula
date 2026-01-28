@@ -150,137 +150,6 @@ export class ZodulaDoctypeHelper {
         return result
     }
 
-    static canUserPermission<DN extends Zodula.DoctypeName>(doctypeName: DN, data: Zodula.SelectDoctype<DN>, options: {
-        requireUserPermission: boolean
-        fields: Record<keyof Zodula.SelectDoctype<DN>, Zodula.Field>
-        bypass: boolean
-        userPermissions: Zodula.SelectDoctype<"zodula__User Permission">[],
-        isSystemAdmin: boolean
-    }) {
-        const { fields, bypass, userPermissions, isSystemAdmin, requireUserPermission } = options
-        if (bypass) {
-            return true
-        }
-        if (isSystemAdmin) {
-            return true
-        }
-
-        const fieldChecks = [] as boolean[]
-        for (const userPermisison of userPermissions) {
-            const { allow, value, apply_to_all, apply_to_only } = userPermisison as Zodula.SelectDoctype<"zodula__User Permission">
-            const isApplied = apply_to_all === 1 || (apply_to_only === doctypeName)
-            if (isApplied) {
-                for (const [fieldName, field] of Object.entries(fields)) {
-                    if (field.type === "Reference" && field.reference === allow) {
-                        if (value !== data[fieldName as keyof Zodula.SelectDoctype<DN>]) {
-                            fieldChecks.push(false)
-                        } else {
-                            fieldChecks.push(true)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Recursive check for Extend fields - check all Extend fields regardless of user permission matching
-        for (const [fieldName, field] of Object.entries(fields)) {
-            if (field.type === "Extend" && field.reference) {
-                const extendValue = data[fieldName as keyof Zodula.SelectDoctype<DN>]
-                if (extendValue && typeof extendValue === "object" && !Array.isArray(extendValue)) {
-                    try {
-                        const referencedDoctype = loader.from("doctype").get(field.reference as Zodula.DoctypeName)
-                        if (referencedDoctype && referencedDoctype.schema) {
-                            const nestedPermission = ZodulaDoctypeHelper.canUserPermission(
-                                field.reference as Zodula.DoctypeName,
-                                extendValue as any,
-                                {
-                                    requireUserPermission: referencedDoctype.config?.require_user_permission === 1,
-                                    fields: referencedDoctype.schema.fields as Record<string, Zodula.Field>,
-                                    bypass: bypass,
-                                    userPermissions: userPermissions,
-                                    isSystemAdmin: isSystemAdmin
-                                }
-                            )
-                            if (!nestedPermission) {
-                                fieldChecks.push(false)
-                            } else {
-                                fieldChecks.push(true)
-                            }
-                        }
-                    } catch (error) {
-                        // If we can't load the doctype, fail the check
-                        fieldChecks.push(false)
-                    }
-                }
-            }
-        }
-
-        // Recursive check for Reference Table fields - check all Reference Table fields regardless of user permission matching
-        for (const [fieldName, field] of Object.entries(fields)) {
-            if (field.type === "Reference Table" && field.reference) {
-                const refTableValue = data[fieldName as keyof Zodula.SelectDoctype<DN>]
-                if (refTableValue && Array.isArray(refTableValue)) {
-                    try {
-                        const referencedDoctype = loader.from("doctype").get(field.reference as Zodula.DoctypeName)
-                        if (referencedDoctype && referencedDoctype.schema) {
-                            const nestedChecks = refTableValue.map((item: any) => {
-                                if (item && typeof item === "object") {
-                                    return ZodulaDoctypeHelper.canUserPermission(
-                                        field.reference as Zodula.DoctypeName,
-                                        item,
-                                        {
-                                            requireUserPermission: referencedDoctype.config?.require_user_permission === 1,
-                                            fields: referencedDoctype.schema.fields as Record<string, Zodula.Field>,
-                                            bypass: bypass,
-                                            userPermissions: userPermissions,
-                                            isSystemAdmin: isSystemAdmin
-                                        }
-                                    )
-                                }
-                                return true
-                            })
-                            // All items in the array must pass permission check
-                            if (!nestedChecks.every((check) => check)) {
-                                fieldChecks.push(false)
-                            } else {
-                                fieldChecks.push(true)
-                            }
-                        }
-                    } catch (error) {
-                        // If we can't load the doctype, fail the check
-                        fieldChecks.push(false)
-                    }
-                }
-            }
-        }
-        let fieldCheck = fieldChecks.every((check) => check)
-        if (fieldChecks.filter((check) => check).length === 0) {
-            if (requireUserPermission) {
-                fieldCheck = false
-            }
-        }
-
-
-        let parentChecks = [] as boolean[]
-        for (const userPermisison of userPermissions) {
-            const { allow, value } = userPermisison as Zodula.SelectDoctype<"zodula__User Permission">
-            if (allow === doctypeName) {
-                if (value !== data.id) {
-                    parentChecks.push(false)
-                } else {
-                    parentChecks.push(true)
-                }
-            }
-        }
-        let parentCheck = parentChecks.every((check) => check)
-        if (parentChecks.filter((check) => check).length === 0) {
-            if (requireUserPermission) {
-                parentCheck = false
-            }
-        }
-
-        return fieldCheck && parentCheck
-    }
 
     static formatSqlError(error: string): string {
         // NOT NULL constraint
@@ -316,11 +185,6 @@ export class ZodulaDoctypeHelper {
         return permissions
     }
 
-    static async getUserPermissions(userId: string) {
-        const db = Database("main")
-        const permissions = await db.select("*").from("zodula__User Permission" as Zodula.DoctypeName).where("user", "=", userId).execute()
-        return permissions
-    }
 
     static async can(doctype: Zodula.DoctypeName, action: keyof Zodula.SelectDoctype<"zodula__Doctype Permission">, isOwn: boolean, roles: string[], bypass: boolean) {
         const db = Database("main")
@@ -333,7 +197,7 @@ export class ZodulaDoctypeHelper {
         if (roles.includes("System Admin") || bypass) {
             return true
         }
-        const permissions = await db.select("*").from("zodula__Doctype Permission" as Zodula.DoctypeName).where("doctype", "=", doctype).where("role", "IN", _roles).execute()
+        const permissions = await db.select("*").from("zodula__Doctype Permission" as Zodula.DoctypeName).where("doctype", "=", doctype).where("role", "IN", _roles).where("perm_level", "=", 0).execute()
         const permission = permissions[0]
         if (!permission) {
             return false
@@ -341,7 +205,7 @@ export class ZodulaDoctypeHelper {
         const { can_create, can_get, can_select, can_update, can_delete, can_submit, can_cancel } = permission as Zodula.SelectDoctype<"zodula__Doctype Permission">
         const { can_own_create, can_own_get, can_own_select, can_own_update, can_own_delete, can_own_submit, can_own_cancel } = permission as Zodula.SelectDoctype<"zodula__Doctype Permission">
         if (action === "can_create") {
-            return can_create === 1 || (can_own_create === 1 && isOwn)
+            return can_create === 1 || (can_own_create === 1)
         }
         if (action === "can_get") {
             return can_get === 1 || (can_own_get === 1 && isOwn)
@@ -374,24 +238,13 @@ export class ZodulaDoctypeHelper {
             user: any
             roles: string[]
         }
-    ): Promise<{ can: boolean; userPermissionCan: boolean }> {
-        const { bypass, doctype, user, roles } = options
+    ): Promise<{ can: boolean }> {
+        const { bypass, user, roles } = options
 
         // Check basic permissions
         const can = await ZodulaDoctypeHelper.can(doctypeName, action, data?.owner === user.id, roles, bypass)
 
-        // Check user permissions
-        const userPermissions = await ZodulaDoctypeHelper.getUserPermissions(user.id)
-
-        const userPermissionCan = ZodulaDoctypeHelper.canUserPermission(doctypeName, data, {
-            requireUserPermission: doctype?.config?.require_user_permission === 1,
-            fields: doctype?.schema?.fields as Record<keyof Zodula.SelectDoctype<TN>, Zodula.Field>,
-            bypass: bypass,
-            userPermissions: userPermissions,
-            isSystemAdmin: roles.includes("System Admin")
-        })
-
-        return { can, userPermissionCan }
+        return { can }
     }
 
     static async getRelativeRecords<TN extends Zodula.DoctypeName = Zodula.DoctypeName>(id: string, relative: DoctypeRelative, options: GETOptions<TN>) {
@@ -714,5 +567,263 @@ export class ZodulaDoctypeHelper {
 
         // Placeholder return - replace with actual embedding generation
         return {}
+    }
+
+    /**
+     * Validate organization access and return the validated organization value
+     * @param doctypeName - The doctype name
+     * @param session - The ZodulaSession instance
+     * @param action - The action being performed (for error messages)
+     * @param existingDoc - Optional existing document (for operations on existing docs)
+     * @param bypass - Whether to bypass validation
+     * @returns The validated organization value
+     */
+    static async validateOrganization<TN extends Zodula.DoctypeName>(
+        doctypeName: TN,
+        session: any,
+        action: string = "perform this operation",
+        existingDoc?: Zodula.SelectDoctype<TN> | null,
+        bypass: boolean = false
+    ): Promise<string | null> {
+        if (bypass) {
+            const organization = await session.organization(true);
+            const doctype = loader.from("doctype").get(doctypeName);
+            if (doctype.config.is_global !== 1 && organization === "system") {
+                return "system";
+            }
+            return organization || null;
+        }
+
+        const userRoles = await zodula.session.roles();
+        const organizations = await session.organizations(true);
+        const organization = await session.organization(true);
+        const doctype = loader.from("doctype").get(doctypeName);
+
+        if(doctype.name === "zodula__Organization") {
+            return organization;
+        }
+        
+        // Validate global doctype rules
+        if (doctype.config.is_global !== 1 && !organization && organization !== "system") {
+            throw new ErrorWithCode(`You are not allowed to ${action} in this organization`, {
+                status: 403,
+            });
+        }
+
+        // Return validated organization value
+        if (doctype.config.is_global !== 1 && organization === "system") {
+            return "system";
+        }
+
+        return organization || null;
+    }
+
+    /**
+     * Get field-level permissions mapped to field names based on field's perm_level
+     * @param doctypeName - The doctype name
+     * @param roles - User roles
+     * @returns Map of field name to permission record
+     */
+    static async getFieldLevelPermissions<TN extends Zodula.DoctypeName>(
+        doctypeName: TN,
+        roles: string[]
+    ): Promise<Map<string, Zodula.SelectDoctype<"zodula__Doctype Permission">>> {
+        const db = Database("main");
+        const isAuthenticated = await zodula.session.isAuthenticated();
+        const _roles = [
+            ...roles,
+            "Anonymous",
+            isAuthenticated ? "Authenticated" : undefined,
+        ].filter(Boolean);
+
+        // Get all doctype permissions
+        const doctypePermissions = await db
+            .select("*")
+            .from("zodula__Doctype Permission" as Zodula.DoctypeName)
+            .where("doctype", "=", doctypeName)
+            .where("role", "IN", _roles)
+            .execute() as Zodula.SelectDoctype<"zodula__Doctype Permission">[];
+
+        // Get Field records to get perm_level for each field
+        const fieldRecords = await db
+            .select("*")
+            .from("zodula__Field" as Zodula.DoctypeName)
+            .where("doctype", "=", doctypeName)
+            .execute() as Zodula.SelectDoctype<"zodula__Field">[];
+
+        // Use ClientFieldHelper to map permissions based on field's perm_level
+        return ClientFieldHelper.getFieldLevelPermissions(
+            doctypePermissions,
+            fieldRecords.map((f) => ({ name: f.name || "", perm_level: f.perm_level || undefined })).filter(f => f.name),
+            _roles as string[]
+        );
+    }
+
+
+    /**
+     * Apply permission level permissions to filter fields based on can_get permission
+     * @param doctypeName - The doctype name
+     * @param result - The document result
+     * @param roles - User roles
+     * @param bypass - Whether to bypass permission checks
+     * @param isOwn - Whether the user owns the document
+     * @returns The filtered document with unauthorized fields set to undefined
+     */
+    static async applyPermLevelPermission<TN extends Zodula.DoctypeName>(
+        doctypeName: TN,
+        result: Zodula.SelectDoctype<TN>,
+        roles: string[],
+        bypass: boolean = false,
+        isOwn: boolean = false
+    ): Promise<Zodula.SelectDoctype<TN>> {
+        if (bypass || roles.includes("System Admin") || !result) {
+            return result;
+        }
+
+        const db = Database("main");
+        const doctype = loader.from("doctype").get(doctypeName);
+        
+        // Get field-level permissions
+        const fieldPermissions = await ZodulaDoctypeHelper.getFieldLevelPermissions(
+            doctypeName,
+            roles
+        );
+
+        // Get Field records to get perm_level for each field
+        const fieldRecords = await db
+            .select("*")
+            .from("zodula__Field" as Zodula.DoctypeName)
+            .where("doctype", "=", doctypeName)
+            .execute() as Zodula.SelectDoctype<"zodula__Field">[];
+
+        // Create a map of field name to perm_level
+        const fieldPermLevelMap = new Map<string, number>();
+        for (const fieldRecord of fieldRecords) {
+            if (fieldRecord.name) {
+                const permLevel = parseInt(String(fieldRecord.perm_level || 0));
+                fieldPermLevelMap.set(fieldRecord.name, permLevel);
+            }
+        }
+
+        const filtered = { ...result };
+        const fieldNames = Object.keys(doctype.schema.fields);
+        const isSystemAdmin = roles.includes("System Admin");
+
+        for (const fieldName of fieldNames) {
+            const fieldPermLevel = fieldPermLevelMap.get(fieldName) ?? 0;
+            
+            // Use ClientFieldHelper to check permissions
+            const { canGet } = ClientFieldHelper.checkPermLevelForField(
+                fieldPermissions,
+                fieldName,
+                fieldPermLevel,
+                isOwn,
+                bypass,
+                isSystemAdmin
+            );
+
+            if (!canGet) {
+                // Set field to undefined if user doesn't have permission to get it
+                (filtered as any)[fieldName] = undefined;
+            }
+        }
+
+        return filtered;
+    }
+
+    /**
+     * Validate permission level permissions for update operations
+     * Checks if user can update fields that have changed
+     * @param doctypeName - The doctype name
+     * @param old - The old document
+     * @param prepared - The prepared document with updates
+     * @param roles - User roles
+     * @param doctype - The doctype metadata
+     * @param bypass - Whether to bypass permission checks
+     * @param isOwn - Whether the user owns the document
+     */
+    /**
+     * Validate permission level permissions for update operations
+     * Checks if user can update fields that have changed
+     * @param doctypeName - The doctype name
+     * @param old - The old document
+     * @param prepared - The prepared document with updates
+     * @param roles - User roles
+     * @param bypass - Whether to bypass permission checks
+     * @param isOwn - Whether the user owns the document
+     */
+    static async validatePermLevelPermissionForUpdate<TN extends Zodula.DoctypeName>(
+        doctypeName: TN,
+        old: Zodula.SelectDoctype<TN>,
+        prepared: Zodula.SelectDoctype<TN>,
+        roles: string[],
+        bypass: boolean = false,
+        isOwn: boolean = false
+    ): Promise<void> {
+        if (bypass || roles.includes("System Admin")) {
+            return;
+        }
+
+        const db = Database("main");
+        const doctype = loader.from("doctype").get(doctypeName);
+
+        // Get field-level permissions
+        const fieldPermissions = await ZodulaDoctypeHelper.getFieldLevelPermissions(
+            doctypeName,
+            roles
+        );
+
+        // Get Field records to get perm_level for each field
+        const fieldRecords = await db
+            .select("*")
+            .from("zodula__Field" as Zodula.DoctypeName)
+            .where("doctype", "=", doctypeName)
+            .execute() as Zodula.SelectDoctype<"zodula__Field">[];
+
+        // Create a map of field name to perm_level
+        const fieldPermLevelMap = new Map<string, number>();
+        for (const fieldRecord of fieldRecords) {
+            if (fieldRecord.name) {
+                const permLevel = parseInt(String(fieldRecord.perm_level || 0));
+                fieldPermLevelMap.set(fieldRecord.name, permLevel);
+            }
+        }
+
+        // Find changed fields by comparing old and prepared documents
+        const fieldNames = Object.keys(doctype.schema.fields);
+        const changedFields: string[] = [];
+
+        for (const fieldName of fieldNames) {
+            const oldValue = old[fieldName as keyof Zodula.SelectDoctype<TN>];
+            const newValue = prepared[fieldName as keyof Zodula.SelectDoctype<TN>];
+
+            // Check if field value has changed
+            if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
+                changedFields.push(fieldName);
+            }
+        }
+
+        // Check permissions for changed fields
+        const isSystemAdmin = roles.includes("System Admin");
+        for (const fieldName of changedFields) {
+            const fieldPermLevel = fieldPermLevelMap.get(fieldName) ?? 0;
+            
+            // Use ClientFieldHelper to check if user can update this field
+            const { canUpdate } = ClientFieldHelper.checkPermLevelForField(
+                fieldPermissions,
+                fieldName,
+                fieldPermLevel,
+                isOwn,
+                bypass,
+                isSystemAdmin
+            );
+
+            if (!canUpdate) {
+                throw new ErrorWithCode(
+                    `You do not have permission to update field "${fieldName}" in ${doctypeName}`,
+                    { status: 403 }
+                );
+            }
+        }
     }
 }

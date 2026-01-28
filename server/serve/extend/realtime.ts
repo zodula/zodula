@@ -36,7 +36,7 @@ export default function extendRealtime() {
                         const user = await zodula.session.user(true).catch(() => null)
                         const roles = await zodula.session.roles()
                         const doctypeConfig = loader.from("doctype").get(doctype as Zodula.DoctypeName)
-                        const { can, userPermissionCan } = await ZodulaDoctypeHelper.checkPermission(
+                        const { can } = await ZodulaDoctypeHelper.checkPermission(
                             doctype as Zodula.DoctypeName,
                             "can_select",
                             { id: "", owner: user?.id || null } as any,
@@ -48,7 +48,7 @@ export default function extendRealtime() {
                             }
                         )
                         
-                        if (can && userPermissionCan) {
+                        if (can) {
                             if (!subscriptions[ws.data?.id]?.paths.includes(path)) {
                                 subscriptions[ws.data?.id]?.paths.push(path)
                                 ws.send(JSON.stringify({

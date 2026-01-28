@@ -48,9 +48,18 @@ export class ZodulaDoctypeRename<
     // Validate document exists and can be renamed
     this.validateDocument(old);
 
+    // Validate organization access
+    await ZodulaDoctypeHelper.validateOrganization(
+      this.doctypeName,
+      this.session,
+      "rename this document",
+      old,
+      this.options.bypass
+    );
+
     // Check permissions
     const roles = await zodula.session.roles();
-    const { can, userPermissionCan } =
+    const { can } =
       await ZodulaDoctypeHelper.checkPermission(
         this.doctypeName,
         "can_update",
@@ -65,16 +74,7 @@ export class ZodulaDoctypeRename<
 
     if (!can) {
       throw new ErrorWithCode(
-        `You do not have User Permission to rename ${this.doctypeName} document with id ${this.oldId}`,
-        {
-          status: 403,
-        }
-      );
-    }
-
-    if (!userPermissionCan) {
-      throw new ErrorWithCode(
-        `You do not have User Permission to rename ${this.doctypeName} document with id ${this.oldId}`,
+        `You do not have permission to rename ${this.doctypeName} document with id ${this.oldId}`,
         {
           status: 403,
         }

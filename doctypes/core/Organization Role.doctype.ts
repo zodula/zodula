@@ -17,7 +17,6 @@ export default $doctype<"zodula__Organization Role">({
         reference_type: "One to Many",
         reference_alias: "organization_roles",
         reference_label: "Organization Role",
-        below_field: "name",
         on_delete: "CASCADE",
         in_list_view: 1,
         required: 1,

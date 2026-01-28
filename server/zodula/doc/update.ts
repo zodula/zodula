@@ -56,6 +56,15 @@ export class ZodulaDoctypeUpdate<
       : old?.doc_status || 0;
     // Validate document exists and can be updated
     await this.validateDocument(old);
+
+    // Validate organization access
+    await ZodulaDoctypeHelper.validateOrganization(
+      this.doctypeName,
+      this.session,
+      "update this document",
+      old,
+      this.options.bypass
+    );
     // Validate readonly fields
     ZodulaDoctypeHelper.validateDoc(
       this.input,
@@ -65,6 +74,22 @@ export class ZodulaDoctypeUpdate<
 
     // Prepare the document data
     let prepared = await this.prepareDocumentData(old, user, doctype);
+
+    // Get roles once for permission checks
+    const roles = await zodula.session.roles();
+
+    // Validate permission level permissions for changed fields
+    if (!this.options.bypass) {
+      const isOwn = old.owner === user.id;
+      await ZodulaDoctypeHelper.validatePermLevelPermissionForUpdate(
+        this.doctypeName,
+        old,
+        prepared,
+        roles,
+        this.options.bypass,
+        isOwn
+      );
+    }
 
     // Validate unique constraints (exclude current document)
     await ZodulaDoctypeHelper.validateUniqueFields(
@@ -76,8 +101,7 @@ export class ZodulaDoctypeUpdate<
     );
     await this.applyFileUpdate(prepared, this.doctypeName, doctype.schema);
     // Check permissions
-    const roles = await zodula.session.roles();
-    const { can, userPermissionCan } =
+    const { can } =
       await ZodulaDoctypeHelper.checkPermission(
         this.doctypeName,
         "can_update",
@@ -92,16 +116,7 @@ export class ZodulaDoctypeUpdate<
 
     if (!can) {
       throw new ErrorWithCode(
-        `You do not have Doctype Permission to update ${this.doctypeName} document with id ${this.input.id}`,
-        {
-          status: 403,
-        }
-      );
-    }
-
-    if (!userPermissionCan) {
-      throw new ErrorWithCode(
-        `You do not have User Permission to update ${this.doctypeName} document with id ${this.input.id}`,
+        `You do not have permission to update ${this.doctypeName} document with id ${this.input.id}`,
         {
           status: 403,
         }

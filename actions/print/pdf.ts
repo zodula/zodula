@@ -687,7 +687,7 @@ async function renderTemplateItem(
 }
 
 export default $action(async (ctx) => {
-  const { print_template, doctype, ids: idsParam, lang, letter_head, format = "pdf" } = ctx.query
+  const { print_template, doctype, ids: idsParam, lang, letter_head, format = "pdf", organization: orgParam } = ctx.query
 
   const ids = Array.isArray(idsParam) ? idsParam : idsParam ? [idsParam] : []
   const baseUrl = ctx.request.url.split("/api")[0] || "http://localhost:3000"
@@ -696,7 +696,8 @@ export default $action(async (ctx) => {
   const sessionContext: any = {}
   try {
     const user = await $zodula.session.user(true).catch(() => null)
-    const organization = await $zodula.session.organization(true).catch(() => null)
+    // Use organization from query param if provided, otherwise from session
+    const organization = orgParam || await $zodula.session.organization(true).catch(() => null)
     if (user) sessionContext.user = user.id
     if (organization) sessionContext.organization = organization
   } catch (e) {
@@ -870,9 +871,14 @@ export default $action(async (ctx) => {
 
   // Fetch documents
   const documents: any[] = []
+  const organization = orgParam || await $zodula.session.organization(true).catch(() => null)
   for (const id of ids) {
     const doc = await $zodula.doctype(doctype as any).get(id).bypass(true)
     if (doc) {
+      // If organization is provided, verify the document belongs to that organization
+      if (organization && doc.organization && doc.organization !== organization) {
+        continue // Skip documents that don't belong to the specified organization
+      }
       documents.push(doc)
     }
   }
@@ -1412,7 +1418,8 @@ export default $action(async (ctx) => {
     ids: z.union([z.string(), z.array(z.string())]),
     lang: z.string().nullable().optional(),
     letter_head: z.string().nullable().optional(),
-    format: z.enum(["pdf", "html"]).optional()
+    format: z.enum(["pdf", "html"]).optional(),
+    organization: z.string().optional()
   }),
   method: "GET",
 })

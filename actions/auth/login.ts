@@ -15,6 +15,7 @@ export default $action(async ctx => {
         throw new Error("User not found")
     }
     const user = users[0]
+
     const isPasswordValid = await Bun.password.verify(password, user.password as string)
     if (!isPasswordValid) {
         throw new Error("Invalid password")

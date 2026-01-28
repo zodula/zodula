@@ -3,6 +3,7 @@ import { zodula } from ".."
 import { Database } from "../../database/database"
 import { loader } from "../../loader"
 import { ZodulaDoctypeHelper } from "./helper"
+import { ZodulaSession } from "../session"
 import path from "path"
 import fs from "fs/promises"
 import type { Bunely } from "bunely"
@@ -13,6 +14,7 @@ export const DEFAULT_ON_DELETE_BEHAVIOR = "CASCADE"
 export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.DoctypeName> {
     private doctypeName: TN
     private id: string
+    private session: ZodulaSession = new ZodulaSession()
     private options = {
         bypass: false
     }
@@ -77,12 +79,21 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
             throw new Error(`Document with id ${this.id} not found`, { cause: 404 })
         }
 
+        // Validate organization access
+        await ZodulaDoctypeHelper.validateOrganization(
+            this.doctypeName,
+            this.session,
+            "delete this document",
+            old,
+            this.options.bypass
+        )
+
         const prepared = {
             ...old,
             id: this.id
         }
         const roles = await zodula.session.roles()
-        const { can, userPermissionCan } = await ZodulaDoctypeHelper.checkPermission(
+        const { can } = await ZodulaDoctypeHelper.checkPermission(
             this.doctypeName,
             "can_delete",
             prepared,
@@ -96,12 +107,6 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
 
         if (!can) {
             throw new ErrorWithCode("You do not have permission to delete this document", {
-                status: 403
-            })
-        }
-
-        if (!userPermissionCan) {
-            throw new ErrorWithCode(`You do not have User Permission to delete ${this.doctypeName} document with id ${this.id}`, {
                 status: 403
             })
         }

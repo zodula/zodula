@@ -40,13 +40,19 @@ export const applyFixtures = async () => {
             .set({
               ...data,
               id: data?.id,
+              doc_status: data?.doc_status || 0,
+              organization: data?.organization || "system",
             })
             .where("id", "=", data.id)
             .execute();
         } else {
           await db
             .insert(fixture.name as Zodula.DoctypeName)
-            .values(data)
+            .values({
+              ...data,
+              doc_status: data?.doc_status || 0,
+              organization: data?.organization || "system",
+            })
             .execute();
         }
       }

@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo } from "react";
-import { useDocStore } from "./use-doc-store";
+import { useCallback, useEffect, useState, useRef } from "react";
+import { zodula } from "@/zodula/client";
 import { useDocList } from "./use-doc-list";
 
-// Track pending fetches per doctype+id to prevent overlapping triggers
-const pendingFetches = new Map<string, Promise<void>>();
+// Track pending fetches per doctype+id to prevent overlapping requests
+const pendingFetches = new Map<string, Promise<any>>();
 
 interface useDocOptions<DT extends Zodula.DoctypeName = Zodula.DoctypeName> {
     doctype: DT;
@@ -28,23 +28,13 @@ export function useDoc<DT extends Zodula.DoctypeName = Zodula.DoctypeName, TDoc 
 ): useDocResult<TDoc> {
     const { doctype, id, fields = [] } = options;
 
-    const { fetchDoc, getDoc, invalidateDoc } = useDocStore();
+    const [doc, setDoc] = useState<TDoc | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // For single doctypes, use doctype as id when id is empty or undefined
-    // For regular doctypes, require an id
     const effectiveId = id || doctype;
-
-    // Get cached data from store
-    const cachedData = useMemo(() => {
-        if (!doctype){
-            // set loading to false
-            return null
-        }
-        return getDoc(doctype, effectiveId);
-    }, [doctype, effectiveId, getDoc, deps]);
-    const doc = cachedData?.data as TDoc | null;
-    const loading = cachedData?.loading || false;
-    const error = cachedData?.error || null;
 
     const { docs: relatives, loading: relativeLoading, error: relativeError, reload: reloadRelatives } = useDocList({
         doctype: "zodula__Doctype Relative",
@@ -55,12 +45,11 @@ export function useDoc<DT extends Zodula.DoctypeName = Zodula.DoctypeName, TDoc 
     }, [doctype, id, effectiveId, ...deps]);
 
     const loadDoc = useCallback(async () => {
-        if (!doctype) return;
-
-        // Check if we already have data and it's not loading
-        const existing = getDoc(doctype, effectiveId);
-        if (existing?.data && !existing.loading) {
-            return; // Data already exists and is not loading
+        if (!doctype) {
+            setDoc(null);
+            setLoading(false);
+            setError(null);
+            return;
         }
 
         // Create a unique key for this doctype+id combination
@@ -70,47 +59,87 @@ export function useDoc<DT extends Zodula.DoctypeName = Zodula.DoctypeName, TDoc 
         const pendingFetch = pendingFetches.get(fetchKey);
         if (pendingFetch) {
             // Wait for the existing fetch to complete
-            await pendingFetch;
+            try {
+                const result = await pendingFetch;
+                setDoc(result);
+                setLoading(false);
+                setError(null);
+            } catch (e: any) {
+                setError(e?.message || "Failed to load doc");
+                setLoading(false);
+            }
             return;
         }
 
-        // Check store loading state again after checking pending fetches
-        const currentState = getDoc(doctype, effectiveId);
-        if (currentState?.loading || (currentState?.data && !currentState.loading)) {
-            return; // Already loading or has data
-        }
+        // Start a new fetch
+        setLoading(true);
+        setError(null);
 
-        // Start a new fetch and track it
-        const fetchPromise = fetchDoc(doctype, id, fields).finally(() => {
-            // Remove from pending fetches when done
-            pendingFetches.delete(fetchKey);
-        });
+        const fetchPromise = (async () => {
+            try {
+                const response = await zodula?.doc?.get_doc(doctype as Zodula.DoctypeName, id, {
+                    fields: fields && fields.length > 0 ? fields : undefined,
+                });
+                return response as TDoc;
+            } catch (e: any) {
+                throw e;
+            }
+        })();
 
         pendingFetches.set(fetchKey, fetchPromise);
-        await fetchPromise;
-    }, [doctype, id, effectiveId, fields, fetchDoc, getDoc]);
+
+        try {
+            const result = await fetchPromise;
+            setDoc(result);
+            setLoading(false);
+            setError(null);
+        } catch (e: any) {
+            setError(e?.message || "Failed to load doc");
+            setLoading(false);
+        } finally {
+            pendingFetches.delete(fetchKey);
+        }
+    }, [doctype, id, effectiveId, fields]);
+
+    // Debounced fetch function
+    const debouncedLoadDoc = useCallback(() => {
+        // Clear existing timeout
+        if (debounceTimeoutRef.current) {
+            clearTimeout(debounceTimeoutRef.current);
+        }
+
+        // Set new timeout for debouncing
+        debounceTimeoutRef.current = setTimeout(() => {
+            loadDoc();
+        }, 300); // 300ms debounce
+    }, []);
 
     useEffect(() => {
-        loadDoc();
+        debouncedLoadDoc();
+
+        // Cleanup timeout on unmount or when deps change
+        return () => {
+            if (debounceTimeoutRef.current) {
+                clearTimeout(debounceTimeoutRef.current);
+            }
+        };
     }, [...deps]);
 
     const reload = useCallback(async () => {
         if (!doctype) return;
 
-        // Invalidate cache and clear any pending fetches for this doc
+        // Clear debounce timeout
+        if (debounceTimeoutRef.current) {
+            clearTimeout(debounceTimeoutRef.current);
+        }
+
+        // Clear any pending fetches for this doc
         const fetchKey = `${doctype}:${effectiveId}`;
         pendingFetches.delete(fetchKey);
 
-        // Invalidate cache and refetch
-        invalidateDoc(doctype, effectiveId);
-
-        const _relatives = relatives.filter((relative) => relative.child_doctype === doctype);
-        for (const relative of _relatives) {
-            const relativeId = doc?.[relative.child_field_name as keyof TDoc];
-            invalidateDoc(relative.parent_doctype, relativeId as string);
-        }
+        // Refetch immediately (bypass debounce)
         await loadDoc();
-    }, [doctype, effectiveId, invalidateDoc, loadDoc, relatives, doc]);
+    }, [doctype, effectiveId]);
 
     return {
         doc,

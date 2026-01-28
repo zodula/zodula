@@ -75,7 +75,7 @@ export function PrintTemplateDialog({
   const template = printTemplates?.find((t) => t.id === selectedTemplate);
   const printUrl =
     initialData?.docIds && initialData?.doctype
-      ? `/api/action/zodula.print.pdf?${initialData.docIds.map((id) => `ids=${id}`).join("&")}&lang=${lang}&doctype=${initialData.doctype}${selectedTemplate ? `&print_template=${selectedTemplate}` : ""}${selectedLetterHead ? `&letter_head=${selectedLetterHead}` : ""}&t=${new Date().getTime()}`
+      ? `/api/action/zodula.print.pdf?${initialData.docIds.map((id) => `ids=${id}`).join("&")}&lang=${lang}&doctype=${initialData.doctype}${selectedTemplate ? `&print_template=${selectedTemplate}` : ""}${selectedLetterHead ? `&letter_head=${selectedLetterHead}` : ""}${initialData.org ? `&organization=${encodeURIComponent(initialData.org)}` : ""}&t=${new Date().getTime()}`
       : undefined;
 
   return (

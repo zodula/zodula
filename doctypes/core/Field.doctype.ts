@@ -155,6 +155,12 @@ export default $doctype({
     in_quick_entry: {
         type: "Check",
         label: "In Quick Entry"
+    },
+    perm_level: {
+        type: "Select",
+        label: "Permission Level",
+        options: "0\n1\n2\n3\n4\n5",
+        default: "0"
     }
 
 }, {

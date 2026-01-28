@@ -1,10 +1,21 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useRef, useEffect, useState } from "react";
 import { FormPlugin } from "../plugin";
 import { Input } from "../../ui/input";
 
 export const TextInputPlugin = new FormPlugin({
   types: ["Text", "Password", "Integer", "Float", "Data", "Email"] as const,
   render: (props) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const isUserTypingRef = useRef(false);
+    const prevPropValueRef = useRef<string>(props.value ?? "");
+    
+    // Initialize with prop value
+    const [internalValue, setInternalValue] = useState<string>(() => {
+      const initialValue = props.value ?? "";
+      prevPropValueRef.current = initialValue;
+      return initialValue;
+    });
+
     const type = useMemo(() => {
       switch (props.fieldOptions.type) {
         case "Password":
@@ -20,22 +31,56 @@ export const TextInputPlugin = new FormPlugin({
       }
     }, [props.fieldOptions.type]);
 
-    // Normalize value to always be a string to prevent cursor jumping
-    // When value is undefined/null, use empty string to match onChange behavior
-    const inputValue = props.value ?? "";
+    // Normalize prop value
+    const propValue = props.value ?? "";
+
+    // Sync internal value with prop value only when:
+    // 1. User is not actively typing (input doesn't have focus)
+    // 2. The prop value actually changed from external source
+    useEffect(() => {
+      const propChanged = prevPropValueRef.current !== propValue;
+      if (propChanged) {
+        prevPropValueRef.current = propValue;
+        
+        // Only update if user is not actively typing
+        if (!isUserTypingRef.current) {
+          setInternalValue(propValue);
+        }
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [propValue, props.fieldKey]);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      isUserTypingRef.current = true;
+      setInternalValue(value);
+      props.onChange?.(value);
+    };
+
+    const handleBlur = () => {
+      isUserTypingRef.current = false;
+      // Sync with prop value on blur in case it changed externally
+      if (propValue !== internalValue) {
+        setInternalValue(propValue);
+      }
+    };
+
+    const handleFocus = () => {
+      isUserTypingRef.current = true;
+    };
 
     return (
       <Input
+        ref={inputRef}
         name={props.fieldKey || ""}
         id={props.fieldKey || ""}
         placeholder={""}
         type={type}
-        value={inputValue}
+        value={internalValue}
         readOnly={props.readonly}
-        onChange={(e) => {
-          const value = e.target.value;
-          props.onChange?.(value);
-        }}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        onFocus={handleFocus}
       />
     );
   },

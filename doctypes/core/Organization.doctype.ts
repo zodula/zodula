@@ -1,8 +1,30 @@
 export default $doctype<"zodula__Organization">({
-    name: $f.Text({
+    name: {
+        type: "Text",
         label: "Name",
         required: 1
-    }),
+    },
+    address: {
+        type: "Text",
+        label: "Address"
+    },
+    phone: {
+        type: "Text",
+        label: "Phone"
+    },
+    email: {
+        type: "Email",
+        label: "Email"
+    },
+    website: {
+        type: "Text",
+        label: "Website"
+    },
+    logo: {
+        type: "File",
+        accept: "image/*",
+        label: "Logo"
+    },
 }, {
     naming_series: "{{name}}",
     label: "Organization",

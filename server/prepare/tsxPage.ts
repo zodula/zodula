@@ -13,17 +13,20 @@ export async function prepareApp() {
     Bun.write(path.join(process.cwd(), ".zodula", "ui", "App.tsx"), `
     import React from "react";
     import { Routes, Route, Link } from "@/zodula/ui/components/router";
+    import { OrganizationProvider } from "@/zodula/ui/hooks/use-organization";
     ${pages.map(page => `import ${page.importName} from "${page.importPath}";`).join("\n")}
     ${shell.map(shell => `import ${shell.importName} from "${shell.importPath}";`).join("\n")}
     ${uiScripts.map(script => `import ${script.importName} from "${script.importPath}";`).join("\n")}
     export default function App() {
     return(
+    <OrganizationProvider>
         ${shell.length > 0 ? shell.map(shell => `<${shell.importName}>`).join("\n") : ""}
         ${uiScripts.map(script => `<${script.importName} />`).join("\n")}
             <Routes>
                 ${pages.map(page => `<Route path="${page.path}" element={<${page.importName} />} />`).join("\n")}
             </Routes>
         ${shell.length > 0 ? shell.slice().reverse().map(shell => `</${shell.importName}>`).join("\n") : ""}
+    </OrganizationProvider>
     )
     }
     `)

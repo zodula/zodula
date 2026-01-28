@@ -133,6 +133,7 @@ async function upsertFieldsBatch(
       fetch_from: fieldSchema.fetch_from || null,
       organization: "system",
       in_quick_entry: fieldSchema.in_quick_entry ? 1 : 0 || null,
+      perm_level: fieldSchema.perm_level || "0",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Field">>;
 
@@ -438,7 +439,6 @@ async function upsertDoctype(
       display_field: doctype.config.display_field || null,
       search_fields: doctype.config.search_fields || null,
       is_system_generated: doctype.config.is_system_generated ? 1 : 0,
-      require_user_permission: doctype.config.require_user_permission ? 1 : 0,
       tabs: doctype.config.tabs || null,
       idx,
       vector: "[]",

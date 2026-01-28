@@ -1,13 +1,12 @@
-import { createContext, useContext, useEffect, type ReactNode } from "react";
-import { useParams } from "react-router";
-import { useDoc } from "./use-doc";
-import { useRouter } from "../components/router";
+import { createContext, useContext, useState, type ReactNode } from "react";
 
 interface OrganizationContextValue {
   organization: Zodula.SelectDoctype<"zodula__Organization"> | null;
   loading: boolean;
   error: string | null;
-  reload: () => void;
+  setOrganization: (org: Zodula.SelectDoctype<"zodula__Organization"> | null) => void;
+  setLoading: (loading: boolean) => void;
+  setError: (error: string | null) => void;
 }
 
 const OrganizationContext = createContext<OrganizationContextValue | undefined>(
@@ -19,40 +18,17 @@ interface OrganizationProviderProps {
 }
 
 export function OrganizationProvider({ children }: OrganizationProviderProps) {
-  const { org } = useParams<{ org: string }>();
-  const router = useRouter();
-
-  const {
-    doc: organization,
-    loading,
-    error,
-    reload,
-  } = useDoc(
-    {
-      doctype: "zodula__Organization",
-      id: org,
-    },
-    [org]
-  );
-
-  useEffect(() => {
-    // If we have an org param but failed to fetch or got an error, redirect to /desk
-    // Only redirect if we're not currently loading and either there's an error or no organization found
-    if (!!org && !loading) {
-      if (!!error || !organization) {
-        // router.replace("/desk");
-      }
-      if (org) {
-        localStorage.setItem("zodula-selected-organization", org);
-      }
-    }
-  }, [org, loading, error, organization, router]);
+  const [organization, setOrganization] = useState<Zodula.SelectDoctype<"zodula__Organization"> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const value: OrganizationContextValue = {
     organization,
     loading,
     error,
-    reload,
+    setOrganization,
+    setLoading,
+    setError,
   };
 
   return (

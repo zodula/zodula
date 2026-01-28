@@ -8,8 +8,10 @@ import AuthErrorView from "../views/auth-error-view";
 import ErrorView from "../views/error-view";
 import LoadingView from "../views/loading-view";
 import { zodula } from "@/zodula/client/zodula";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import type { GenerateMetadata } from "../components/metadata";
+import { useOrganization } from "../hooks/use-organization";
+import { useDoc } from "../hooks/use-doc";
 
 export const generateMetadata: GenerateMetadata = async (ctx) => {
     return {
@@ -60,7 +62,51 @@ configureToast({
 })
 export default function Shell({ children }: { children: React.ReactNode }) {
     const { isAuthenticated, user, isLoading } = useAuth()
+    const { organization, setOrganization, setLoading, setError } = useOrganization()
     const router = useRouter()
+
+    // Extract org slug from pathname: /desk/:org/...
+    const orgSlug = useMemo(() => {
+        const pathname = router.pathname || "";
+        if (!pathname.startsWith("/desk/")) return null;
+        const parts = pathname.split("/");
+        // ["", "desk", ":org", ...]
+        return parts.length >= 3 ? parts[2] || null : null;
+    }, [router.pathname]);
+
+    // Fetch organization based on org slug
+    const {
+        doc: fetchedOrganization,
+        loading: orgLoading,
+        error: orgError,
+    } = useDoc(
+        {
+            doctype: "zodula__Organization",
+            id: orgSlug || " ",
+        },
+        [orgSlug]
+    );
+
+    // Sync fetched organization into context
+    useEffect(() => {
+        if (!router.pathname.startsWith("/desk/")) {
+            setOrganization(null);
+            setLoading(false);
+            setError(null);
+            return;
+        }
+
+        setOrganization(fetchedOrganization);
+        setLoading(orgLoading);
+        setError(orgError);
+    }, [router.pathname, fetchedOrganization, orgLoading, orgError, setOrganization, setLoading, setError]);
+
+    // Persist selected org to localStorage
+    useEffect(() => {
+        if (orgSlug) {
+            localStorage.setItem("zodula-selected-organization", orgSlug);
+        }
+    }, [orgSlug]);
 
     // Load theme from localStorage on component mount
     useEffect(() => {
@@ -71,6 +117,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     }
     if (router.pathname.startsWith("/desk") && process.env.ZODULA_PUBLIC_DISABLE_ADMIN === "true") {
         return <ErrorView message="Admin is disabled" status={404} />
+    }
+    if(router.pathname.startsWith("/desk/") && !organization?.id) {
+        return <ErrorView message="Organization is not found, please select an organization" status={404} />
     }
     if ((!isAuthenticated || !user) && router.pathname.startsWith("/desk")) {
         return <AuthErrorView message="Authentication required" />

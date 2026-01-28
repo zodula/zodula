@@ -28,7 +28,7 @@ const useFormStore = create<FormState>()(
           forms: {
             ...state.forms,
             [formId]: {
-              ...state.forms[formId],
+              ...(state.forms[formId] || {}),
               [fieldName]: value,
             },
           },
@@ -165,6 +165,14 @@ export function useForm<T extends Record<string, Zodula.Field>>(
     clearForm(formId);
   }, [formId, clearForm]);
 
+  // Get current form data directly from store (useful for getting latest values)
+  // This reads directly from the store's current state, not from the reactive forms variable
+  const getFormData = useCallback(() => {
+    const storeState = useFormStore.getState();
+    const currentForm = storeState.forms[formId] || {};
+    return options?.initialValues ? { ...options.initialValues, ...currentForm } : currentForm;
+  }, [formId, options?.initialValues]);
+
   return {
     formData,
     handleChange,
@@ -174,6 +182,7 @@ export function useForm<T extends Record<string, Zodula.Field>>(
     clear,
     formId,
     defaultValues,
+    getFormData,
   };
 }
 

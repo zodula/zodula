@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { useMemo, useEffect } from 'react';
+import { useMemo } from 'react';
 
 interface ColumnSettingsState {
   // Visible columns per doctype
@@ -9,14 +9,10 @@ interface ColumnSettingsState {
   // Has custom columns flag per doctype
   hasCustomColumns: Record<string, boolean>;
   
-  // Actions
+  // Actions (per doctype)
   setVisibleColumns: (doctype: string, columns: string[]) => void;
   setHasCustomColumns: (doctype: string, hasCustom: boolean) => void;
   resetVisibleColumns: (doctype: string) => void;
-  
-  // Getters
-  getVisibleColumns: (doctype: string) => string[] | null;
-  getHasCustomColumns: (doctype: string) => boolean;
 }
 
 export const useColumnSettingsStore = create<ColumnSettingsState>()(
@@ -52,15 +48,11 @@ export const useColumnSettingsStore = create<ColumnSettingsState>()(
             hasCustomColumns: newHasCustomColumns,
           };
         }),
-
-      getVisibleColumns: (doctype: string) => get().visibleColumns[doctype] || null,
-
-      getHasCustomColumns: (doctype: string) => get().hasCustomColumns[doctype] || false,
     }),
     {
       name: 'zodula-column-settings-storage',
-      getStorage: () => localStorage,
-    }
+      // use default storage (localStorage in browser)
+    } as any
   )
 );
 
@@ -70,7 +62,14 @@ export const useColumnSettings = (
   defaultColumns: string[],
   allAvailableColumns: Array<{ key: string | number }>
 ) => {
+  // Read full store; avoid selectors that return new objects (can confuse React dev mode)
   const store = useColumnSettingsStore();
+
+  const storedVisibleColumns = store.visibleColumns[doctype] || null;
+  const storedHasCustomColumns = store.hasCustomColumns[doctype] || false;
+  const setVisibleColumnsForDoctype = store.setVisibleColumns;
+  const setHasCustomColumnsForDoctype = store.setHasCustomColumns;
+  const resetVisibleColumnsForDoctype = store.resetVisibleColumns;
 
   // Get available column keys
   const availableColumnKeys = useMemo(
@@ -80,61 +79,40 @@ export const useColumnSettings = (
 
   // Get and validate visible columns
   const visibleColumns = useMemo(() => {
-    const stored = store.getVisibleColumns(doctype);
-    if (!stored || stored.length === 0) {
+    // If nothing stored yet, or storage not hydrated, fall back to defaults
+    if (!storedVisibleColumns || storedVisibleColumns.length === 0) {
       return defaultColumns;
     }
 
     // Validate stored columns against available columns
-    const validColumns = stored.filter((colKey: string) =>
+    const validColumns = storedVisibleColumns.filter((colKey: string) =>
       availableColumnKeys.includes(String(colKey))
     );
 
     // If all stored columns are valid, use them; otherwise use defaults
     return validColumns.length > 0 ? validColumns : defaultColumns;
-  }, [store, doctype, defaultColumns, availableColumnKeys]);
-
-  // Initialize visible columns if not set
-  useEffect(() => {
-    if (defaultColumns.length === 0 || availableColumnKeys.length === 0) return;
-    
-    const stored = store.getVisibleColumns(doctype);
-    if (!stored || stored.length === 0) {
-      store.setVisibleColumns(doctype, defaultColumns);
-      store.setHasCustomColumns(doctype, false);
-    } else {
-      // Validate and update if needed
-      const validColumns = stored.filter((colKey: string) =>
-        availableColumnKeys.includes(String(colKey))
-      );
-      
-      if (validColumns.length !== stored.length) {
-        // Some columns are invalid, update with valid ones
-        if (validColumns.length > 0) {
-          store.setVisibleColumns(doctype, validColumns);
-        } else {
-          store.setVisibleColumns(doctype, defaultColumns);
-          store.setHasCustomColumns(doctype, false);
-        }
-      }
-    }
-  }, [doctype, defaultColumns, availableColumnKeys, store]);
+  }, [storedVisibleColumns, defaultColumns, availableColumnKeys]);
 
   return {
     visibleColumns,
-    hasCustomColumns: store.getHasCustomColumns(doctype),
+    hasCustomColumns: storedHasCustomColumns,
     setVisibleColumns: (columns: string[]) => {
       // Validate before setting
       const validColumns = columns.filter((colKey: string) =>
         availableColumnKeys.includes(String(colKey))
       );
-      store.setVisibleColumns(doctype, validColumns.length > 0 ? validColumns : defaultColumns);
-      store.setHasCustomColumns(doctype, true);
+      setVisibleColumnsForDoctype(
+        doctype,
+        validColumns.length > 0 ? validColumns : defaultColumns
+      );
+      setHasCustomColumnsForDoctype(doctype, true);
     },
-    setHasCustomColumns: (hasCustom: boolean) => store.setHasCustomColumns(doctype, hasCustom),
+    setHasCustomColumns: (hasCustom: boolean) =>
+      setHasCustomColumnsForDoctype(doctype, hasCustom),
     resetVisibleColumns: () => {
-      store.setVisibleColumns(doctype, defaultColumns);
-      store.setHasCustomColumns(doctype, false);
+      resetVisibleColumnsForDoctype(doctype);
+      setVisibleColumnsForDoctype(doctype, defaultColumns);
+      setHasCustomColumnsForDoctype(doctype, false);
     },
   };
 };
