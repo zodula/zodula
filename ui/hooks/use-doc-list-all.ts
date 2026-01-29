@@ -12,6 +12,7 @@ interface DocListAllCache {
 
 interface DocListAllStore {
     cache: DocListAllCache;
+    reloadTriggers: Record<string, number>; // Track reload triggers by doctype
     setDocs: <DT extends Zodula.DoctypeName>(
         doctype: DT,
         docs: Zodula.SelectDoctype<DT>[]
@@ -20,13 +21,15 @@ interface DocListAllStore {
         doctype: DT
     ) => Zodula.SelectDoctype<DT>[] | null;
     invalidate: (doctype: string) => void;
+    triggerReload: (doctype: string) => void; // Trigger a reload for a doctype
     clearCache: () => void;
     isLoaded: (doctype: string) => boolean;
 }
 
 // Store for caching all records per doctype - session-only (cleared on page reload)
-const useDocListAllStore = create<DocListAllStore>()((set, get) => ({
+export const useDocListAllStore = create<DocListAllStore>()((set, get) => ({
     cache: {},
+    reloadTriggers: {},
     setDocs: <DT extends Zodula.DoctypeName>(
         doctype: DT,
         docs: Zodula.SelectDoctype<DT>[]
@@ -57,8 +60,22 @@ const useDocListAllStore = create<DocListAllStore>()((set, get) => ({
             set({ cache: newCache });
         }
     },
+    triggerReload: (doctype: string) => {
+        const { reloadTriggers } = get();
+        // Clear pending fetches for this doctype
+        pendingFetches.delete(doctype);
+        // Invalidate cache
+        get().invalidate(doctype);
+        // Increment trigger counter to force hooks to refetch
+        set({
+            reloadTriggers: {
+                ...reloadTriggers,
+                [doctype]: (reloadTriggers[doctype] || 0) + 1,
+            },
+        });
+    },
     clearCache: () => {
-        set({ cache: {} });
+        set({ cache: {}, reloadTriggers: {} });
     },
     isLoaded: (doctype: string) => {
         const { cache } = get();
@@ -102,7 +119,7 @@ export function useDocListAll<DT extends Zodula.DoctypeName = Zodula.DoctypeName
 ): useDocListAllResult<TDoc> {
     const { doctype, forceRefetch = false, cacheTTL } = options;
     
-    const { cache, setDocs, getDocs, invalidate: invalidateStore, isLoaded: isLoadedStore } = useDocListAllStore();
+    const { cache, reloadTriggers, setDocs, getDocs, invalidate: invalidateStore, isLoaded: isLoadedStore } = useDocListAllStore();
 
     // Get cached docs
     const cachedDocs = useMemo(() => {
@@ -126,6 +143,7 @@ export function useDocListAll<DT extends Zodula.DoctypeName = Zodula.DoctypeName
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const initializedRef = useRef<string | null>(null);
+    const lastReloadTriggerRef = useRef<Record<string, number>>({});
 
     const fetchAll = useCallback(async () => {
         if (!doctype) {
@@ -198,6 +216,18 @@ export function useDocListAll<DT extends Zodula.DoctypeName = Zodula.DoctypeName
             initializedRef.current = null;
         }
 
+        // Check if a reload was triggered for this doctype
+        const reloadTrigger = reloadTriggers[doctype] || 0;
+        const lastReloadTrigger = lastReloadTriggerRef.current[doctype] || 0;
+        
+        // If a reload was triggered, reset initialization to force refetch
+        if (reloadTrigger > lastReloadTrigger) {
+            initializedRef.current = null;
+            lastReloadTriggerRef.current[doctype] = reloadTrigger;
+            // Clear pending fetches to ensure fresh data
+            pendingFetches.delete(doctype);
+        }
+
         // If we have cached data and not forcing refetch, use it
         if (cachedDocs && !forceRefetch && initializedRef.current !== doctype) {
             setDocsState(cachedDocs);
@@ -206,15 +236,21 @@ export function useDocListAll<DT extends Zodula.DoctypeName = Zodula.DoctypeName
             return;
         }
 
+        // If cache was invalidated (cachedDocs is null but we were initialized), force refetch
+        if (initializedRef.current === doctype && !cachedDocs && !forceRefetch) {
+            // Cache was invalidated, reset initialization and refetch
+            initializedRef.current = null;
+        }
+
         // If already initialized for this doctype and not forcing refetch, skip
-        if (initializedRef.current === doctype && !forceRefetch) {
+        if (initializedRef.current === doctype && !forceRefetch && cachedDocs) {
             return;
         }
 
         // Fetch data
         fetchAll();
         initializedRef.current = doctype;
-    }, [doctype, forceRefetch, cachedDocs, fetchAll]);
+    }, [doctype, forceRefetch, cachedDocs, fetchAll, reloadTriggers]);
 
     const reload = useCallback(async () => {
         if (!doctype) return;

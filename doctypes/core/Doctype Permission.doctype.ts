@@ -109,6 +109,13 @@ export default $doctype({
         default: "0",
         depends_on: "doc.perm_level == 0"
     }),
+    app: {
+        type: "Reference",
+        label: "App",
+        reference: "zodula__App",
+        required: 1,
+        on_delete: "CASCADE"
+    }
 }, {
     label: "Doctype Permission",
     is_global: 1,
