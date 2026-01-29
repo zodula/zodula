@@ -5,6 +5,7 @@ import {
   useDocListAll,
   useDocListAllStore,
 } from "@/zodula/ui/hooks/use-doc-list-all";
+import { useOrganization } from "@/zodula/ui/hooks/use-organization";
 
 export interface WorkspaceItem {
   id: string;
@@ -22,6 +23,7 @@ export interface WorkspaceWithChildren {
   workspace_parent?: string | null;
   icon?: string | null;
   app: string | null;
+  is_system?: number | null;
   children: WorkspaceWithChildren[];
   items: WorkspaceItem[];
 }
@@ -406,6 +408,7 @@ export const useWorkspaceEdit = create<
         workspace_parent: workspace.workspace_parent || null,
         icon: workspace.icon || null,
         app: workspace.app || "zodula",
+        is_system: workspace.is_system || 0,
         _deleted: false,
       }));
 
@@ -419,6 +422,7 @@ export const useWorkspaceEdit = create<
             workspace_parent: originalWorkspace.workspace_parent || null,
             icon: originalWorkspace.icon || null,
             app: originalWorkspace.app || "zodula",
+            is_system: originalWorkspace.is_system || 0,
             _deleted: true,
           });
         }
@@ -473,10 +477,18 @@ export const useWorkspaceEdit = create<
       });
 
       // Mark deleted items
+      // First, collect all workspace IDs that still exist (not deleted)
+      const existingWorkspaceIds = new Set(
+        allEditedWorkspaces.map((w) => w.id)
+      );
+
       Object.entries(originalWorkspaceItems).forEach(([workspaceId, items]) => {
+        // If the workspace itself was deleted, mark all its items as deleted
+        const isWorkspaceDeleted = !existingWorkspaceIds.has(workspaceId);
+        
         items.forEach((originalItem) => {
-          const editedItems = normalizedItemsByWorkspace.get(workspaceId) || [];
-          if (!editedItems.find((item) => item.id === originalItem.id)) {
+          if (isWorkspaceDeleted) {
+            // Workspace was deleted, mark all its items as deleted
             workspaceItemsToApply.push({
               id: originalItem.id,
               idx: originalItem.idx || 0,
@@ -486,6 +498,20 @@ export const useWorkspaceEdit = create<
               workspaceId: originalItem.workspaceId,
               _deleted: true,
             });
+          } else {
+            // Workspace still exists, check if item was deleted
+            const editedItems = normalizedItemsByWorkspace.get(workspaceId) || [];
+            if (!editedItems.find((item) => item.id === originalItem.id)) {
+              workspaceItemsToApply.push({
+                id: originalItem.id,
+                idx: originalItem.idx || 0,
+                type: originalItem.type || null,
+                value: originalItem.value || null,
+                options: originalItem.options || null,
+                workspaceId: originalItem.workspaceId,
+                _deleted: true,
+              });
+            }
           }
         });
       });
@@ -874,9 +900,16 @@ export const useWorkspaceEdit = create<
         }));
     };
 
-    set((state) => ({
-      editedWorkspaces: deleteWorkspaceFromHierarchy(state.editedWorkspaces),
-    }));
+    set((state) => {
+      // Remove workspace items associated with this workspace
+      const updatedWorkspaceItems = { ...state.editedWorkspaceItems };
+      delete updatedWorkspaceItems[workspaceId];
+
+      return {
+        editedWorkspaces: deleteWorkspaceFromHierarchy(state.editedWorkspaces),
+        editedWorkspaceItems: updatedWorkspaceItems,
+      };
+    });
   },
 
   deleteWorkspaceItem: (workspaceId: string, itemId: string) => {
@@ -1106,6 +1139,7 @@ export const useWorkspaceEdit = create<
 
 export const useWorkspace = () => {
   const { selectedWorkspace, setSelectedWorkspace } = useWorkspaceStore();
+  const { organization } = useOrganization();
 
   // Fetch all workspaces and workspace items with persistent caching
   const {
@@ -1126,14 +1160,31 @@ export const useWorkspace = () => {
     doctype: "zodula__Workspace Item",
   });
 
-  // Sort workspaces and workspace items by idx
+  // Filter and sort workspaces based on organization
+  // is_system workspaces should only show in System Organization
   const workspaces = useMemo(() => {
-    return allWorkspaces.sort((a, b) => (a.idx || 0) - (b.idx || 0));
-  }, [allWorkspaces]);
+    const isSystemOrg = organization?.id === "System";
+    
+    const filtered = allWorkspaces.filter((workspace) => {
+      // If workspace is system, only show in System Organization
+      if (workspace.is_system === 1) {
+        return isSystemOrg;
+      }
+      // Non-system workspaces show in all organizations
+      return true;
+    });
+    
+    return filtered.sort((a, b) => (a.idx || 0) - (b.idx || 0));
+  }, [allWorkspaces, organization]);
 
+  // Filter workspace items to only include items from visible workspaces
   const workspaceItems = useMemo(() => {
-    return allWorkspaceItems.sort((a, b) => (a.idx || 0) - (b.idx || 0));
-  }, [allWorkspaceItems]);
+    const visibleWorkspaceIds = new Set(workspaces.map((w) => w.id));
+    const filtered = allWorkspaceItems.filter((item) =>
+      visibleWorkspaceIds.has(item.workspaceId)
+    );
+    return filtered.sort((a, b) => (a.idx || 0) - (b.idx || 0));
+  }, [allWorkspaceItems, workspaces]);
 
   const isLoading = workspacesLoading || itemsLoading;
   const error = workspacesError || itemsError;

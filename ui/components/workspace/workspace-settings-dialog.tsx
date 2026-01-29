@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogTitle } from "../ui/dialog"
 import { Button } from "../ui/button"
 import { Input } from "../ui/input"
 import { FormControl } from "../ui/form-control"
+import { Checkbox } from "../ui/checkbox"
 import { WorkspaceIconPicker } from "./workspace-icon-picker"
 import type { WorkspaceWithChildren } from "./use-workspace"
 
@@ -35,6 +36,7 @@ export const WorkspaceSettingsDialog = ({
                 workspace_parent: null,
                 icon: "Folder",
                 app: "zodula",
+                is_system: 0,
                 children: [],
                 items: []
             })
@@ -77,6 +79,39 @@ export const WorkspaceSettingsDialog = ({
                                     onChange={(e) => handleValueChange('name', e.target.value)}
                                     placeholder="Enter workspace name"
                                 />
+                            </FormControl>
+
+                            {/* App field */}
+                            <FormControl
+                                docId=""
+                                label="App"
+                                field={{
+                                    type: "Reference",
+                                    reference: "zodula__App"
+                                }}
+                                value={editedWorkspace.app}
+                                fieldKey="app"
+                                onChange={handleValueChange}
+                            />
+
+                            {/* Is System checkbox */}
+                            <FormControl
+                                label="Is System"
+                                fieldKey="is_system"
+                                value={editedWorkspace.is_system}
+                                onChange={handleValueChange}
+                            >
+                                <div className="zd:flex zd:items-center zd:gap-2">
+                                    <Checkbox
+                                        checked={editedWorkspace.is_system === 1}
+                                        onCheckedChange={(checked) => 
+                                            handleValueChange('is_system', checked ? 1 : 0)
+                                        }
+                                    />
+                                    <span className="zd:text-sm zd:text-muted-foreground">
+                                        Show this workspace only in System Organization
+                                    </span>
+                                </div>
                             </FormControl>
 
                             {/* Icon field */}

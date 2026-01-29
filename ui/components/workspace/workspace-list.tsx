@@ -75,9 +75,9 @@ export const WorkspaceList = () => {
 
     // Reset editing state and initialize edit mode when hierarchical workspaces change
     useEffect(() => {
-        // Always initialize edit mode, even when there are no workspaces
-        // Reset editing state if we have no edited workspaces (fresh load)
-        if (editedWorkspaces.length === 0) {
+        // Only initialize edit mode when NOT in editing mode and we have no edited workspaces (fresh load)
+        // This prevents resetting edit mode when deleting workspaces during editing
+        if (!isEditing && editedWorkspaces.length === 0) {
             // Flatten hierarchical workspaces to include all workspaces (including children)
             const flattenWorkspaces = (workspaces: WorkspaceWithChildren[]): WorkspaceWithChildren[] => {
                 const result: WorkspaceWithChildren[] = [];

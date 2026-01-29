@@ -7,6 +7,7 @@ interface WorkspaceData {
     workspace_parent?: string | null
     icon?: string | null
     app?: string | null
+    is_system?: number | null
 }
 
 interface WorkspaceItemData {
@@ -49,7 +50,8 @@ export default $action(async (ctx) => {
                     idx: workspace.idx || 0,
                     workspace_parent: workspace.workspace_parent || null,
                     icon: workspace.icon || null,
-                    app: workspace.app || "zodula"
+                    app: workspace.app || "zodula",
+                    is_system: workspace.is_system || 0
                 })
             } else if (workspace._deleted) {
                 // Workspace to delete
@@ -66,7 +68,8 @@ export default $action(async (ctx) => {
                             idx: workspace.idx || 0,
                             workspace_parent: workspace.workspace_parent || null,
                             icon: workspace.icon || null,
-                            app: workspace.app || "zodula"
+                            app: workspace.app || "zodula",
+                            is_system: workspace.is_system || 0
                         }
                     })
                 }
@@ -142,7 +145,8 @@ export default $action(async (ctx) => {
                 idx: workspaceData.idx || 0,
                 workspace_parent: workspaceData.workspace_parent || null,
                 icon: workspaceData.icon || null,
-                app: workspaceData.app || "zodula"
+                app: workspaceData.app || "zodula",
+                is_system: (workspaceData.is_system === 1 ? 1 : 0) as 0 | 1
             }).bypass(true)
             
             if (created) {
@@ -172,7 +176,8 @@ export default $action(async (ctx) => {
                 idx: data.idx || 0,
                 workspace_parent: data.workspace_parent || null,
                 icon: data.icon || null,
-                app: data.app || "zodula"
+                app: data.app || "zodula",
+                is_system: (data.is_system === 1 ? 1 : 0) as 0 | 1
             }).bypass(true)
         }
 
@@ -207,6 +212,7 @@ export default $action(async (ctx) => {
             workspace_parent: z.string().nullable().optional(),
             icon: z.string().nullable().optional(),
             app: z.string().nullable().optional(),
+            is_system: z.number().nullable().optional(),
             _deleted: z.boolean().optional()
         })),
         workspaceItems: z.array(z.object({

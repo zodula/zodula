@@ -22,6 +22,11 @@ export default $doctype<"zodula__Workspace">({
         required: 1,
         on_delete: "CASCADE"
     },
+    is_system: {
+        type: "Check",
+        label: "Is System",
+        default: "0"
+    },
 }, {
     label: "Workspace",
     is_global: 1,
