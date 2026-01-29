@@ -24,8 +24,8 @@ interface DocListAllStore {
     isLoaded: (doctype: string) => boolean;
 }
 
-// Store for caching all records per doctype - session only (not persisted)
-const useDocListAllStore = create<DocListAllStore>((set, get) => ({
+// Store for caching all records per doctype - session-only (cleared on page reload)
+const useDocListAllStore = create<DocListAllStore>()((set, get) => ({
     cache: {},
     setDocs: <DT extends Zodula.DoctypeName>(
         doctype: DT,
@@ -86,14 +86,13 @@ interface useDocListAllResult<TDoc extends Record<string, any> = Record<string, 
 }
 
 /**
- * Hook to fetch all records for a doctype with session-level caching
+ * Hook to fetch all records for a doctype with persistent caching
  * 
  * Features:
  * - Fetches all records without filters, limits, or sorting
- * - Caches results in memory for the current session only
+ * - Caches results in memory (session-only, cleared on page reload)
  * - Only fetches once per session unless explicitly invalidated
  * - Prevents duplicate concurrent requests
- * - Cache is cleared on page refresh
  * 
  * @param options - Configuration for the doc list query
  * @returns Doc list result with cached data

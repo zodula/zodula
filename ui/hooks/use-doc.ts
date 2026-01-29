@@ -34,7 +34,7 @@ export function useDoc<DT extends Zodula.DoctypeName = Zodula.DoctypeName, TDoc 
     const [error, setError] = useState<string | null>(null);
 
     // For single doctypes, use doctype as id when id is empty or undefined
-    const effectiveId = useMemo(() => id || doctype, [id, doctype]);
+    const effectiveId = useMemo(() => id, [id]);
 
     // Fetch all doctype relatives with persistent caching, then filter client-side
     const { docs: allRelatives, loading: relativeLoading, error: relativeError, reload: reloadRelatives } = useDocListAll({
@@ -47,7 +47,7 @@ export function useDoc<DT extends Zodula.DoctypeName = Zodula.DoctypeName, TDoc 
     }, [allRelatives, doctype]);
 
     const loadDoc = useCallback(async () => {
-        if (!doctype) {
+        if (!doctype || !effectiveId) {
             setDoc(null);
             setLoading(false);
             setError(null);

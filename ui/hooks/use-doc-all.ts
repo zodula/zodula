@@ -28,8 +28,8 @@ interface DocAllStore {
     isLoaded: (doctype: string, id?: string) => boolean;
 }
 
-// Store for caching single doctypes - session only (not persisted)
-const useDocAllStore = create<DocAllStore>((set, get) => ({
+// Store for caching single doctypes - session-only (cleared on page reload)
+const useDocAllStore = create<DocAllStore>()((set, get) => ({
     cache: {},
     setDoc: <DT extends Zodula.DoctypeName>(
         doctype: DT,
@@ -107,14 +107,13 @@ interface useDocAllResult<TDoc extends Record<string, any> = Record<string, any>
 }
 
 /**
- * Hook to fetch a single doctype (for single doctypes like Global Setting) with session-level caching
+ * Hook to fetch a single doctype (for single doctypes like Global Setting) with persistent caching
  * 
  * Features:
- * - Fetches single doctype using doctype name as id (or provided id)
- * - Caches results in memory for the current session only
+ * - Fetches single doctype using doctype name as id
+ * - Caches results in memory (session-only, cleared on page reload)
  * - Only fetches once per session unless explicitly invalidated
  * - Prevents duplicate concurrent requests
- * - Cache is cleared on page refresh
  * 
  * @param options - Configuration for the doc query
  * @returns Doc result with cached data
@@ -218,9 +217,9 @@ export function useDocAll<DT extends Zodula.DoctypeName = Zodula.DoctypeName, TD
             setError(e?.message || "Failed to load doc");
             setLoading(false);
         } finally {
-            pendingFetches.delete(doctype);
+            pendingFetches.delete(fetchKey);
         }
-    }, [doctype, setDoc, fields]);
+    }, [doctype, effectiveId, forceRefetch, isLoadedStore, cachedDoc, setDoc, fields]);
 
     // Fetch on mount if not cached or if forcing refetch
     useEffect(() => {
