@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useRef, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { zodula } from "@/zodula/client";
 import type { IFilter, IOperator } from "@/zodula/server/zodula/type";
 
@@ -37,10 +37,9 @@ function generateRequestKey(options: useDocListOptions<any>): string {
 }
 
 /**
- * Simplified useDocList hook with debouncing
+ * Simplified useDocList hook
  * 
  * Features:
- * - 300ms debouncing to prevent excessive API calls
  * - Prevents duplicate concurrent requests
  * - Simple state management without caching
  * 
@@ -56,7 +55,6 @@ export function useDocList<DT extends Zodula.DoctypeName = Zodula.DoctypeName, T
     const [count, setCount] = useState(0);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Use external params directly
     const limit = options.limit || 20;
@@ -72,24 +70,24 @@ export function useDocList<DT extends Zodula.DoctypeName = Zodula.DoctypeName, T
         if (!options.doctype) {
             setDocs([]);
             setCount(0);
-            setLoading(false);
+                setLoading(false);
             setError(null);
-            return;
-        }
+                return;
+            }
 
         // Check if there's already a pending fetch for this request
         const pendingFetch = pendingFetches.get(requestKey);
-        if (pendingFetch) {
-            // Wait for the existing fetch to complete
+            if (pendingFetch) {
+                // Wait for the existing fetch to complete
             try {
                 const result = await pendingFetch;
                 setDocs(result.docs);
                 setCount(result.count);
-                setLoading(false);
+                    setLoading(false);
                 setError(null);
-            } catch (e: any) {
+                    } catch (e: any) {
                 setError(e?.message || "Failed to load docs");
-                setLoading(false);
+                        setLoading(false);
             }
             return;
         }
@@ -99,14 +97,14 @@ export function useDocList<DT extends Zodula.DoctypeName = Zodula.DoctypeName, T
         setError(null);
 
         const fetchPromise = (async () => {
-            try {
-                const response = await zodula?.doc?.select_docs(options.doctype, {
-                    limit: limit,
-                    sort,
-                    order,
-                    filters: filters,
-                    q
-                });
+        try {
+            const response = await zodula?.doc?.select_docs(options.doctype, {
+                limit: limit,
+                sort,
+                order,
+                filters: filters,
+                q
+            });
 
                 return {
                     docs: response.docs as TDoc[],
@@ -133,43 +131,18 @@ export function useDocList<DT extends Zodula.DoctypeName = Zodula.DoctypeName, T
         }
     }, [options.doctype, requestKey, limit, sort, order, filters, q]);
 
-    // Debounced fetch function
-    const debouncedFetchList = useCallback(() => {
-        // Clear existing timeout
-        if (debounceTimeoutRef.current) {
-            clearTimeout(debounceTimeoutRef.current);
-        }
-
-        // Set new timeout for debouncing
-        debounceTimeoutRef.current = setTimeout(() => {
-            fetchList();
-        }, 300); // 300ms debounce
-    }, []);
-
     // Fetch when dependencies change
     useEffect(() => {
-        debouncedFetchList();
-
-        // Cleanup timeout on unmount or when deps change
-        return () => {
-            if (debounceTimeoutRef.current) {
-                clearTimeout(debounceTimeoutRef.current);
-            }
-        };
+        fetchList();
     }, [...deps]);
 
     const reload = useCallback(async () => {
         if (!options.doctype) return;
 
-        // Clear debounce timeout
-        if (debounceTimeoutRef.current) {
-            clearTimeout(debounceTimeoutRef.current);
-        }
-
         // Clear any pending fetches for this request
         pendingFetches.delete(requestKey);
 
-        // Fetch immediately (bypass debounce)
+        // Fetch immediately
         await fetchList();
     }, [options.doctype, requestKey]);
 

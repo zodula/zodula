@@ -4,7 +4,8 @@ import { SidebarLayout, type ActionItem, type PrimaryAction } from "@/zodula/ui/
 import { SheetView } from "@/zodula/ui/components/list/SheetView";
 import { useListParams } from "@/zodula/ui/hooks/use-list-params";
 import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
-import { useDoc } from "@/zodula/ui/hooks/use-doc";
+import { useDocListAll } from "@/zodula/ui/hooks/use-doc-list-all";
+import { useDocAll } from "@/zodula/ui/hooks/use-doc-all";
 import { Plus, Printer, Download, X, Trash2, RefreshCw, List, Grid3x3, ChevronDown } from "lucide-react";
 import {
     DropdownMenu,
@@ -56,19 +57,20 @@ export default function DoctypeSheetPage() {
         reload
     } = useDocList({ doctype, limit, sort, order, q, filters });
 
-    const { docs: fields, reload: reloadFields } = useDocList({
-        doctype: "zodula__Field",
-        limit: 1000000,
-        sort: "idx",
-        order: "asc",
-        q: "",
-        filters: [
-            ["doctype", "=", doctype]
-        ]
-    }, [doctype]);
+    // Fetch all fields with persistent caching, then filter client-side
+    const { docs: allFields, reload: reloadFields } = useDocListAll({
+        doctype: "zodula__Field"
+    });
+
+    // Filter fields by doctype and sort by idx
+    const fields = useMemo(() => {
+        return allFields
+            .filter((field) => field.doctype === doctype)
+            .sort((a, b) => (a.idx || 0) - (b.idx || 0));
+    }, [allFields, doctype]);
 
     // Get doctype metadata to check if it's submittable
-    const { doc: doctypeDoc, reload: reloadDoctype } = useDoc({
+    const { doc: doctypeDoc, reload: reloadDoctype } = useDocAll({
         doctype: "zodula__Doctype",
         id: doctype
     });

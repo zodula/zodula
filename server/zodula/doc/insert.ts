@@ -449,11 +449,6 @@ export class ZodulaDoctypeInsert<
           vectorFields
         );
 
-        console.log(
-          `TODO: Process Vector fields for ${this.doctypeName}/${result.id}:`
-        );
-        console.log(vectorData);
-
         // TODO: Implement embeddings processing
         // const embeddings = await ZodulaDoctypeHelper.processVectorEmbeddings(vectorData)
         // Store embeddings back to the document fields

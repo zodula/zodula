@@ -1,6 +1,6 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { create } from 'zustand';
 
-interface OrganizationContextValue {
+interface OrganizationState {
   organization: Zodula.SelectDoctype<"zodula__Organization"> | null;
   loading: boolean;
   error: string | null;
@@ -9,41 +9,23 @@ interface OrganizationContextValue {
   setError: (error: string | null) => void;
 }
 
-const OrganizationContext = createContext<OrganizationContextValue | undefined>(
-  undefined
-);
+// Zustand store for organization state (accessible without hooks)
+export const useOrganizationStore = create<OrganizationState>((set) => ({
+  organization: null,
+  loading: false,
+  error: null,
+  setOrganization: (org) => set({ organization: org }),
+  setLoading: (loading) => set({ loading }),
+  setError: (error) => set({ error }),
+}));
 
-interface OrganizationProviderProps {
-  children: ReactNode;
+// Hook for React components (subscribes to store changes)
+export function useOrganization() {
+  return useOrganizationStore();
 }
 
-export function OrganizationProvider({ children }: OrganizationProviderProps) {
-  const [organization, setOrganization] = useState<Zodula.SelectDoctype<"zodula__Organization"> | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const value: OrganizationContextValue = {
-    organization,
-    loading,
-    error,
-    setOrganization,
-    setLoading,
-    setError,
-  };
-
-  return (
-    <OrganizationContext.Provider value={value}>
-      {children}
-    </OrganizationContext.Provider>
-  );
-}
-
-export function useOrganization(): OrganizationContextValue {
-  const context = useContext(OrganizationContext);
-  if (context === undefined) {
-    throw new Error(
-      "useOrganization must be used within an OrganizationProvider"
-    );
-  }
-  return context;
+// Get organization ID directly from store (for use outside React components)
+export function getOrganizationId(): string | null {
+  const state = useOrganizationStore.getState();
+  return state.organization?.id || null;
 }

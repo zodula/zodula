@@ -11,6 +11,8 @@ export default function FormPage() {
     const fromDoc = location.state?.fromDoc;
     const resetForm = location.state?.resetForm
 
+    console.log(doctype)
+
     return (
         <div className="zd:pb-16">
             <DocFormView

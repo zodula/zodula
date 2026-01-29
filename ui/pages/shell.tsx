@@ -7,10 +7,11 @@ import { useAuth } from "@/zodula/ui/hooks/use-auth";
 import AuthErrorView from "../views/auth-error-view";
 import ErrorView from "../views/error-view";
 import LoadingView from "../views/loading-view";
-import { zodula } from "@/zodula/client/zodula";
+import { zodula, setOrganizationGetter } from "@/zodula/client/zodula";
+import { getOrganizationId } from "../hooks/use-organization";
 import { useEffect, useMemo } from "react";
 import type { GenerateMetadata } from "../components/metadata";
-import { useOrganization } from "../hooks/use-organization";
+import { useOrganizationStore } from "../hooks/use-organization";
 import { useDoc } from "../hooks/use-doc";
 
 export const generateMetadata: GenerateMetadata = async (ctx) => {
@@ -62,7 +63,7 @@ configureToast({
 })
 export default function Shell({ children }: { children: React.ReactNode }) {
     const { isAuthenticated, user, isLoading } = useAuth()
-    const { organization, setOrganization, setLoading, setError } = useOrganization()
+    const { organization, setOrganization, setLoading, setError } = useOrganizationStore()
     const router = useRouter()
 
     // Extract org slug from pathname: /desk/:org/...
@@ -72,20 +73,25 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         const parts = pathname.split("/");
         // ["", "desk", ":org", ...]
         return parts.length >= 3 ? parts[2] || null : null;
-    }, [router.pathname]);
+    }, [router]);
 
     // Fetch organization based on org slug
     const {
         doc: fetchedOrganization,
         loading: orgLoading,
         error: orgError,
+        reload: reloadOrganization,
     } = useDoc(
         {
             doctype: "zodula__Organization",
-            id: orgSlug || " ",
+            id: orgSlug || "",
         },
         [orgSlug]
     );
+
+    useEffect(() => {
+        reloadOrganization();
+    }, [orgSlug]);
 
     // Sync fetched organization into context
     useEffect(() => {
@@ -107,6 +113,11 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             localStorage.setItem("zodula-selected-organization", orgSlug);
         }
     }, [orgSlug]);
+
+    // Register organization getter with zodula client
+    useEffect(() => {
+        setOrganizationGetter(() => getOrganizationId());
+    }, []);
 
     // Load theme from localStorage on component mount
     useEffect(() => {

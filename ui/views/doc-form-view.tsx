@@ -2,6 +2,8 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Link, useRouter } from "@/zodula/ui/components/router";
 import { useDoc } from "@/zodula/ui/hooks/use-doc";
 import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
+import { useDocListAll } from "@/zodula/ui/hooks/use-doc-list-all";
+import { useDocAll } from "@/zodula/ui/hooks/use-doc-all";
 import { useForm } from "@/zodula/ui/hooks/use-form";
 import { NavbarLayout } from "@/zodula/ui/layout/navbar-layout";
 import { SidebarLayout } from "@/zodula/ui/layout/sidebar-layout";
@@ -103,20 +105,17 @@ export function DocFormView({
   const { t } = useTranslation();
 
   // ===== DOCTYPE & DOC DATA =====
-  const { doc: doctypeDoc } = useDoc(
-    {
-      doctype: "zodula__Doctype",
-      id: doctype,
-    },
-    [doctype]
-  );
+  const { doc: doctypeDoc } = useDocAll({
+    doctype: "zodula__Doctype",
+    id: doctype
+  });
 
   const { doc, loading, error, reload, relatives } = useDoc(
     {
       doctype: doctype as Zodula.DoctypeName,
-      id: id,
+      id: id || "",
     },
-    [id, doctype, doctypeDoc, mode]
+    [mode]
   );
 
   // ===== USER NAMES =====
@@ -158,16 +157,17 @@ export function DocFormView({
   );
 
   // ===== FIELDS =====
-  const { docs: fields, reload: reloadFields } = useDocList(
-    {
-      doctype: "zodula__Field",
-      limit: 1000000,
-      sort: "idx",
-      order: "asc",
-      filters: [["doctype", "=", doctype]],
-    },
-    [doctypeDoc]
-  );
+  // Fetch all fields with persistent caching, then filter client-side
+  const { docs: allFields, reload: reloadFields } = useDocListAll({
+    doctype: "zodula__Field"
+  });
+
+  // Filter fields by doctype and sort by idx
+  const fields = useMemo(() => {
+    return allFields
+      .filter((field) => field.doctype === doctype)
+      .sort((a, b) => (a.idx || 0) - (b.idx || 0));
+  }, [allFields, doctype]);
 
   // ===== FIELD-LEVEL PERMISSIONS =====
   const { docs: doctypePermissions } = useDocList(
@@ -176,7 +176,7 @@ export function DocFormView({
       limit: 1000000,
       filters: [["doctype", "=", doctype]],
     },
-    [doctype, roles]
+    [fields]
   );
 
   // Map field-level permissions: field name -> permission record

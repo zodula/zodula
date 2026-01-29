@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { useMemo, useEffect } from "react";
 import { zodula } from "@/zodula/client";
+import { useDocListAll } from "@/zodula/ui/hooks/use-doc-list-all";
 
 export interface WorkspaceItem {
     id: string
@@ -81,70 +82,18 @@ export const useWorkspaceDataStore = create<WorkspaceDataState>((set, get) => ({
     setError: (error: string | null) => set({ error }),
 
     reloadWorkspaces: async () => {
-        set({ isLoading: true, error: null });
-        try {
-            const result = await zodula.doc.select_docs("zodula__Workspace", {
-                limit: 1000000,
-                sort: "idx",
-                order: "asc",
-                q: "",
-                filters: []
-            });
-            set({ workspaces: result.docs, isLoading: false });
-        } catch (error) {
-            console.error('Failed to reload workspaces:', error);
-            const errorMessage = error instanceof Error ? error.message : 'Failed to reload workspaces';
-            set({ error: errorMessage, isLoading: false });
-        }
+        // This is now handled by useDocListAll hook, kept for backward compatibility
+        console.warn("reloadWorkspaces is deprecated. Workspaces are automatically fetched via useDocListAll.");
     },
 
     reloadWorkspaceItems: async () => {
-        set({ isLoading: true, error: null });
-        try {
-            const result = await zodula.doc.select_docs("zodula__Workspace Item", {
-                limit: 1000000,
-                sort: "idx",
-                order: "asc",
-                q: "",
-                filters: []
-            });
-            set({ workspaceItems: result.docs, isLoading: false });
-        } catch (error) {
-            console.error('Failed to reload workspace items:', error);
-            const errorMessage = error instanceof Error ? error.message : 'Failed to reload workspace items';
-            set({ error: errorMessage, isLoading: false });
-        }
+        // This is now handled by useDocListAll hook, kept for backward compatibility
+        console.warn("reloadWorkspaceItems is deprecated. Workspace items are automatically fetched via useDocListAll.");
     },
 
     reloadAll: async () => {
-        set({ isLoading: true, error: null });
-        try {
-            const [workspacesResult, workspaceItemsResult] = await Promise.all([
-                zodula.doc.select_docs("zodula__Workspace", {
-                    limit: 1000000,
-                    sort: "idx",
-                    order: "asc",
-                    q: "",
-                    filters: []
-                }),
-                zodula.doc.select_docs("zodula__Workspace Item", {
-                    limit: 1000000,
-                    sort: "idx",
-                    order: "asc",
-                    q: "",
-                    filters: []
-                })
-            ]);
-            set({
-                workspaces: workspacesResult.docs,
-                workspaceItems: workspaceItemsResult.docs,
-                isLoading: false
-            });
-        } catch (error) {
-            console.error('Failed to reload workspace data:', error);
-            const errorMessage = error instanceof Error ? error.message : 'Failed to reload workspace data';
-            set({ error: errorMessage, isLoading: false });
-        }
+        // This is now handled by useDocListAll hooks, kept for backward compatibility
+        console.warn("reloadAll is deprecated. Workspaces and workspace items are automatically fetched via useDocListAll.");
     }
 }));
 
@@ -826,20 +775,33 @@ export const useWorkspaceEdit = create<WorkspaceEditState & {
 
 export const useWorkspace = () => {
     const { selectedWorkspace, setSelectedWorkspace } = useWorkspaceStore()
-    const {
-        workspaces,
-        workspaceItems,
-        isLoading,
-        error,
-        reloadWorkspaces,
-        reloadWorkspaceItems,
-        reloadAll
-    } = useWorkspaceDataStore()
+    
+    // Fetch all workspaces and workspace items with persistent caching
+    const { docs: allWorkspaces, loading: workspacesLoading, error: workspacesError, reload: reloadWorkspaces } = useDocListAll({
+        doctype: "zodula__Workspace"
+    });
 
-    // Load data when component mounts
-    useEffect(() => {
-        reloadAll();
-    }, []);
+    const { docs: allWorkspaceItems, loading: itemsLoading, error: itemsError, reload: reloadWorkspaceItems } = useDocListAll({
+        doctype: "zodula__Workspace Item"
+    });
+
+    // Sort workspaces and workspace items by idx
+    const workspaces = useMemo(() => {
+        return allWorkspaces.sort((a, b) => (a.idx || 0) - (b.idx || 0));
+    }, [allWorkspaces]);
+
+    const workspaceItems = useMemo(() => {
+        return allWorkspaceItems.sort((a, b) => (a.idx || 0) - (b.idx || 0));
+    }, [allWorkspaceItems]);
+
+    const isLoading = workspacesLoading || itemsLoading;
+    const error = workspacesError || itemsError;
+
+    // Reload all function
+    const reloadAll = () => {
+        reloadWorkspaces();
+        reloadWorkspaceItems();
+    };
 
     // Restore selected workspace from localStorage when workspaces are loaded
     useEffect(() => {

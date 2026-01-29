@@ -588,8 +588,8 @@ export class ZodulaDoctypeHelper {
         if (bypass) {
             const organization = await session.organization(true);
             const doctype = loader.from("doctype").get(doctypeName);
-            if (doctype.config.is_global !== 1 && organization === "system") {
-                return "system";
+            if (doctype.config.is_global !== 1 && organization === "System") {
+                return "System";
             }
             return organization || null;
         }
@@ -604,15 +604,15 @@ export class ZodulaDoctypeHelper {
         }
         
         // Validate global doctype rules
-        if (doctype.config.is_global !== 1 && !organization && organization !== "system") {
+        if (doctype.config.is_global !== 1 && !organization && organization !== "System") {
             throw new ErrorWithCode(`You are not allowed to ${action} in this organization`, {
                 status: 403,
             });
         }
 
         // Return validated organization value
-        if (doctype.config.is_global !== 1 && organization === "system") {
-            return "system";
+        if (doctype.config.is_global !== 1 && organization === "System") {
+            return "System";
         }
 
         return organization || null;

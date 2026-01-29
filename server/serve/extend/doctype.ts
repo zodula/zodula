@@ -204,7 +204,7 @@ export const extendDoctype = () => {
     const isSingle = doctypeMeta.schema.is_single;
     // get single doc
     server.get(
-      `/api/resources/${doctypeMeta.name}${isSingle ? "" : "/:id"}`,
+      `/api/resources/${doctypeMeta.name}${isSingle ? `/${doctypeMeta.name}` : "/:id"}`,
       async (ctx) => {
         try {
           ctxContext.enterWith({
@@ -289,7 +289,7 @@ export const extendDoctype = () => {
 
     // update doc
     server.put(
-      `/api/resources/${doctypeMeta.name}${isSingle ? "" : "/:id"}`,
+      `/api/resources/${doctypeMeta.name}${isSingle ? `/${doctypeMeta.name}` : "/:id"}`,
       async (ctx) => {
         try {
           ctxContext.enterWith({

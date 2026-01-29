@@ -139,8 +139,8 @@ export class ZodulaDoctypeSelector<
       }
     }
 
-    if (doctype.config.is_global !== 1 && organization !== "system" && !this.options.bypass) {
-      whereConditions.push(`("organization" = "${organization}" OR "organization" = "system")`);
+    if (doctype.config.is_global !== 1 && organization !== "System" && !this.options.bypass) {
+      whereConditions.push(`("organization" = "${organization}" OR "organization" = "System")`);
     }
     if(doctype.name === "zodula__Organization" && !roles.includes("System Admin") && !this.options.bypass) {
       whereConditions.push(`("owner" = "${user?.id}" OR "id" IN ("${userOrganizationRoles.join('","')}"))`);
@@ -261,7 +261,6 @@ export class ZodulaDoctypeSelector<
         limitClause,
       ].filter(Boolean);
       const stmt = queryParts.join(" ");
-      console.log(stmt);
       // Execute query
       const result = (await db.all(
         stmt

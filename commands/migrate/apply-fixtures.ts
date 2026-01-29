@@ -41,7 +41,7 @@ export const applyFixtures = async () => {
               ...data,
               id: data?.id,
               doc_status: data?.doc_status || 0,
-              organization: data?.organization || "system",
+              organization: data?.organization || "System",
             })
             .where("id", "=", data.id)
             .execute();
@@ -51,7 +51,7 @@ export const applyFixtures = async () => {
             .values({
               ...data,
               doc_status: data?.doc_status || 0,
-              organization: data?.organization || "system",
+              organization: data?.organization || "System",
             })
             .execute();
         }

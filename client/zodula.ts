@@ -7,14 +7,17 @@ import { toast } from '../ui';
 interface ZodulaOptions {
     onRequest?: (config: AxiosRequestConfig) => InternalAxiosRequestConfig | Promise<InternalAxiosRequestConfig>;
     onResponse?: (response: AxiosResponse) => AxiosResponse | Promise<AxiosResponse>;
+    getOrganization?: () => string | null; // Function to get current organization ID
 }
 
 export class Zodula {
     public api: AxiosInstance;
     private baseUrl: string;
+    private getOrganization?: () => string | null;
 
     constructor(baseUrl: string, options: ZodulaOptions = {}) {
         this.baseUrl = baseUrl;
+        this.getOrganization = options.getOrganization;
         this.api = axios.create({
             baseURL: baseUrl,
             withCredentials: true
@@ -23,6 +26,27 @@ export class Zodula {
         // Add request interceptor
         if (options.onRequest) {
             this.api.interceptors.request.use(options.onRequest);
+        } else {
+            // Default request interceptor that uses getOrganization if provided
+            this.api.interceptors.request.use((config) => {
+                const orgId = this.getOrganization ? this.getOrganization() : null;
+                if (orgId) {
+                    if (!config.headers) {
+                        config.headers = {};
+                    }
+                    (config.headers as any)["x-organization"] = orgId;
+                } else {
+                    // Fallback to localStorage if getOrganization not provided or returns null
+                    const selectedOrganization = localStorage.getItem("zodula-selected-organization");
+                    if (selectedOrganization) {
+                        if (!config.headers) {
+                            config.headers = {};
+                        }
+                        (config.headers as any)["x-organization"] = selectedOrganization;
+                    }
+                }
+                return config as InternalAxiosRequestConfig;
+            });
         }
 
         // Add response interceptor
@@ -104,16 +128,22 @@ export function createZodulaClient(baseUrl: string, options: ZodulaOptions = {})
     return new Zodula(baseUrl, options);
 }
 
+// Lazy getter function to avoid circular dependencies
+let getOrganizationIdFn: (() => string | null) | null = null;
+
+// Function to set the organization getter (called from UI code)
+export function setOrganizationGetter(fn: () => string | null) {
+    getOrganizationIdFn = fn;
+}
+
 export const zodula = createZodulaClient(zodulaUtils.BASE_URL, {
-    async onRequest(config) {
-        const selectedOrganization = localStorage.getItem("zodula-selected-organization")
-        if (selectedOrganization) {
-            if (!config.headers) {
-                config.headers = {}
-            }
-            (config.headers as any)["x-organization"] = selectedOrganization
+    // Use Zustand store to get organization ID via lazy getter
+    getOrganization: () => {
+        if (getOrganizationIdFn) {
+            return getOrganizationIdFn();
         }
-        return config as InternalAxiosRequestConfig
+        // Fallback to localStorage if getter not set
+        return localStorage.getItem("zodula-selected-organization");
     },
     onResponse(response: any) {
         if (response.status === 200) {

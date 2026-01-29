@@ -53,7 +53,7 @@ export class ZodulaDoctypeGetter<
       if (!this.options.bypass) {
         const user = await session.user(true);
         const old = (await db.get(
-          `SELECT * FROM "${doctype?.name}" WHERE "id" = '${this.id}' AND (${isGlobal ? "1=1" : `("organization" = "${organization}" OR "organization" = "system")`})`    
+          `SELECT * FROM "${doctype?.name}" WHERE "id" = '${this.id}' AND (${isGlobal ? "1=1" : `("organization" = "${organization}" OR "organization" = "System")`})`    
         )) as any;
 
         // Validate organization access
@@ -103,7 +103,7 @@ export class ZodulaDoctypeGetter<
               )
           : ["*"];
       let result = (await db.get(
-        `SELECT ${fields.join(",")} FROM "${doctype?.name}" WHERE "id" = '${this.id}' AND (${isGlobal ? "1=1" : `("organization" = "${organization}" OR "organization" = "system")`})`
+        `SELECT ${fields.join(",")} FROM "${doctype?.name}" WHERE "id" = '${this.id}' AND (${isGlobal ? "1=1" : `("organization" = "${organization}" OR "organization" = "System")`})`
       )) as any;
 
       if (relatives.length > 0 && result) {
@@ -143,8 +143,6 @@ export class ZodulaDoctypeGetter<
           isOwn
         );
       }
-
-      console.log(`[GET][${this.doctypeName}] ${result}`)
 
       return this.options.unsafe
         ? result

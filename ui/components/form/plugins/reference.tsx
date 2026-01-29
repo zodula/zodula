@@ -46,7 +46,7 @@ const ReferenceInput = (props: {
   // Get doctype metadata to check if it's quick entry
   const { doc: referenceDoctypeDoc } = useDoc({
     doctype: "zodula__Doctype",
-    id: referenceDoctype
+    id: referenceDoctype || ""
   }, [referenceDoctype]);
 
   // Get fields for the reference doctype
@@ -322,7 +322,7 @@ const ReferenceInput = (props: {
 
 export const ReferencePlugin = new FormPlugin({
   types: ["Reference", "Virtual Reference"],
-  supportOperators: ["=", "!=", "IN", "NOT IN", "IS NULL", "IS NOT NULL"],
+  supportOperators: ["=", "!=", "LIKE", "NOT LIKE", "IN", "NOT IN", "IS NULL", "IS NOT NULL"],
   render: (props) => {
     return <ReferenceInput {...props} />;
   },

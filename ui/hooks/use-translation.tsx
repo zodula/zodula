@@ -2,8 +2,8 @@ import { zodula } from "@/zodula/client/zodula";
 import { useCallback, useEffect } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { useDocList } from "./use-doc-list";
-import { useDoc } from "./use-doc";
+import { useDocListAll } from "./use-doc-list-all";
+import { useDocAll } from "./use-doc-all";
 
 // Language store - persisted in localStorage
 export interface LanguageStore {
@@ -80,25 +80,18 @@ export const useTranslation = (lang?: string) => {
     // Use provided language or current language from store
     const activeLanguage = lang || currentLanguage;
 
-    // Use useDocList for fully-loaded doctypes (will use cache)
-    // Note: For fully-loaded doctypes, all fields are fetched regardless of limit/sort params
-    // The limit/sort params here are for client-side filtering after fetch
-    const { docs: languageDocs } = useDocList({
-        doctype: "zodula__Language",
-        limit: 1000,
-        sort: "name",
-        order: "asc"
+    // Use useDocListAll for fetching all languages with persistent caching
+    const { docs: languageDocs } = useDocListAll({
+        doctype: "zodula__Language"
     });
 
-    const { docs: translationDocs } = useDocList({
-        doctype: "zodula__Translation",
-        limit: 1000000,
-        sort: "key",
-        order: "asc"
+    // Use useDocListAll for fetching all translations with persistent caching
+    const { docs: translationDocs } = useDocListAll({
+        doctype: "zodula__Translation"
     });
 
-    // Use useDoc for Global Setting (single doctype)
-    const { doc: websiteSetting } = useDoc({
+    // Use useDocAll for Global Setting (single doctype) with persistent caching
+    const { doc: websiteSetting } = useDocAll({
         doctype: "zodula__Global Setting"
     });
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "@/zodula/ui/components/router";
 import { useAction } from "@/zodula/ui/hooks/use-action";
-import { useDoc } from "@/zodula/ui/hooks/use-doc";
+import { useDocAll } from "@/zodula/ui/hooks/use-doc-all";
 import { useAuth } from "@/zodula/ui/hooks/use-auth";
 import { Button } from "@/zodula/ui/components/ui/button";
 import { FileText, Plus, ChevronRight, BuildingIcon } from "lucide-react";
@@ -16,8 +16,8 @@ const STORAGE_KEY = "zodula-selected-organization";
 export default function DeskPage() {
   const { push, pathname } = useRouter();
   const { user } = useAuth();
-  const { doc: globalSetting } = useDoc({
-    doctype: "zodula__Global Setting",
+  const { doc: globalSetting } = useDocAll({
+    doctype: "zodula__Global Setting"
   });
   const { t } = useTranslation();
 

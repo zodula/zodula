@@ -1,8 +1,8 @@
 import React, { useMemo } from "react";
 import { FormPlugin } from "../plugin";
 import { Form } from "../form";
-import { useDocList } from "../../../hooks/use-doc-list";
-import { useDoc } from "../../../hooks/use-doc";
+import { useDocListAll } from "../../../hooks/use-doc-list-all";
+import { useDocAll } from "../../../hooks/use-doc-all";
 import { ClientFieldHelper } from "@/zodula/client/field";
 import { useUIScript } from "@/zodula/ui";
 import { useRouter } from "../../router";
@@ -22,10 +22,10 @@ export const ExtendPlugin = new FormPlugin({
     docId: string;
     fieldPath?: string;
 }) => {
-    const { doc: doctypeDoc } = useDoc({
+    const { doc: doctypeDoc } = useDocAll({
         doctype: "zodula__Doctype",
         id: props.fieldOptions.reference as any
-    }, [props.fieldOptions.reference]);
+    });
 
     const { push } = useRouter();
 
@@ -48,14 +48,18 @@ export const ExtendPlugin = new FormPlugin({
         navigate: (path) => push(path)
     });
 
-    // Get fields for the reference doctype
-    const { docs: fields } = useDocList({
-        doctype: "zodula__Field",
-        limit: 1000000,
-        sort: "idx",
-        order: "asc",
-        filters: [["doctype", "=", doctypeDoc?.id]]
-    }, [doctypeDoc]);
+    // Fetch all fields with persistent caching, then filter client-side
+    const { docs: allFields } = useDocListAll({
+        doctype: "zodula__Field"
+    });
+
+    // Filter fields by doctype and sort by idx
+    const fields = useMemo(() => {
+        if (!doctypeDoc?.id) return [];
+        return allFields
+            .filter((field) => field.doctype === doctypeDoc.id)
+            .sort((a, b) => (a.idx || 0) - (b.idx || 0));
+    }, [allFields, doctypeDoc?.id]);
 
     // Process fields and filter out self-references
     const formFields = useMemo(() => {

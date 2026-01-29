@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { useRouter } from "@/zodula/ui/components/router";
-import { useDoc } from "@/zodula/ui/hooks/use-doc";
+import { useDocAll } from "@/zodula/ui/hooks/use-doc-all";
 import { DocFormView } from "@/zodula/ui/views/doc-form-view";
 import ErrorView from "@/zodula/ui/views/error-view";
 import { useParams } from "react-router";
@@ -11,10 +11,10 @@ export default function DoctypePage() {
     const prefill = location.state?.prefill;
     const { org } = useParams();
     // Get doctype metadata to check if it's single
-    const { doc: doctypeDoc, loading } = useDoc({
+    const { doc: doctypeDoc, loading } = useDocAll({
         doctype: "zodula__Doctype",
         id: doctype
-    }, [doctype]);
+    });
 
     // Redirect to list if not single doctype
     useEffect(() => {

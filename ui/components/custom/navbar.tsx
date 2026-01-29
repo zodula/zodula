@@ -14,8 +14,8 @@ import {
 import { Button } from "../ui/button";
 import { PlusIcon, UserIcon, InfoIcon, FileIcon, BookIcon } from "lucide-react";
 import { useAuth } from "../../hooks/use-auth";
-import { useDoc } from "../../hooks/use-doc";
-import { useDocList } from "../../hooks/use-doc-list";
+import { useDocAll } from "../../hooks/use-doc-all";
+import { useDocListAll } from "../../hooks/use-doc-list-all";
 import { useTranslation } from "../../hooks/use-translation";
 import { AboutZodulaDialog } from "../dialogs/about-zodula-dialog";
 import { confirm, popup } from "../ui/popit";
@@ -29,8 +29,8 @@ export interface NavbarProps {
 }
 
 export const Navbar = ({ children }: NavbarProps) => {
-  const { doc: zodula__WebsiteSetting } = useDoc({
-    doctype: "zodula__Global Setting",
+  const { doc: zodula__WebsiteSetting } = useDocAll({
+    doctype: "zodula__Global Setting"
   });
   const { org } = useParams();
   const [searchTerm, setSearchTerm] = useState<string>("");
@@ -39,21 +39,27 @@ export const Navbar = ({ children }: NavbarProps) => {
   const { fullWidth, setFullWidth, toggleFullWidth } = useNavbar();
   const { t } = useTranslation();
 
-  // Use useDocList for both doctypes and pages
-  const doctypeResults = useDocList({
-    doctype: "zodula__Doctype",
-    filters: [["is_child_doctype", "=", 0]],
-    limit: 999999,
-    sort: "label",
-    order: "asc",
+  // Fetch all doctypes and pages with persistent caching, then filter client-side
+  const { docs: allDoctypes } = useDocListAll({
+    doctype: "zodula__Doctype"
   });
 
-  const pageResults = useDocList({
-    doctype: "zodula__Page",
-    limit: 999999,
-    sort: "name",
-    order: "asc",
+  const { docs: allPages } = useDocListAll({
+    doctype: "zodula__Page"
   });
+
+  // Filter doctypes and sort
+  const doctypeResults = useMemo(() => ({
+    docs: allDoctypes
+      .filter((doc) => doc.is_child_doctype === 0)
+      .sort((a, b) => (a.label || a.name || "").localeCompare(b.label || b.name || ""))
+  }), [allDoctypes]);
+
+  // Sort pages
+  const pageResults = useMemo(() => ({
+    docs: allPages
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+  }), [allPages]);
 
   // Function to calculate relevance score for sorting
   const calculateRelevance = (

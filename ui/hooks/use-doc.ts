@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { zodula } from "@/zodula/client";
-import { useDocList } from "./use-doc-list";
+import { useDocListAll } from "./use-doc-list-all";
 
 // Track pending fetches per doctype+id to prevent overlapping requests
 const pendingFetches = new Map<string, Promise<any>>();
 
 interface useDocOptions<DT extends Zodula.DoctypeName = Zodula.DoctypeName> {
     doctype: DT;
-    id?: string;
+    id: string;
     fields?: string[];
+    isSingle?: boolean;
 }
 
 interface useDocResult<TDoc extends Zodula.SelectDoctype<Zodula.DoctypeName> = Zodula.SelectDoctype<Zodula.DoctypeName>> {
@@ -26,23 +27,24 @@ export function useDoc<DT extends Zodula.DoctypeName = Zodula.DoctypeName, TDoc 
     options: useDocOptions<DT>,
     deps: any[] = []
 ): useDocResult<TDoc> {
-    const { doctype, id, fields = [] } = options;
+    const { doctype, id, fields = [], isSingle = false } = options;
 
     const [doc, setDoc] = useState<TDoc | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // For single doctypes, use doctype as id when id is empty or undefined
-    const effectiveId = id || doctype;
+    const effectiveId = useMemo(() => id || doctype, [id, doctype]);
 
-    const { docs: relatives, loading: relativeLoading, error: relativeError, reload: reloadRelatives } = useDocList({
-        doctype: "zodula__Doctype Relative",
-        filters: [
-            ["parent_doctype", "=", doctype]
-        ],
-        limit: 1000,
-    }, [doctype, id, effectiveId, ...deps]);
+    // Fetch all doctype relatives with persistent caching, then filter client-side
+    const { docs: allRelatives, loading: relativeLoading, error: relativeError, reload: reloadRelatives } = useDocListAll({
+        doctype: "zodula__Doctype Relative"
+    });
+
+    // Filter relatives by parent_doctype
+    const relatives = useMemo(() => {
+        return allRelatives.filter((relative) => relative.parent_doctype === doctype);
+    }, [allRelatives, doctype]);
 
     const loadDoc = useCallback(async () => {
         if (!doctype) {
@@ -77,7 +79,7 @@ export function useDoc<DT extends Zodula.DoctypeName = Zodula.DoctypeName, TDoc 
 
         const fetchPromise = (async () => {
             try {
-                const response = await zodula?.doc?.get_doc(doctype as Zodula.DoctypeName, id, {
+                const response = await zodula?.doc?.get_doc(doctype as Zodula.DoctypeName, effectiveId, {
                     fields: fields && fields.length > 0 ? fields : undefined,
                 });
                 return response as TDoc;
@@ -101,45 +103,20 @@ export function useDoc<DT extends Zodula.DoctypeName = Zodula.DoctypeName, TDoc 
         }
     }, [doctype, id, effectiveId, fields]);
 
-    // Debounced fetch function
-    const debouncedLoadDoc = useCallback(() => {
-        // Clear existing timeout
-        if (debounceTimeoutRef.current) {
-            clearTimeout(debounceTimeoutRef.current);
-        }
-
-        // Set new timeout for debouncing
-        debounceTimeoutRef.current = setTimeout(() => {
-            loadDoc();
-        }, 300); // 300ms debounce
-    }, []);
-
     useEffect(() => {
-        debouncedLoadDoc();
-
-        // Cleanup timeout on unmount or when deps change
-        return () => {
-            if (debounceTimeoutRef.current) {
-                clearTimeout(debounceTimeoutRef.current);
-            }
-        };
+        loadDoc();
     }, [...deps]);
 
     const reload = useCallback(async () => {
         if (!doctype) return;
 
-        // Clear debounce timeout
-        if (debounceTimeoutRef.current) {
-            clearTimeout(debounceTimeoutRef.current);
-        }
-
         // Clear any pending fetches for this doc
         const fetchKey = `${doctype}:${effectiveId}`;
         pendingFetches.delete(fetchKey);
 
-        // Refetch immediately (bypass debounce)
+        // Refetch immediately
         await loadDoc();
-    }, [doctype, effectiveId]);
+    }, [doctype, effectiveId, loadDoc]);
 
     return {
         doc,
