@@ -18,6 +18,7 @@ export const NavbarLayout = ({
 }: NavbarLayoutProps) => {
   const { fullWidth } = useNavbar();
   const router = useRouter();
+  
 
   return (
       <div className={cn("zd:flex zd:flex-col zd:items-center", className)}>

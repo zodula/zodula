@@ -35,8 +35,8 @@ export const Breadcrumb = ({ className = "", items, showHome = true }: Breadcrum
         }
 
         // Handle different route patterns
-        if (pathSegments.length >= 3 && pathSegments[1] === "doctypes") {
-            const doctype = pathSegments[2]
+        if (pathSegments.length >= 3 && pathSegments[2] === "doctypes") {
+            const doctype = pathSegments[3]
 
             // Add doctype breadcrumb
             breadcrumbItems.push({
@@ -45,8 +45,8 @@ export const Breadcrumb = ({ className = "", items, showHome = true }: Breadcrum
             })
 
             // Handle specific doctype actions
-            if (pathSegments.length >= 4) {
-                const action = pathSegments[3]
+            if (pathSegments.length >= 5) {
+                const action = pathSegments[4]
 
                 if (action === "list") {
                     breadcrumbItems.push({
@@ -54,8 +54,8 @@ export const Breadcrumb = ({ className = "", items, showHome = true }: Breadcrum
                         href: `/desk/${org}/doctypes/${doctype}/list`
                     })
                 } else if (action === "form") {
-                    const id = pathSegments[4]
-                    if (pathSegments.length >= 5) {
+                    const id = pathSegments[5]
+                    if (pathSegments.length >= 6) {
                         // Edit existing document
                         breadcrumbItems.push({
                             label: t("Edit"),

@@ -276,67 +276,24 @@ export class ZodulaDoctypeSelector<
 
       let results = [] as Zodula.SelectDoctype<TN>[];
 
-      if (
-        this.doctypeName === "zodula__Doctype" &&
-        !this.options.bypass &&
-        !roles.includes("System Admin")
-      ) {
-        for (const doctypeDoc of result) {
-          const { can } =
-            await ZodulaDoctypeHelper.checkPermission(
-              doctypeDoc.id as any,
-              "can_select",
-              doctypeDoc,
-              {
-                bypass: this.options.bypass,
-                doctype: doctypeDoc,
-                user,
-                roles,
-              }
-            );
-          if (can) {
-            // Apply permission level permissions to filter fields
-            let filteredDoc = doctypeDoc;
-            if (!this.options.bypass && !roles.includes("System Admin")) {
-              const isOwn = doctypeDoc.owner === user.id;
-              filteredDoc = await ZodulaDoctypeHelper.applyPermLevelPermission(
-                this.doctypeName,
-                doctypeDoc,
-                roles,
-                this.options.bypass,
-                isOwn
-              );
-            }
-            results.push(
-              this.options.unsafe
-                ? filteredDoc
-                : (zodula.utils.safe(
-                    this.doctypeName,
-                    filteredDoc
-                  ) as Zodula.SelectDoctype<TN>)
+      results = await Promise.all(
+        result.map(async (doc) => {
+          // Apply permission level permissions to filter fields
+          if (!this.options.bypass && !roles.includes("System Admin")) {
+            const isOwn = doc.owner === user.id;
+            doc = await ZodulaDoctypeHelper.applyPermLevelPermission(
+              this.doctypeName,
+              doc,
+              roles,
+              this.options.bypass,
+              isOwn
             );
           }
-        }
-      } else {
-        results = await Promise.all(
-          result.map(async (doc) => {
-            // Apply permission level permissions to filter fields
-            if (!this.options.bypass && !roles.includes("System Admin")) {
-              const isOwn = doc.owner === user.id;
-              doc = await ZodulaDoctypeHelper.applyPermLevelPermission(
-                this.doctypeName,
-                doc,
-                roles,
-                this.options.bypass,
-                isOwn
-              );
-            }
-            return this.options.unsafe
-              ? doc
-              : zodula.utils.safe(this.doctypeName, doc);
-          })
-        ) as Zodula.SelectDoctype<TN>[];
-      }
+          return this.options.unsafe
+            ? doc
+            : zodula.utils.safe(this.doctypeName, doc);
+        })
+      ) as Zodula.SelectDoctype<TN>[];
 
       return {
         docs: results,

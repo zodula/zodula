@@ -970,10 +970,9 @@ export function DocFormView({
               <span className="zd:text-sm zd:text-muted-foreground">•</span>
               <span className="zd:text-sm zd:text-muted-foreground">
                 {doc?.updated_by ? (
-                  <UserLink
-                    userId={doc.updated_by}
-                    name={getUserName(doc.updated_by) || doc.updated_by}
-                  />
+                  <span>
+                    {getUserName(doc.updated_by) || doc.updated_by}
+                    </span>
                 ) : (
                   "Unknown"
                 )}{" "}
