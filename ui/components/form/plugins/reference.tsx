@@ -304,6 +304,8 @@ const ReferenceInput = (props: {
       }}
       allowFreeText
       readOnly={props.readonly}
+      clearable={true}
+      hideChevron={true}
       suffix={
         <>
           {!!props.value && !props.multiple && (

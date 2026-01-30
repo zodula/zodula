@@ -67,6 +67,7 @@ export interface SelectProps {
   validate?: boolean;
   displayMode?: "label" | "value" | "key";
   autocomplete?: 'on' | 'off';
+  hideChevron?: boolean;
 }
 
 const Select = ({
@@ -96,6 +97,7 @@ const Select = ({
   validate = false,
   displayMode = "value",
   autocomplete = "off",
+  hideChevron = false,
 }: SelectProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
@@ -569,15 +571,17 @@ const Select = ({
               <button
                 type="button"
                 onClick={handleClear}
-                className="zd:p-1 zd:hover:bg-muted-foreground/10 zd:rounded"
+                className="zd:p-1 zd:cursor-pointer"
               >
                 <XIcon />
               </button>
             )}
-            {isOpen ? (
-              <ChevronUp className="zd:h-4 zd:w-4 zd:text-muted-foreground" />
-            ) : (
-              <ChevronDown className="zd:h-4 zd:w-4 zd:text-muted-foreground" />
+            {!hideChevron && (
+              isOpen ? (
+                <ChevronUp className="zd:h-4 zd:w-4 zd:text-muted-foreground" />
+              ) : (
+                <ChevronDown className="zd:h-4 zd:w-4 zd:text-muted-foreground" />
+              )
             )}
           </div>
         }
