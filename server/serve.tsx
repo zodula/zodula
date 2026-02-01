@@ -13,12 +13,15 @@ import extendRealtime from "./serve/extend/realtime";
 import { doMigrate } from "../commands/migrate";
 import { extendPage } from "./serve/extend/page";
 import { extendTranslation } from "./serve/extend/translation";
+import { OrgTier } from "./serve/extend/org-tier";
 
 
 async function startServer() {
     await startup()
     await doMigrate("main")
     const server = new BXO()
+    
+    server.use(OrgTier())
     server.use(openapi())
 
     server.use(extendAction())

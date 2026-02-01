@@ -19,7 +19,21 @@ const DEFAULT_ICONS = [
   "Heart", "Bookmark", "Tag", "Search", "Filter", "Grid", "List",
   "Plus", "Minus", "Edit", "Trash2", "Copy", "Move", "Download",
   "Upload", "Share", "Lock", "Unlock", "Eye", "EyeOff", "Bell",
-  "BellOff", "Check", "X", "AlertCircle", "Info", "HelpCircle"
+  "BellOff", "Check", "X", "AlertCircle", "Info", "HelpCircle",
+  "Building", "Building2", "CreditCard", "DollarSign", "TrendingUp", "TrendingDown",
+  "PieChart", "BarChart", "Wallet", "Phone", "PhoneCall", "Video", "VideoOff",
+  "Send", "Inbox", "Save", "SaveAll", "RefreshCw", "RotateCw", "Power", "PowerOff",
+  "Play", "Pause", "StopCircle", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown",
+  "ChevronLeft", "ChevronRight", "ChevronUp", "ChevronDown", "Image", "Images",
+  "Music", "Film", "Wrench", "Hammer", "Palette", "Paintbrush",
+  "CheckCircle", "XCircle", "AlertTriangle", "Zap", "Flame", "Sparkles",
+  "Circle", "Square", "Triangle", "Globe", "Map", "MapPin", "Compass", "Target",
+  "Flag", "Award", "Trophy", "Gift", "Package", "Box", "ShoppingCart", "Store",
+  "Coffee", "Briefcase", "Laptop", "Monitor", "Smartphone", "Tablet", "Printer",
+  "Server", "Cloud", "CloudUpload", "CloudDownload", "Shield", "Key", "Fingerprint",
+  "Activity", "Gauge", "Timer", "Clock", "Sun", "Moon", "Lightbulb",
+  "Flashlight", "Camera", "Mic", "Headphones", "Radio", "Tv", "Gamepad2",
+  "Dice1", "Dice2", "Dice3", "Dice4", "Dice5", "Dice6"
 ]
 
 export const IconSelectPopup: React.FC<IconSelectPopupProps> = ({

@@ -251,13 +251,17 @@ export function DocFormView({
     return processedFields;
   }, [fields, doctypeDoc, t, fieldPermissions, isOwn, roles, user]);
 
+  // Compute formId based on mode and document ID
   const formId = useMemo(() => {
-    return mode === "create" ? `new-${doctype}` : `edit-${doctype}-${id}`;
+    if (mode === "create") {
+      return `create-${doctype}`;
+    }
+    return `edit-${doctype}-${id || ""}`;
   }, [doctype, id, mode]);
 
   const { formData, handleChange, setValues, reset, getFormData } = useForm({
-    formId: `${mode === "create" ? "create" : "edit"}-${doctype}-${formId}`,
-    initialValues: undefined, // Don't pass doc here to avoid recomputation issues
+    formId,
+    initialValues: undefined,
     fields: formFields,
   });
 
@@ -267,10 +271,10 @@ export function DocFormView({
   
   React.useEffect(() => {
     if (mode === "edit" && doc) {
-      // Only set values if form is empty or if doc ID changed (new document loaded)
-      // This prevents overwriting user input while typing
       const currentDocId = doc.id;
       
+      // Only update form values if doc ID changed (new document loaded)
+      // This prevents overwriting user input while typing
       if (prevDocIdRef.current !== currentDocId) {
         const valuesToSet = { ...doc };
         if (prefill) {
@@ -280,7 +284,7 @@ export function DocFormView({
         prevDocIdRef.current = currentDocId;
       }
     }
-  }, [doc?.id, setValues, prefill, formId, mode]);
+  }, [doc?.id, setValues, prefill, mode]);
 
   React.useEffect(() => {
     if (mode === "create" && fields && doctypeDoc) {
@@ -405,18 +409,6 @@ export function DocFormView({
     }
   };
 
-  const handleUpdate = async () => {
-    try {
-      console.log("DEBUG: handleUpdate called");
-      const payload = getUpdatePayload();
-      console.log("DEBUG: handleUpdate - payload:", payload);
-      await zodula.doc.update_doc(doctype, id || "", payload);
-      reload();
-    } finally {
-      // Handle completion
-    }
-  };
-
   const handleCancel = async () => {
     try {
       const con = await confirm({
@@ -434,18 +426,91 @@ export function DocFormView({
     }
   };
 
-  const handleSave = async () => {
-    console.log("DEBUG: handleSave called");
+  // Helper function to get changed fields and standard fields
+  const getUpdatePayload = useCallback(() => {
+    // Always get the latest form data directly from the store
+    // This ensures we have the most current values even after ID changes
+    const latestFormData = getFormData();
+
+    if (!doc) {
+      // For create mode, return all form data
+      return latestFormData;
+    }
+
+    const standardFieldNames = Object.keys(ClientFieldHelper.standardFields());
+    const changedFields: Record<string, any> = {};
+
+    // Include all standard fields
+    standardFieldNames.forEach((fieldName) => {
+      if (latestFormData[fieldName] !== undefined) {
+        changedFields[fieldName] = latestFormData[fieldName];
+      }
+    });
+
+    // Get all field names from both doc and latestFormData
+    const allFieldNames = new Set([
+      ...Object.keys(latestFormData),
+      ...Object.keys(doc as any)
+    ]);
+
+    // Include only changed non-standard fields
+    allFieldNames.forEach((fieldName) => {
+      if (standardFieldNames.includes(fieldName)) {
+        return; // Skip standard fields (already handled above)
+      }
+
+      const oldValue = (doc as any)[fieldName];
+      const newValue = latestFormData[fieldName];
+      
+      // Check if value has changed
+      if (!valuesAreEqual(oldValue, newValue)) {
+        changedFields[fieldName] = newValue;
+      }
+    });
+
+    return changedFields;
+  }, [getFormData, doc])
+
+  const handleUpdate = useCallback(async () => {
+    try {
+      const payload = getUpdatePayload();
+      await zodula.doc.update_doc(doctype, id || "", payload);
+      reload();
+    } catch (error) {
+      console.error("Error updating doc:", error);
+    }
+  }, [doctype, id, getUpdatePayload, reload]);
+
+  // ===== COMPUTED VALUES =====
+  const isSingle = doctypeDoc?.is_single === 1;
+
+  // Helper function to compare values (handles different types)
+  const valuesAreEqual = (val1: any, val2: any): boolean => {
+    // Handle null/undefined
+    if (val1 == null && val2 == null) return true;
+    if (val1 == null || val2 == null) return false;
+    
+    // Handle arrays and objects
+    if (typeof val1 === 'object' && typeof val2 === 'object') {
+      return JSON.stringify(val1) === JSON.stringify(val2);
+    }
+    
+    // Handle primitive types
+    return val1 === val2;
+  };
+
+  const handleSave = useCallback(async () => {
     const payload = getUpdatePayload();
-    console.log("DEBUG: handleSave - payload:", payload);
     const updatedDoc = await zodula.doc.update_doc(doctype, id || "", payload);
 
     if (updatedDoc.id !== id && !isSingle) {
+      // ID changed - navigate to new URL
       replace(`/desk/${org}/doctypes/${doctype}/form/${updatedDoc.id}`);
     } else {
+      // ID unchanged - just reload
       reload();
     }
-  };
+  }, [doctype, id, org, replace, reload, isSingle, getUpdatePayload])
 
   // Helper function to set nested field values
   const setNestedField = (obj: any, fieldPath: string, value: any) => {
@@ -534,80 +599,7 @@ export function DocFormView({
     }
   };
 
-  // Helper function to compare values (handles different types)
-  const valuesAreEqual = (val1: any, val2: any): boolean => {
-    // Handle null/undefined
-    if (val1 == null && val2 == null) return true;
-    if (val1 == null || val2 == null) return false;
-    
-    // Handle arrays and objects
-    if (typeof val1 === 'object' && typeof val2 === 'object') {
-      return JSON.stringify(val1) === JSON.stringify(val2);
-    }
-    
-    // Handle primitive types
-    return val1 === val2;
-  };
-
-  // Helper function to get changed fields and standard fields
-  const getUpdatePayload = () => {
-    if (!doc) {
-      // For create mode, get latest form data
-      const latestFormData = getFormData();
-      console.log("DEBUG: getUpdatePayload (create mode) - latestFormData:", latestFormData);
-      return latestFormData;
-    }
-
-    // Get latest form data to ensure we have all current values
-    const latestFormData = getFormData();
-    console.log("DEBUG: getUpdatePayload - doc:", doc);
-    console.log("DEBUG: getUpdatePayload - formData (memoized):", formData);
-    console.log("DEBUG: getUpdatePayload - latestFormData (from store):", latestFormData);
-
-    const standardFieldNames = Object.keys(ClientFieldHelper.standardFields());
-    const changedFields: Record<string, any> = {};
-
-    // Include all standard fields
-    standardFieldNames.forEach((fieldName) => {
-      if (latestFormData[fieldName] !== undefined) {
-        changedFields[fieldName] = latestFormData[fieldName];
-      }
-    });
-
-    // Get all field names from both doc and latestFormData to ensure we check everything
-    const allFieldNames = new Set([
-      ...Object.keys(latestFormData),
-      ...Object.keys(doc as any)
-    ]);
-
-    // Include only changed non-standard fields
-    allFieldNames.forEach((fieldName) => {
-      if (standardFieldNames.includes(fieldName)) {
-        return; // Skip standard fields (already handled above)
-      }
-
-      const oldValue = (doc as any)[fieldName];
-      const newValue = latestFormData[fieldName];
-      
-      // Check if value has changed
-      if (!valuesAreEqual(oldValue, newValue)) {
-        console.log(`DEBUG: Field "${fieldName}" changed:`, {
-          old: oldValue,
-          new: newValue,
-          oldType: typeof oldValue,
-          newType: typeof newValue
-        });
-        changedFields[fieldName] = newValue;
-      }
-    });
-
-    console.log("DEBUG: getUpdatePayload - changedFields:", changedFields);
-    console.log("DEBUG: getUpdatePayload - changedFields count:", Object.keys(changedFields).length);
-    return changedFields;
-  };
-
   // ===== COMPUTED VALUES =====
-  const isSingle = doctypeDoc?.is_single === 1;
   const doctypeLabel = doctypeDoc?.label || doctype;
   const isSystemGenerated = doctypeDoc?.is_system_generated === 1;
   const isMac =
@@ -810,8 +802,7 @@ export function DocFormView({
         </Button>
       );
     }
-    console.log("primaryButtonRender", mode, isLoading, isDirty, doc);
-  }, [mode, isLoading, isDirty, doc?.doc_status]);
+  }, [mode, isLoading, isDirty, doc?.doc_status, doctypeDoc?.is_submittable, handleSave, handleSubmit, handleUpdate, t]);
 
   // ===== LOADING & ERROR STATES =====
   if (mode === "edit" && loading) {

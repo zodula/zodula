@@ -8,13 +8,15 @@ export default $doctype<"zodula__Workspace">({
         label: "Idx",
         default: "0"
     },
-    workspace_parent: $f.VirtualReference({
+    workspace_parent: {
+        type: "Virtual Reference",
         label: "Workspace Parent",
         reference: "zodula__Workspace"
-    }),
-    icon: $f.Text({
+    },
+    icon: {
+        type: "Text",
         label: "Icon"
-    }),
+    },
     app: {
         type: "Reference",
         label: "App",

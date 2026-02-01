@@ -6,7 +6,6 @@ import { ZodulaDoctypeGetter } from "./get"
 import { ZodulaDoctypeDeleter } from "./delete"
 import { ZodulaDoctypeSubmit } from "./submit"
 import { ZodulaDoctypeCancel } from "./cancel"
-import { ZodulaDoctypeRename } from "./rename"
 import { ErrorWithCode } from "@/zodula/error"
 import path from "path"
 
@@ -44,10 +43,6 @@ export class ZodulaDoctype<TN extends Zodula.DoctypeName = Zodula.DoctypeName> {
 
     cancel(id: string) {
         return new ZodulaDoctypeCancel<TN>(this.doctypeName, id)
-    }
-
-    rename(oldId: string, newId: string) {
-        return new ZodulaDoctypeRename<TN>(this.doctypeName, oldId, newId)
     }
 
     async get_file_url(docId: string, fieldName: string) {

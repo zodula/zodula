@@ -79,15 +79,6 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
             throw new Error(`Document with id ${this.id} not found`, { cause: 404 })
         }
 
-        // Validate organization access
-        await ZodulaDoctypeHelper.validateOrganization(
-            this.doctypeName,
-            this.session,
-            "delete this document",
-            old,
-            this.options.bypass
-        )
-
         const prepared = {
             ...old,
             id: this.id

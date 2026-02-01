@@ -12,7 +12,7 @@ export default $doctype<"zodula__Audit Trail">(
     },
     action: {
       type: "Select",
-      options: "Insert\nUpdate\nDelete\nRename\nSubmit\nCancel\nComment",
+      options: "Insert\nUpdate\nDelete\nSubmit\nCancel\nComment",
       required: 1,
     },
     old_value: {

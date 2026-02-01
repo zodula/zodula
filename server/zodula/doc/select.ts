@@ -139,8 +139,8 @@ export class ZodulaDoctypeSelector<
       }
     }
 
-    if (doctype.config.is_global !== 1 && organization !== "System" && !this.options.bypass) {
-      whereConditions.push(`("organization" = "${organization}" OR "organization" = "System")`);
+    if (doctype.config.is_global !== 1 && organization !== "SYS" && !this.options.bypass) {
+      whereConditions.push(`("organization" = "${organization}" OR "organization" = "SYS")`);
     }
     if(doctype.name === "zodula__Organization" && !roles.includes("System Admin") && !this.options.bypass) {
       whereConditions.push(`("owner" = "${user?.id}" OR "id" IN ("${userOrganizationRoles.join('","')}"))`);
@@ -202,17 +202,8 @@ export class ZodulaDoctypeSelector<
       const session = new ZodulaSession();
       const user = await session.user(true);
       const organization = await session.organization(true);
-      const userOrganizationRoles = await session.organizationRoles(true);
+      const userOrganizationRoles = await session.organizationRoles(undefined, true);
       const roles = await session.roles();
-      // Validate organization access
-      await ZodulaDoctypeHelper.validateOrganization(
-        this.doctypeName,
-        session,
-        "select documents",
-        undefined,
-        this.options.bypass
-      );
-
       const permissions = await ZodulaDoctypeHelper.getPermissions(
         this.doctypeName,
         roles

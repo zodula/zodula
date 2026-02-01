@@ -285,7 +285,7 @@ export default function DoctypeListPage() {
         return <ErrorView message="Doctype not found" status={404} />
     }
 
-    if(doctypeDoc.is_global === 1 && org !== "System") {
+    if(doctypeDoc.is_global === 1 && org !== "SYS") {
         return <ErrorView message="Doctype is global and cannot be accessed from this organization" status={404} />
     }
 

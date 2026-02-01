@@ -5,7 +5,7 @@ import { Database } from "../database/database";
 export class ZodulaSession {
   private getSystemUser() {
     return {
-      name: "System",
+      name: "SYS",
       email: "system@example.com",
       password: "password",
       is_active: 1,
@@ -37,18 +37,18 @@ export class ZodulaSession {
     ];
   }
 
-  async organizationRoles(bypass?: boolean) {
+  async organizationRoles(organization?: string, bypass?: boolean) {
     const db = Database("main");
     const user = await this.user(true);
-    const organization = await this.organization(true);
-    if (!organization) {
+    const org = organization || (await this.organization(true));
+    if (!org) {
       return [];
     }
     const organizationRoles = await db
       .select("*")
       .from("zodula__Organization Role")
       .where("userId", "=", user.id)
-      .where("organizationId", "=", organization)
+      .where("organizationId", "=", org)
       .execute();
       
     return organizationRoles.map(
@@ -128,10 +128,11 @@ export class ZodulaSession {
     return user;
   }
 
-  async roles(bypass?: boolean) {
+  async roles(organization?: string | null, bypass?: boolean) {
     const db = Database("main");
     const user = await this.user(true);
-    const organizationRoles = await this.organizationRoles(true);
+    const org = organization ?? (await this.organization(true));
+    const organizationRoles = await this.organizationRoles(org ?? undefined, true);
 
     const roles = await db
       .select("*")
@@ -154,7 +155,7 @@ export class ZodulaSession {
   }
 
   async hasRoles(roles: string[]) {
-    const userRoles = await this.roles(true);
+    const userRoles = await this.roles(undefined, true);
     return roles.some((role) => userRoles.includes(role));
   }
 }

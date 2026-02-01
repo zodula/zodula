@@ -25,6 +25,19 @@ export default $doctype<"zodula__Organization">({
         accept: "image/*",
         label: "Logo"
     },
+    tier_level: {
+        type: "Select",
+        label: "Tier Level",
+        options: "0\n1\n2\n3\n4\n5",
+        required: 1,
+        perm_level: "1",
+        default: "0"
+    },
+    tier_expires_at: {
+        type: "Date",
+        label: "Tier Expires At",
+        perm_level: "1",
+    },
 }, {
     naming_series: "{{name}}",
     label: "Organization",

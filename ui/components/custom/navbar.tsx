@@ -110,7 +110,7 @@ export const Navbar = ({ children }: NavbarProps) => {
 
     // Add doctype results
     doctypeResults.docs.forEach((doc) => {
-      if(doc.is_global === 1 && org !== "System") {
+      if(doc.is_global === 1 && org !== "SYS") {
         return;
       }
       const translatedLabel = t(doc.label || doc.name);

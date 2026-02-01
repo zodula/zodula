@@ -53,17 +53,8 @@ export class ZodulaDoctypeGetter<
       if (!this.options.bypass) {
         const user = await session.user(true);
         const old = (await db.get(
-          `SELECT * FROM "${doctype?.name}" WHERE "id" = '${this.id}' AND (${isGlobal ? "1=1" : `("organization" = "${organization}" OR "organization" = "System")`})`    
+          `SELECT * FROM "${doctype?.name}" WHERE "id" = '${this.id}' AND (${isGlobal ? "1=1" : `("organization" = "${organization}" OR "organization" = "SYS")`})`    
         )) as any;
-
-        // Validate organization access
-        await ZodulaDoctypeHelper.validateOrganization(
-          this.doctypeName,
-          session,
-          "get this document",
-          old,
-          this.options.bypass
-        );
 
         const roles = await zodula.session.roles();
         const { can } =
@@ -103,7 +94,7 @@ export class ZodulaDoctypeGetter<
               )
           : ["*"];
       let result = (await db.get(
-        `SELECT ${fields.join(",")} FROM "${doctype?.name}" WHERE "id" = '${this.id}' AND (${isGlobal ? "1=1" : `("organization" = "${organization}" OR "organization" = "System")`})`
+        `SELECT ${fields.join(",")} FROM "${doctype?.name}" WHERE "id" = '${this.id}'`
       )) as any;
 
       if (relatives.length > 0 && result) {

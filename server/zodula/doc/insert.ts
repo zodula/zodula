@@ -47,16 +47,9 @@ export class ZodulaDoctypeInsert<
       const db = Database("main");
       const user = await this.session.user(true);
       const doctype = loader.from("doctype").get(this.doctypeName);
+      const organization = await this.session.organization(true);
 
-      // Validate organization access
-      const organization = await ZodulaDoctypeHelper.validateOrganization(
-        this.doctypeName,
-        this.session,
-        "create this document",
-        undefined,
-        this.options.bypass
-      );
-      this.input.organization = organization;
+      this.input.organization = organization || "SYS";
 
       // Validate readonly fields
       ZodulaDoctypeHelper.validateDoc(
@@ -78,7 +71,7 @@ export class ZodulaDoctypeInsert<
       await this.applyFileInsert(prepared, this.doctypeName, doctype.schema);
 
       // Check permissions
-      const roles = await zodula.session.roles();
+      const roles = await zodula.session.roles(this.input.organization);
       const { can } =
         await ZodulaDoctypeHelper.checkPermission(
           this.doctypeName,

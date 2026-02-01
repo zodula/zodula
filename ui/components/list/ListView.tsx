@@ -130,20 +130,13 @@ export function ListView({
       ? plugins.find((plugin) => plugin.types.includes(displayFieldInfo.type))
       : null;
 
-    cols.push({
-      key: displayField,
-      label: displayField === "id" ? "ID" : displayField,
-      sortable: true,
-      render:
-        displayPlugin && displayFieldInfo
-          ? (doc: any) =>
-              displayPlugin.cellRender({
-                fieldOptions: displayFieldInfo,
-                value: doc[displayField],
-                doc: doc,
-              })
-          : undefined,
-    });
+      cols.push({
+        key: "id",
+        label: "ID",
+        sortable: true,
+        render:
+          (doc: any) => doc.id,
+      });
 
     // Add ALL fields (not just in_list_view fields)
     fields.forEach((field: any) => {

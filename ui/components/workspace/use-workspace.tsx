@@ -1163,7 +1163,7 @@ export const useWorkspace = () => {
   // Filter and sort workspaces based on organization
   // is_system workspaces should only show in System Organization
   const workspaces = useMemo(() => {
-    const isSystemOrg = organization?.id === "System";
+    const isSystemOrg = organization?.id === "SYS";
     
     const filtered = allWorkspaces.filter((workspace) => {
       // If workspace is system, only show in System Organization

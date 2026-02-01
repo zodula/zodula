@@ -37,15 +37,6 @@ export class ZodulaDoctypeSubmit<TN extends Zodula.DoctypeName = Zodula.DoctypeN
         // Validate document exists and can be submitted
         this.validateDocument(old)
 
-        // Validate organization access
-        await ZodulaDoctypeHelper.validateOrganization(
-            this.doctypeName,
-            this.session,
-            "submit this document",
-            old,
-            this.options.bypass
-        )
-
         // Check if doctype is submittable
         if (doctype?.schema.is_submittable !== 1) {
             throw new ErrorWithCode(`Doctype ${this.doctypeName} is not submittable`, { status: 400 })

@@ -28,10 +28,10 @@ export async function naming<TN extends Zodula.DoctypeName>(
    * {{field}} (field value)
    */
   let namingSeries = doctypeMetadata?.schema.naming_series;
-  if (doctypeMetadata?.schema.is_single) {
-    return doctypeMetadata?.name;
-  }
   let id = genRanHex(16);
+  if (doctypeMetadata?.schema.is_single) {
+    id = doctypeMetadata?.name;
+  }
   if (!!namingSeries) {
     // Use the improved getFieldValueFromDoc function to handle both field and utility patterns
     let tempId = getFieldValueFromDoc(namingSeries, data as any);
@@ -43,18 +43,21 @@ export async function naming<TN extends Zodula.DoctypeName>(
     // count #
     for (const runingNumberSqure of id.match(runingNumberSqureRegex) || []) {
       const whereId = id.replaceAll(runingNumberSqure, "%");
-      
+
       // Instead of counting, find the maximum number used to handle gaps from deletions
-      const existingIdsQuery = `SELECT id FROM "${doctypeMetadata?.name}" WHERE id LIKE '${whereId}' AND organization = '${data.organization}'`;
+      const existingIdsQuery = `SELECT id FROM "${doctypeMetadata?.name}" WHERE id LIKE '${whereId}'`;
       const existingIds = (await db.all(existingIdsQuery)) as { id: string }[];
-      
+
       let maxNumber = 0;
       const numberLength = runingNumberSqure.length - 2; // -2 for { and }
       const patternIndex = whereId.indexOf("%");
-      
+
       // Extract the numeric part from each existing ID
       for (const row of existingIds) {
-        if (patternIndex !== -1 && row.id.length >= patternIndex + numberLength) {
+        if (
+          patternIndex !== -1 &&
+          row.id.length >= patternIndex + numberLength
+        ) {
           // Extract the numeric part at the position where {#####} appears
           const numericPart = row.id.substring(
             patternIndex,
@@ -66,16 +69,14 @@ export async function naming<TN extends Zodula.DoctypeName>(
           }
         }
       }
-      
+
       // Next number is max + 1, or 1 if no documents exist
       const nextNumber = maxNumber + 1;
 
-      const squareCount = nextNumber
-        .toString()
-        .padStart(numberLength, "0");
+      const squareCount = nextNumber.toString().padStart(numberLength, "0");
       id = id.replace(runingNumberSqure, squareCount);
     }
-    return id;
   }
+
   return id;
 }

@@ -9,7 +9,7 @@ export default $action(async (ctx) => {
     }
     const userRoles = await $zodula.session.roles()
     const organizationsOwn = await $zodula.doctype("zodula__Organization").select().where("owner", "=", user.id).bypass(true)
-    const systemOrg = await $zodula.doctype("zodula__Organization").select().where("id", "=", "System").bypass(true)
+    const systemOrg = await $zodula.doctype("zodula__Organization").select().where("id", "=", "SYS").bypass(true)
     const organizationsUserRoles = await $zodula.doctype("zodula__Organization Role").select().where("userId", "=", user.id).bypass(true)
 
     const organizationsUser = await $zodula.doctype("zodula__Organization").select().where("id", "IN", organizationsUserRoles?.docs?.map((doc) => doc.organizationId)).bypass(true)

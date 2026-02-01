@@ -57,14 +57,6 @@ export class ZodulaDoctypeUpdate<
     // Validate document exists and can be updated
     await this.validateDocument(old);
 
-    // Validate organization access
-    await ZodulaDoctypeHelper.validateOrganization(
-      this.doctypeName,
-      this.session,
-      "update this document",
-      old,
-      this.options.bypass
-    );
     // Validate readonly fields
     ZodulaDoctypeHelper.validateDoc(
       this.input,
@@ -244,7 +236,7 @@ export class ZodulaDoctypeUpdate<
       });
     }
     if (old.id !== this.input.id) {
-      throw new Error(`Must not rename document with update api`, {
+      throw new Error(`Must not change id with update api`, {
         cause: 400,
       });
     }
@@ -306,7 +298,8 @@ export class ZodulaDoctypeUpdate<
 
   private async shouldChangeId(
     doctype: any,
-    prepared: Zodula.SelectDoctype<TN>
+    prepared: Zodula.SelectDoctype<TN>,
+    db: Bunely
   ): Promise<boolean> {
     const namingSeries = doctype.schema.naming_series;
     if (!namingSeries) {
@@ -357,12 +350,10 @@ export class ZodulaDoctypeUpdate<
       // Update the prepared document with the new ID
       prepared.id = newId as any;
 
-      // Perform the rename operation
-      await zodula.doctype(this.doctypeName).rename(this.input.id!, newId);
+      await db.run(`UPDATE "${this.doctypeName}" SET id = ? WHERE id = ?`, [newId, this.input.id]);
 
       // Update the input ID for the rest of the update process
       this.input.id = newId as any;
-
       return true;
     }
 
@@ -380,7 +371,7 @@ export class ZodulaDoctypeUpdate<
 
     // Check if id should change and perform rename if needed
     // This must be done before extracting relationship data
-    await this.shouldChangeId(doctype, prepared);
+    await this.shouldChangeId(doctype, prepared, db as Bunely);
 
     // Extract relationship data
     const relationshipData = this.extractRelationshipData(doctype, prepared);

@@ -105,20 +105,28 @@ export class ZodulaDoctypeHelper {
                         dateValue = parsedDate
                     }
                 }
-                switch (fieldType) {
-                    case "Date":
-                        value = format(dateValue, "yyyy-MM-dd")
-                        break
-                    case "Datetime":
-                        value = format(dateValue, "yyyy-MM-dd HH:mm:ss")
-                        break
-                    case "Time":
-                        value = format(dateValue, "HH:mm:ss")
-                        break
-                    default:
-                        break
+                try {
+                    switch (fieldType) {
+                        case "Date":
+                            value = format(dateValue, "yyyy-MM-dd")
+                            break
+                        case "Datetime":
+                            value = format(dateValue, "yyyy-MM-dd HH:mm:ss")
+                            break
+                        case "Time":
+                            value = format(dateValue, "HH:mm:ss")
+                            break
+                        default:
+                            break
+                    }
+                }catch(error) {
+                    if(config.required) {
+                        throw new ErrorWithCode(`Field ${fieldName} is not a valid date`, {
+                            status: 400,
+                        })
+                    }
                 }
-                if (!isValid(dateValue)) {
+                if (!isValid(dateValue) && config.required) {
                     throw new Error(`Field ${fieldName} is not a valid date`)
                 }
             }
@@ -188,11 +196,8 @@ export class ZodulaDoctypeHelper {
 
     static async can(doctype: Zodula.DoctypeName, action: keyof Zodula.SelectDoctype<"zodula__Doctype Permission">, isOwn: boolean, roles: string[], bypass: boolean) {
         const db = Database("main")
-        const isAuthenticated = await zodula.session.isAuthenticated()
         const _roles = [
             ...roles,
-            "Anonymous",
-            isAuthenticated ? "Authenticated" : undefined,
         ].filter(Boolean)
         if (roles.includes("System Admin") || bypass) {
             return true
@@ -287,6 +292,12 @@ export class ZodulaDoctypeHelper {
         //     })
         // }
 
+        if(doctype.is_global == 1 && input.organization !== "SYS") {
+            throw new ErrorWithCode(`Global doctype can only be created in SYS organization`, {
+                status: 400,
+            })
+        }
+
         // check for required
         for (const [fieldName, value] of Object.entries(input)) {
             const fieldConfig = doctype.fields[fieldName as keyof typeof doctype.fields]
@@ -343,8 +354,8 @@ export class ZodulaDoctypeHelper {
             }
 
             // Check if another document with the same value exists
-            let query = `SELECT id FROM "${doctypeName}" WHERE "${fieldName}" = ? AND organization = ?`
-            const params: any[] = [value, input.organization]
+            let query = `SELECT id FROM "${doctypeName}" WHERE "${fieldName}" = ?`
+            const params: any[] = [value]
 
             // For updates, exclude the current document
             if (currentId) {
@@ -407,7 +418,7 @@ export class ZodulaDoctypeHelper {
         doctypeName: TN,
         old: Zodula.SelectDoctype<TN>,
         result: Zodula.SelectDoctype<TN>,
-        action: "Update" | "Submit" | "Cancel" | "Delete" | "Rename",
+        action: "Update" | "Submit" | "Cancel" | "Delete",
         userId: string,
         userName: string
     ): Promise<void> {
@@ -429,13 +440,6 @@ export class ZodulaDoctypeHelper {
             const changedFields: string[] = []
             const oldValues: Record<string, any> = {}
             const newValues: Record<string, any> = {}
-
-            // For rename action, always include the ID change
-            if (action === "Rename" && old.id !== result.id) {
-                changedFields.push("id")
-                oldValues.id = old.id
-                newValues.id = result.id
-            }
 
             for (const field of userDefinedFields) {
                 const oldValue = old[field as keyof Zodula.SelectDoctype<TN>]
@@ -567,55 +571,6 @@ export class ZodulaDoctypeHelper {
 
         // Placeholder return - replace with actual embedding generation
         return {}
-    }
-
-    /**
-     * Validate organization access and return the validated organization value
-     * @param doctypeName - The doctype name
-     * @param session - The ZodulaSession instance
-     * @param action - The action being performed (for error messages)
-     * @param existingDoc - Optional existing document (for operations on existing docs)
-     * @param bypass - Whether to bypass validation
-     * @returns The validated organization value
-     */
-    static async validateOrganization<TN extends Zodula.DoctypeName>(
-        doctypeName: TN,
-        session: any,
-        action: string = "perform this operation",
-        existingDoc?: Zodula.SelectDoctype<TN> | null,
-        bypass: boolean = false
-    ): Promise<string | null> {
-        if (bypass) {
-            const organization = await session.organization(true);
-            const doctype = loader.from("doctype").get(doctypeName);
-            if (doctype.config.is_global !== 1 && organization === "System") {
-                return "System";
-            }
-            return organization || null;
-        }
-
-        const userRoles = await zodula.session.roles();
-        const organizations = await session.organizations(true);
-        const organization = await session.organization(true);
-        const doctype = loader.from("doctype").get(doctypeName);
-
-        if(doctype.name === "zodula__Organization") {
-            return organization;
-        }
-        
-        // Validate global doctype rules
-        if (doctype.config.is_global !== 1 && !organization && organization !== "System") {
-            throw new ErrorWithCode(`You are not allowed to ${action} in this organization`, {
-                status: 403,
-            });
-        }
-
-        // Return validated organization value
-        if (doctype.config.is_global !== 1 && organization === "System") {
-            return "System";
-        }
-
-        return organization || null;
     }
 
     /**
