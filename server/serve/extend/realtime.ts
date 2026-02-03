@@ -5,6 +5,7 @@ import type { DoctypeEvent } from "../../loader/plugins/doctype";
 import { zodula } from "../..";
 import { getUserFromSid } from "../../zodula/utils";
 import { loader } from "../../loader";
+import { ctxContext } from "../../async-context";
 
 // id -> { paths }
 
@@ -12,8 +13,11 @@ export default function extendRealtime() {
     const bxo = new BXO()
     // doctype event realtime
     bxo.ws("/realtime", {
-        open(ws) {
-            addConnection(ws.data?.id, ws)
+        async open(ws) {
+            // Get user from session using cookies from websocket
+            const sid = ws.data?.cookies?.zodula_sid as string | undefined;
+            const user = sid ? await getUserFromSid(sid).catch(() => null) : null;
+            addConnection(ws.data?.id, ws, user?.id || null)
         },
         close(ws) {
             removeConnection(ws.data?.id)
@@ -31,9 +35,19 @@ export default function extendRealtime() {
                     }
                     const [_, zero, ...rest] = path.split("/")
 
+                    // Get user from websocket cookies
+                    const sid = ws.data?.cookies?.zodula_sid as string | undefined;
+                    const user = sid ? await getUserFromSid(sid).catch(() => null) : null;
+
                     if (zero === "doctypes") {
                         const [doctype] = rest
-                        const user = await zodula.session.user(true).catch(() => null)
+                        // Set up context for permission checking
+                        ctxContext.enterWith({
+                            ctx: {
+                                cookies: ws.data?.cookies || {}
+                            } as any
+                        });
+                        
                         const roles = await zodula.session.roles()
                         const doctypeConfig = loader.from("doctype").get(doctype as Zodula.DoctypeName)
                         const { can } = await ZodulaDoctypeHelper.checkPermission(
@@ -60,6 +74,23 @@ export default function extendRealtime() {
                             ws.send(JSON.stringify({
                                 type: "log",
                                 message: "You do not have permission to subscribe to " + path,
+                            }))
+                        }
+                    } else if (zero === "backgrounds") {
+                        // Background job subscriptions - require authentication
+                        if (!user || !user.id) {
+                            ws.send(JSON.stringify({
+                                type: "log",
+                                message: "You must be authenticated to subscribe to background jobs",
+                            }))
+                            return
+                        }
+                        
+                        if (!subscriptions[ws.data?.id]?.paths.includes(path)) {
+                            subscriptions[ws.data?.id]?.paths.push(path)
+                            ws.send(JSON.stringify({
+                                type: "log",
+                                message: "Subscribed to " + path,
                             }))
                         }
                     }

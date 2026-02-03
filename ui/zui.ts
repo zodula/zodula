@@ -221,9 +221,12 @@ function createFormObject(context: any): Form {
       doc[fieldname] = value;
     },
     set_df_property: (fieldname: string, property: string, value: any) => {
-      // This would need to be implemented in the form component
-      // For now, we'll just log it
-      console.log(`set_df_property(${fieldname}, ${property}, ${value})`);
+      // Call the setFieldProperty function from context if available
+      if (context.setFieldProperty) {
+        context.setFieldProperty(fieldname, property, value);
+      } else {
+        console.warn(`set_df_property(${fieldname}, ${property}, ${value}) - setFieldProperty not available in context`);
+      }
     },
     get_doc: () => doc,
     refresh: () => {
@@ -248,11 +251,69 @@ function createFormObject(context: any): Form {
   };
 }
 
+// List context for list scripts
+export interface ListContext {
+  doctype: string;
+  listData: any[];
+  selectedRows: Set<string>;
+  setSelectedRows: (selected: Set<string>) => void;
+  refreshList: () => void;
+  addColumn: (column: { key: string; label: string; render?: (doc: any) => React.ReactNode }) => void;
+  addBadge: (fieldName: string, config: { variant?: string; size?: string; getValue?: (doc: any) => any }) => void;
+}
+
 // Singleton instance for UI scripting
 class ZUI {
   private getStore() {
     return useUIScriptStore.getState();
   }
+
+  list = {
+    on: (doctype: string, eventOrHandlers: 'on_format' | 'on_render' | Record<string, (context: ListContext) => void | Promise<void>>, handler?: (context: ListContext) => void | Promise<void>) => {
+      const { registerScript } = this.getStore();
+      
+      // Handle single event: zui.list.on('Task', 'on_format', function(context) { ... })
+      if (typeof eventOrHandlers === 'string' && typeof handler === 'function') {
+        const eventType = eventOrHandlers;
+        const scriptId = `${doctype}_list_${eventType}_${Date.now()}`;
+        
+        registerScript(doctype, {
+          id: scriptId,
+          doctype,
+          name: `${doctype} list ${eventType}`,
+          events: [
+            {
+              type: eventType as any,
+              action: async (context: any) => {
+                await handler(context as ListContext);
+              }
+            }
+          ]
+        });
+      }
+      // Handle multiple events: zui.list.on('Task', { on_format: function(context) { ... }, on_render: function(context) { ... } })
+      else if (typeof eventOrHandlers === 'object' && !handler) {
+        const scriptId = `${doctype}_list_multi_${Date.now()}`;
+        const events: any[] = [];
+        
+        Object.entries(eventOrHandlers).forEach(([key, eventHandler]) => {
+          events.push({
+            type: key as any,
+            action: async (context: any) => {
+              await eventHandler(context as ListContext);
+            }
+          });
+        });
+        
+        registerScript(doctype, {
+          id: scriptId,
+          doctype,
+          name: `${doctype} list multiple events`,
+          events
+        });
+      }
+    }
+  };
 
   form = {
     on: (doctype: string, eventOrFieldOrHandlers: EventType | EventHandlers | string, handler?: EventHandler) => {

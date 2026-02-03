@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { useDocList } from "../../hooks/use-doc-list";
 import { useDoc } from "../../hooks/use-doc";
 import { ListToolbar } from "./ListToolbar";
@@ -19,6 +19,7 @@ import { ClientFieldHelper } from "@/zodula/client/field";
 import { plugins } from "../form/plugins";
 import { useTranslation } from "../../hooks/use-translation";
 import { useColumnSettings } from "../../hooks/use-column-settings";
+import { useUIScriptStore } from "../../zui";
 
 interface ListViewProps {
   doctype: string;
@@ -135,8 +136,41 @@ export function ListView({
         label: "ID",
         sortable: true,
         render:
-          (doc: any) => doc.id,
+          (doc: any) => {
+            const isSysOrg = doc.organization === "SYS";
+            return isSysOrg ? (
+              <span className="zd:font-bold">{doc.id}</span>
+            ) : (
+              doc.id
+            );
+          },
       });
+
+    // Add doc_status column right after display field
+    if (!hideDocStatus) {
+      const { DocStatusBadge } = require("../custom/doc-status-badge");
+      const isInvoice = doctype === "zerp__Sales Invoice" || doctype === "zerp__Purchase Invoice";
+      cols.push({
+        key: "doc_status",
+        label: t("Status"),
+        sortable: true,
+        render: (doc: any) => {
+          // For Invoice doctypes, show payment_status when doc_status === 1
+          if (isInvoice && doc.doc_status === 1 && doc.payment_status) {
+            const Badge = require("../ui/badge").Badge;
+            const status = doc.payment_status || "Unpaid";
+            const variant = status === "Paid" ? "success" : status === "Partially Paid" ? "warning" : "default";
+            return (
+              <Badge variant={variant as any} size="sm">
+                {status}
+              </Badge>
+            );
+          }
+          // Default: show doc_status badge
+          return <DocStatusBadge status={doc.doc_status || 0} />;
+        },
+      });
+    }
 
     // Add ALL fields (not just in_list_view fields)
     fields.forEach((field: any) => {
@@ -176,10 +210,16 @@ export function ListView({
     const displayField = (doctypeDoc as any).display_field || "id";
     const defaultCols = [displayField];
 
+    // Add doc_status right after display field if not hidden
+    if (!hideDocStatus) {
+      defaultCols.push("doc_status");
+    }
+
     // Add fields that are in_list_view or required (system default behavior)
     fields.forEach((field: any) => {
       if (
         field.name !== displayField &&
+        field.name !== "doc_status" &&
         (field.in_list_view === 1 || field.required === 1) &&
         !zodula.utils.isStandardField(field.name)
       ) {
@@ -188,7 +228,7 @@ export function ListView({
     });
 
     return defaultCols;
-  }, [doctypeDoc, fields, allAvailableColumns]);
+  }, [doctypeDoc, fields, allAvailableColumns, hideDocStatus]);
 
   // Use shared column settings hook with validation
   const columnSettings = useColumnSettings(
@@ -288,14 +328,87 @@ export function ListView({
       }
     }
   };
+  // Execute list scripts for on_format event
+  const customRenderers = useRef<Record<string, (doc: any) => React.ReactNode>>({});
+  const badgeConfigs = useRef<Record<string, { variant?: string; size?: string; getValue?: (doc: any) => any }>>({});
+  
+  useEffect(() => {
+    const store = useUIScriptStore.getState();
+    const scripts = store.getScripts(doctype);
+    
+    // Execute on_format events to allow scripts to customize column rendering
+    const executeFormatScripts = async () => {
+      const context = {
+        doctype,
+        listData: docs,
+        selectedRows: selected,
+        setSelectedRows: setSelected,
+        refreshList: () => {
+          // Trigger a refresh - this would need to be passed from parent
+          console.log('refreshList called');
+        },
+        addColumn: (column: { key: string; label: string; render?: (doc: any) => React.ReactNode }) => {
+          // This would add a custom column - for now we'll store renderers
+          if (column.render) {
+            customRenderers.current[column.key] = column.render;
+          }
+        },
+        addBadge: (fieldName: string, config: { variant?: string; size?: string; getValue?: (doc: any) => any }) => {
+          badgeConfigs.current[fieldName] = config;
+        }
+      };
+      
+      await store.executeScripts(doctype, 'on_format', context);
+    };
+    
+    if (docs.length > 0) {
+      executeFormatScripts();
+    }
+  }, [doctype, docs, selected, setSelected]);
+
   const _columns = useMemo(() => {
     return allAvailableColumns
       ?.filter((col) => derivedColumns.includes(String(col.key)))
-      .map((col) => ({
+      .map((col) => {
+        // Check if there's a custom renderer from scripts
+        const customRenderer = customRenderers.current[String(col.key)];
+        const badgeConfig = badgeConfigs.current[String(col.key)];
+        
+        // If badge config exists, create a badge renderer
+        if (badgeConfig) {
+          return {
+            ...col,
+            label: t(col.label || col.key || ""),
+            render: (doc: any) => {
+              const Badge = require("../ui/badge").Badge;
+              const valueOrObj = badgeConfig.getValue ? badgeConfig.getValue(doc) : doc[String(col.key)];
+              // Handle both string values and objects with status/variant
+              const displayValue = typeof valueOrObj === 'object' && valueOrObj !== null ? valueOrObj.status : valueOrObj;
+              const variant = typeof valueOrObj === 'object' && valueOrObj !== null ? valueOrObj.variant : badgeConfig.variant;
+              return (
+                <Badge variant={variant as any} size={badgeConfig.size as any}>
+                  {displayValue || ""}
+                </Badge>
+              );
+            }
+          };
+        }
+        
+        // If custom renderer exists, use it
+        if (customRenderer) {
+          return {
         ...col,
         label: t(col.label || col.key || ""),
-      }));
-  }, [allAvailableColumns, derivedColumns, t]);
+            render: customRenderer
+          };
+        }
+        
+        return {
+          ...col,
+          label: t(col.label || col.key || ""),
+        };
+      });
+  }, [allAvailableColumns, derivedColumns, t, customRenderers, badgeConfigs]);
 
   return (
     <div className="zd:flex zd:flex-col zd:gap-4 zd:pb-12">
@@ -339,7 +452,6 @@ export function ListView({
         onRowClick={handleRowClick}
         selected={selected}
         setSelected={setSelected}
-        hideDocStatus={hideDocStatus}
       />
 
       {/* Row count selector at bottom left */}

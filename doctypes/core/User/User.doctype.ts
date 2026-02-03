@@ -19,6 +19,17 @@ export default $doctype<"zodula__User">({
         default: "1",
         in_list_view: 1
     },
+    organization_roles: {
+        type: "Reference Table",
+        label: "Organization Roles",
+        reference: "zodula__Organization Role",
+    },
+    roles: {
+        type: "Reference Table",
+        label: "Roles",
+        reference: "zodula__User Role",
+        required: 0
+    }
 }, {
     label: "User",
     search_fields: "email\nname\nid",

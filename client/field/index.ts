@@ -22,14 +22,14 @@ export const standardFields = {
         allow_on_submit: 1
     },
     created_at: {
-        type: "Datetime",
+        type: "DateTime",
         label: "Created At",
         required: 1,
         default: "NOW()",
         allow_on_submit: 1
     },
     updated_at: {
-        type: "Datetime",
+        type: "DateTime",
         label: "Updated At",
         required: 1,
         default: "NOW()",

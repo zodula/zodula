@@ -204,6 +204,22 @@ export function DocFormView({
     return doc?.owner === (user?.id || null);
   }, [doc?.owner, user?.id]);
 
+  // ===== FIELD PROPERTY OVERRIDES =====
+  // Track field property overrides from UI scripts (set_df_property)
+  const [fieldPropertyOverrides, setFieldPropertyOverrides] = useState<Record<string, Record<string, any>>>({});
+
+  // Function to set field property (used by UI scripts)
+  const setFieldProperty = useCallback((fieldName: string, property: string, value: any) => {
+    setFieldPropertyOverrides((prev) => {
+      const newOverrides = { ...prev };
+      if (!newOverrides[fieldName]) {
+        newOverrides[fieldName] = {};
+      }
+      newOverrides[fieldName][property] = value;
+      return newOverrides;
+    });
+  }, []);
+
   // ===== FORM LOGIC =====
   const formFields = useMemo(() => {
     if (!fields || !doctypeDoc) return {};
@@ -239,17 +255,44 @@ export function DocFormView({
         // Determine if field should be readonly based on permissions
         const fieldReadonly = !canUpdate || field.readonly === 1;
 
-        processedFields[field.name] = {
+        // Start with base field configuration
+        let fieldConfig: any = {
           ...field,
           label: t(field.label || field.name || ""),
           // Set readonly based on update permission
           readonly: fieldReadonly ? 1 : (field.readonly || 0),
         };
+
+        // Apply property overrides from UI scripts
+        const overrides = fieldPropertyOverrides[field.name];
+        if (overrides) {
+          // Handle common property overrides
+          if (overrides.hidden !== undefined) {
+            fieldConfig.hidden = overrides.hidden ? 1 : 0;
+          }
+          if (overrides.readonly !== undefined) {
+            fieldConfig.readonly = overrides.readonly ? 1 : 0;
+          }
+          if (overrides.required !== undefined) {
+            fieldConfig.required = overrides.required ? 1 : 0;
+          }
+          if (overrides.label !== undefined) {
+            fieldConfig.label = overrides.label;
+          }
+          // Apply any other property overrides
+          Object.keys(overrides).forEach((prop) => {
+            if (!['hidden', 'readonly', 'required', 'label'].includes(prop)) {
+              fieldConfig[prop] = overrides[prop];
+            }
+          });
+        }
+
+        processedFields[field.name] = fieldConfig;
       }
     });
 
     return processedFields;
-  }, [fields, doctypeDoc, t, fieldPermissions, isOwn, roles, user]);
+  }, [fields, doctypeDoc, t, fieldPermissions, isOwn, roles, user, fieldPropertyOverrides]);
 
   // Compute formId based on mode and document ID
   const formId = useMemo(() => {
@@ -485,7 +528,7 @@ export function DocFormView({
   const isSingle = doctypeDoc?.is_single === 1;
 
   // Helper function to compare values (handles different types)
-  const valuesAreEqual = (val1: any, val2: any): boolean => {
+  const valuesAreEqual = useCallback((val1: any, val2: any): boolean => {
     // Handle null/undefined
     if (val1 == null && val2 == null) return true;
     if (val1 == null || val2 == null) return false;
@@ -497,7 +540,33 @@ export function DocFormView({
     
     // Handle primitive types
     return val1 === val2;
-  };
+  }, []);
+
+  // Helper function to deeply compare two objects for dirty checking
+  const areObjectsEqual = useCallback((obj1: any, obj2: any): boolean => {
+    if (obj1 === obj2) return true;
+    if (obj1 == null || obj2 == null) return obj1 == obj2;
+    
+    // Get all unique keys from both objects
+    const allKeys = new Set([...Object.keys(obj1), ...Object.keys(obj2)]);
+    
+    for (const key of allKeys) {
+      const val1 = obj1[key];
+      const val2 = obj2[key];
+      
+      // Handle undefined - treat as equal if both are undefined or missing
+      if (val1 === undefined && val2 === undefined) continue;
+      if (val1 === undefined && val2 == null) continue;
+      if (val1 == null && val2 === undefined) continue;
+      
+      // Use valuesAreEqual for comparison
+      if (!valuesAreEqual(val1, val2)) {
+        return false;
+      }
+    }
+    
+    return true;
+  }, [valuesAreEqual]);
 
   const handleSave = useCallback(async () => {
     const payload = getUpdatePayload();
@@ -679,9 +748,11 @@ export function DocFormView({
         (value) => value !== undefined && value !== null && value !== ""
       );
     }
-    const _isDirty = JSON.stringify(formData) !== JSON.stringify(doc);
-    return _isDirty;
-  }, [formData, doc, mode]);
+    if (!doc) return false;
+    
+    // Compare formData with doc using proper deep comparison
+    return !areObjectsEqual(formData, doc);
+  }, [formData, doc, mode, areObjectsEqual]);
 
   useEffect(() => {
     if (!isDirty) {
@@ -940,6 +1011,7 @@ export function DocFormView({
             doctype={doctype}
             tabs={doctypeDoc?.tabs ? JSON.parse(doctypeDoc.tabs) : []}
             enableScripts={true}
+            setFieldProperty={setFieldProperty}
           />
           <div className="">
             {!!doc?.id && <AuditTrail doctype={doctype} docId={id!} />}

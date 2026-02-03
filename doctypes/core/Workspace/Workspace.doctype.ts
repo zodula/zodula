@@ -29,6 +29,12 @@ export default $doctype<"zodula__Workspace">({
         label: "Is System",
         default: "0"
     },
+    workspace_items: {
+        type: "Reference Table",
+        label: "Workspace Items",
+        reference: "zodula__Workspace Item",
+        required: 0
+    }
 }, {
     label: "Workspace",
     is_global: 1,

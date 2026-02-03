@@ -201,16 +201,15 @@ export const extendDoctype = () => {
   const server = new BXO();
   const doctypeMetas = loader.from("doctype").list();
   for (const doctypeMeta of doctypeMetas) {
-    const isSingle = doctypeMeta.schema.is_single;
     // get single doc
     server.get(
-      `/api/resources/${doctypeMeta.name}${isSingle ? `/${doctypeMeta.name}` : "/:id"}`,
+      `/api/resources/${doctypeMeta.name}/:id`,
       async (ctx) => {
         try {
           ctxContext.enterWith({
             ctx: ctx as any,
           });
-          const docid = !!isSingle ? doctypeMeta.name : (ctx as any).params.id;
+          const docid = (ctx as any).params.id;
           const db = Database("main");
 
           if (!Array.isArray(ctx.query.fields)) {
@@ -226,21 +225,12 @@ export const extendDoctype = () => {
               .from(doctypeMeta.name)
               .where("id", "=", docid)
               .first();
-            if (!isExist && isSingle) {
-              await zodula
-                .doctype(doctypeMeta.name)
-                .insert({
-                  id: docid,
-                })
-                .bypass()
-                .override();
-            }
             const result = await zodula
               .doctype(doctypeMeta.name)
               .get(docid)
               .fields((ctx.query.fields || ["*"]) as any[]);
 
-            if (!isExist && !isSingle) {
+            if (!isExist) {
               return ctx.json(
                 {
                   error: "Document not found",
@@ -261,35 +251,34 @@ export const extendDoctype = () => {
     );
 
     // single create doc
-    !isSingle &&
-      server.post(
-        `/api/resources/${doctypeMeta.name}/new`,
-        async (ctx) => {
-          try {
-            ctxContext.enterWith({
-              ctx: ctx as any,
-            });
-            const input = await ctx.body;
-            const result = await zodula
-              .doctype(doctypeMeta.name)
-              .insert(input)
-              .fields(ctx.query.fields || (["*"] as any[]));
-            return ctx.json(result);
-          } catch (error: any) {
-            return ctx.json(
-              {
-                error: error?.message || "Internal server error",
-              },
-              error?.status || 500
-            );
-          }
-        },
-        DoctypeAPIHelper.getCreateRouteConfig(doctypeMeta)
-      );
+    server.post(
+      `/api/resources/${doctypeMeta.name}/new`,
+      async (ctx) => {
+        try {
+          ctxContext.enterWith({
+            ctx: ctx as any,
+          });
+          const input = await ctx.body;
+          const result = await zodula
+            .doctype(doctypeMeta.name)
+            .insert(input)
+            .fields(ctx.query.fields || (["*"] as any[]));
+          return ctx.json(result);
+        } catch (error: any) {
+          return ctx.json(
+            {
+              error: error?.message || "Internal server error",
+            },
+            error?.status || 500
+          );
+        }
+      },
+      DoctypeAPIHelper.getCreateRouteConfig(doctypeMeta)
+    );
 
     // update doc
     server.put(
-      `/api/resources/${doctypeMeta.name}${isSingle ? `/${doctypeMeta.name}` : "/:id"}`,
+      `/api/resources/${doctypeMeta.name}/:id`,
       async (ctx) => {
         try {
           ctxContext.enterWith({
@@ -300,7 +289,7 @@ export const extendDoctype = () => {
             dbcontext.enterWith({
               trx: trx,
             });
-            const docid = isSingle ? doctypeMeta.name : (ctx as any).params.id;
+            const docid = (ctx as any).params.id;
             const input = ctx.body;
             const result = await zodula
               .doctype(doctypeMeta.name)
@@ -321,170 +310,164 @@ export const extendDoctype = () => {
     );
 
     // delete doc
-    !isSingle &&
-      server.delete(
-        `/api/resources/${doctypeMeta.name}/${isSingle ? "" : ":id"}`,
-        async (ctx) => {
-          try {
-            ctxContext.enterWith({
-              ctx: ctx as any,
+    server.delete(
+      `/api/resources/${doctypeMeta.name}/:id`,
+      async (ctx) => {
+        try {
+          ctxContext.enterWith({
+            ctx: ctx as any,
+          });
+          const db = Database("main");
+          return await db.transaction(async (trx) => {
+            dbcontext.enterWith({
+              trx: trx,
             });
-            const db = Database("main");
-            return await db.transaction(async (trx) => {
-              dbcontext.enterWith({
-                trx: trx,
-              });
-              const docid = isSingle
-                ? doctypeMeta.name
-                : (ctx as any).params.id;
-              const result = await zodula
-                .doctype(doctypeMeta.name)
-                .delete(docid);
-              return ctx.json(result);
-            });
-          } catch (error: any) {
-            return ctx.json(
-              {
-                error: error?.message || "Internal server error",
-              },
-              error?.status || 500
-            );
-          }
-        },
-        DoctypeAPIHelper.getDeleteRouteConfig(doctypeMeta)
-      );
+            const docid = (ctx as any).params.id;
+            const result = await zodula
+              .doctype(doctypeMeta.name)
+              .delete(docid);
+            return ctx.json(result);
+          });
+        } catch (error: any) {
+          return ctx.json(
+            {
+              error: error?.message || "Internal server error",
+            },
+            error?.status || 500
+          );
+        }
+      },
+      DoctypeAPIHelper.getDeleteRouteConfig(doctypeMeta)
+    );
 
     // list docs
-    !isSingle &&
-      server.get(
-        `/api/resources/${doctypeMeta.name}`,
-        async (ctx) => {
-          try {
-            const {
-              limit = "20",
-              page = "1",
-              sort = "updated_at",
-              order = "asc",
-              q,
-              fields,
-              ...rest
-            } = ctx.query;
-            const doctypeName = doctypeMeta.name;
-            ctxContext.enterWith({
-              ctx: ctx as any,
+    server.get(
+      `/api/resources/${doctypeMeta.name}`,
+      async (ctx) => {
+        try {
+          const {
+            limit = "20",
+            page = "1",
+            sort = "updated_at",
+            order = "asc",
+            q,
+            fields,
+            ...rest
+          } = ctx.query;
+          const doctypeName = doctypeMeta.name;
+          ctxContext.enterWith({
+            ctx: ctx as any,
+          });
+
+          const db = Database("main");
+          return await db.transaction(async (trx) => {
+            dbcontext.enterWith({
+              trx: trx,
             });
+            let query = zodula
+              .doctype(doctypeName)
+              .select()
+              .limit(+limit)
+              .page(+page)
+              .sort(sort as any, order as "asc" | "desc")
+              .q(q as string)
+              .fields(fields || (["*"] as any[]));
 
-            const db = Database("main");
-            return await db.transaction(async (trx) => {
-              dbcontext.enterWith({
-                trx: trx,
-              });
-              let query = zodula
-                .doctype(doctypeName)
-                .select()
-                .limit(+limit)
-                .page(+page)
-                .sort(sort as any, order as "asc" | "desc")
-                .q(q as string)
-                .fields(fields || (["*"] as any[]));
-
-              if (rest) {
-                const filters = DoctypeAPIHelper.parseFiltersFromObject(rest);
-                for (const [field, operator, value] of filters) {
-                  query = query.where(field as any, operator as any, value);
-                }
+            if (rest) {
+              const filters = DoctypeAPIHelper.parseFiltersFromObject(rest);
+              for (const [field, operator, value] of filters) {
+                query = query.where(field as any, operator as any, value);
               }
+            }
 
-              const result = await query;
-              return ctx.json({
-                docs: result.docs,
-                limit: result.limit,
-                page: result.page,
-                count: result.count,
-              });
+            const result = await query;
+            return ctx.json({
+              docs: result.docs,
+              limit: result.limit,
+              page: result.page,
+              count: result.count,
             });
-          } catch (error: any) {
-            return ctx.json(
-              {
-                error: error?.message || "Internal server error",
-              },
-              error?.status || 500
-            );
-          }
-        },
-        DoctypeAPIHelper.getListRouteConfig(doctypeMeta)
-      );
+          });
+        } catch (error: any) {
+          return ctx.json(
+            {
+              error: error?.message || "Internal server error",
+            },
+            error?.status || 500
+          );
+        }
+      },
+      DoctypeAPIHelper.getListRouteConfig(doctypeMeta)
+    );
 
     // bulk create docs
-    !isSingle &&
-      server.post(
-        `/api/resources/${doctypeMeta.name}`,
-        async (ctx) => {
-          try {
-            ctxContext.enterWith({
-              ctx: ctx as any,
+    server.post(
+      `/api/resources/${doctypeMeta.name}`,
+      async (ctx) => {
+        try {
+          ctxContext.enterWith({
+            ctx: ctx as any,
+          });
+          const db = Database("main");
+          return await db.transaction(async (trx) => {
+            dbcontext.enterWith({
+              trx: trx,
             });
-            const db = Database("main");
-            return await db.transaction(async (trx) => {
-              dbcontext.enterWith({
-                trx: trx,
+            const input = await ctx.body;
+            let result: Zodula.SelectDoctype<typeof doctypeMeta.name>[] = [];
+            for (const item of input.docs || []) {
+              const res = await zodula.doctype(doctypeMeta.name).insert({
+                ...item,
+                id: item.id as string,
               });
-              const input = await ctx.body;
-              let result: Zodula.SelectDoctype<typeof doctypeMeta.name>[] = [];
-              for (const item of input.docs || []) {
-                const res = await zodula.doctype(doctypeMeta.name).insert({
-                  ...item,
-                  id: item.id as string,
-                });
-                result.push(res);
-              }
-              return ctx.json(result);
-            });
-          } catch (error: any) {
-            return ctx.json(
-              {
-                error: error?.message || "Internal server error",
-              },
-              error?.status || 500
-            );
-          }
-        },
-        DoctypeAPIHelper.getBulkCreateRouteConfig(doctypeMeta)
-      );
+              result.push(res);
+            }
+            return ctx.json(result);
+          });
+        } catch (error: any) {
+          return ctx.json(
+            {
+              error: error?.message || "Internal server error",
+            },
+            error?.status || 500
+          );
+        }
+      },
+      DoctypeAPIHelper.getBulkCreateRouteConfig(doctypeMeta)
+    );
 
     // bulk delete docs
-    !isSingle &&
-      server.delete(
-        `/api/resources/${doctypeMeta.name}`,
-        async (ctx) => {
-          try {
-            ctxContext.enterWith({
-              ctx: ctx as any,
+    server.delete(
+      `/api/resources/${doctypeMeta.name}`,
+      async (ctx) => {
+        try {
+          ctxContext.enterWith({
+            ctx: ctx as any,
+          });
+          const db = Database("main");
+          return await db.transaction(async (trx) => {
+            dbcontext.enterWith({
+              trx: trx,
             });
-            const db = Database("main");
-            return await db.transaction(async (trx) => {
-              dbcontext.enterWith({
-                trx: trx,
-              });
-              const input = await ctx.body;
-              for (const id of input.ids) {
-                await zodula.doctype(doctypeMeta.name).delete(id);
-              }
-              return ctx.json({
-                success: true,
-              });
+            const input = await ctx.body;
+            for (const id of input.ids) {
+              await zodula.doctype(doctypeMeta.name).delete(id);
+            }
+            return ctx.json({
+              success: true,
             });
-          } catch (error: any) {
-            return ctx.json(
-              {
-                error: error?.message || "Internal server error",
-              },
-              error?.status || 500
-            );
-          }
-        },
-        DoctypeAPIHelper.getBulkDeleteRouteConfig(doctypeMeta)
-      );
+          });
+        } catch (error: any) {
+          return ctx.json(
+            {
+              error: error?.message || "Internal server error",
+            },
+            error?.status || 500
+          );
+        }
+      },
+      DoctypeAPIHelper.getBulkDeleteRouteConfig(doctypeMeta)
+    );
   }
   return server;
 };

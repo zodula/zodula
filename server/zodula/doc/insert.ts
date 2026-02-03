@@ -49,7 +49,9 @@ export class ZodulaDoctypeInsert<
       const doctype = loader.from("doctype").get(this.doctypeName);
       const organization = await this.session.organization(true);
 
-      this.input.organization = organization || "SYS";
+      if(!this.input.organization) {
+        this.input.organization = organization || "SYS";
+      }
 
       // Validate readonly fields
       ZodulaDoctypeHelper.validateDoc(
@@ -352,9 +354,25 @@ export class ZodulaDoctypeInsert<
 
       if (!fieldConfig || !refDoctypeSchema) continue;
 
+      // Find the relative to get the child field name
+      const relative = doctype.relatives.find(
+        (rel: any) =>
+          rel.parentDoctype === this.doctypeName &&
+          rel.childDoctype === refDoctypeName &&
+          rel.parentFieldName === key
+      );
+      const childFieldName = relative?.childFieldName;
+
+      if (!childFieldName) {
+        throw new ErrorWithCode(
+          `Could not find child field name for relationship ${this.doctypeName}/${key} -> ${refDoctypeName}`,
+          { status: 500 }
+        );
+      }
+
       try {
         let updatedPayload = { ...payload };
-        updatedPayload[fieldConfig.reference_alias!] = result.id;
+        updatedPayload[childFieldName] = result.id;
 
         let formattedPayload = { ...updatedPayload };
         ZodulaDoctypeHelper.formatDoc(
@@ -391,16 +409,31 @@ export class ZodulaDoctypeInsert<
       const refDoctypeSchema = loader
         .from("doctype")
         .get(fieldConfig?.reference as Zodula.DoctypeName)?.schema;
-      const refDoctypeAlias = fieldConfig?.reference_alias as string;
 
       if (!fieldConfig || !refDoctypeSchema) continue;
+
+      // Find the relative to get the child field name
+      const relative = doctype.relatives.find(
+        (rel: any) =>
+          rel.parentDoctype === this.doctypeName &&
+          rel.childDoctype === refDoctypeName &&
+          rel.parentFieldName === key
+      );
+      const childFieldName = relative?.childFieldName;
+
+      if (!childFieldName) {
+        throw new ErrorWithCode(
+          `Could not find child field name for relationship ${this.doctypeName}/${key} -> ${refDoctypeName}`,
+          { status: 500 }
+        );
+      }
 
       try {
         (result as any)[key] = [];
 
         for (let index = 0; index < payloadArray?.length || 0; index++) {
           let payload = { ...payloadArray[index] };
-          payload[refDoctypeAlias] = result.id;
+          payload[childFieldName] = result.id;
 
           let formattedPayload = { ...payload };
           ZodulaDoctypeHelper.formatDoc(

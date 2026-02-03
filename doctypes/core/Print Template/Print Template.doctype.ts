@@ -62,6 +62,12 @@ export default $doctype<"zodula__Print Template">({
         type: "File",
         label: "Guided Background",
         description: "Background image to guide template layout on physical paper (displayed with opacity)"
+    },
+    items: {
+        type: "Reference Table",
+        label: "Items",
+        reference: "zodula__Print Template Item",
+        required: 0
     }
 }, {
     label: "Print Template",

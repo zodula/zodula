@@ -3,10 +3,6 @@ export default $doctype<"zodula__Organization Role">({
         type: "Reference",
         label: "User",
         reference: "zodula__User",
-        reference_type: "One to Many",
-        reference_alias: "user_roles",
-        reference_label: "Organization Role",
-        below_field: "name",
         on_delete: "CASCADE",
         required: 1
     },
@@ -14,9 +10,6 @@ export default $doctype<"zodula__Organization Role">({
         type: "Reference",
         label: "Organization",
         reference: "zodula__Organization",
-        reference_type: "One to Many",
-        reference_alias: "organization_roles",
-        reference_label: "Organization Role",
         on_delete: "CASCADE",
         in_list_view: 1,
         required: 1,
@@ -28,7 +21,7 @@ export default $doctype<"zodula__Organization Role">({
         on_delete: "CASCADE",
         required: 1,
         filters: JSON.stringify([
-            ["name", "NOT IN", ["Anonymous", "Authenticated", "System Admin", "OpenAPI User", "Desk User"]],
+            ["is_system", "=", "0"],
         ])
     },
 }, {

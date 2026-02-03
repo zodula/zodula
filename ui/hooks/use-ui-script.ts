@@ -9,6 +9,7 @@ export function useUIScript(doctype: string, options?: {
   setValues?: (values: Record<string, any>) => void;
   getValue?: (fieldName: string) => any;
   getValues?: () => any;
+  setFieldProperty?: (fieldName: string, property: string, value: any) => void;
   
   // List options
   listData?: any[];
@@ -47,6 +48,7 @@ export function useUIScript(doctype: string, options?: {
       setValues: options?.setValues,
       getValue: options?.getValue,
       getValues: options?.getValues,
+      setFieldProperty: options?.setFieldProperty,
       
       // List context
       listData: options?.listData || [],

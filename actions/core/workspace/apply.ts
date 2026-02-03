@@ -47,7 +47,7 @@ export default $action(async (ctx) => {
                 // New workspace - will be created
                 workspaceToCreate.push({
                     name: workspace.name,
-                    idx: workspace.idx || 0,
+                    idx: workspace.idx ?? 0,
                     workspace_parent: workspace.workspace_parent || null,
                     icon: workspace.icon || null,
                     app: workspace.app || "zodula",
@@ -65,7 +65,7 @@ export default $action(async (ctx) => {
                         id: workspace.id,
                         data: {
                             name: workspace.name,
-                            idx: workspace.idx || 0,
+                            idx: workspace.idx ?? 0,
                             workspace_parent: workspace.workspace_parent || null,
                             icon: workspace.icon || null,
                             app: workspace.app || "zodula",
@@ -85,7 +85,7 @@ export default $action(async (ctx) => {
             if (isTempId(item.id)) {
                 // New item - will be created
                 itemToCreate.push({
-                    idx: item.idx || 0,
+                    idx: item.idx ?? 0,
                     type: item.type || null,
                     value: item.value || null,
                     options: item.options || null,
@@ -102,7 +102,7 @@ export default $action(async (ctx) => {
                     itemToUpdate.push({
                         id: item.id,
                         data: {
-                            idx: item.idx || 0,
+                            idx: item.idx ?? 0,
                             type: item.type || null,
                             value: item.value || null,
                             options: item.options || null,
@@ -142,7 +142,7 @@ export default $action(async (ctx) => {
             
             const created = await $zodula.doctype("zodula__Workspace").insert({
                 name: workspaceData.name,
-                idx: workspaceData.idx || 0,
+                idx: workspaceData.idx ?? 0,
                 workspace_parent: workspaceData.workspace_parent || null,
                 icon: workspaceData.icon || null,
                 app: workspaceData.app || "zodula",
@@ -161,7 +161,7 @@ export default $action(async (ctx) => {
         for (const itemData of itemToCreate) {
             const workspaceId = workspaceIdMap.get(itemData.workspaceId) || itemData.workspaceId
             await $zodula.doctype("zodula__Workspace Item").insert({
-                idx: itemData.idx || 0,
+                idx: itemData.idx ?? 0,
                 type: (itemData.type as any) || null,
                 value: itemData.value || null,
                 options: itemData.options || null,
@@ -173,7 +173,7 @@ export default $action(async (ctx) => {
         for (const { id, data } of workspaceToUpdate) {
             await $zodula.doctype("zodula__Workspace").update(id, {
                 name: data.name,
-                idx: data.idx || 0,
+                idx: data.idx ?? 0,
                 workspace_parent: data.workspace_parent || null,
                 icon: data.icon || null,
                 app: data.app || "zodula",
@@ -184,7 +184,7 @@ export default $action(async (ctx) => {
         // Update workspace items
         for (const { id, data } of itemToUpdate) {
             await $zodula.doctype("zodula__Workspace Item").update(id, {
-                idx: data.idx || 0,
+                idx: data.idx ?? 0,
                 type: (data.type as any) || null,
                 value: data.value || null,
                 options: data.options || null,

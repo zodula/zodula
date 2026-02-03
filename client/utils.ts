@@ -59,7 +59,7 @@ export function getDefaultValue(field: Zodula.Field) {
             const now = new Date();
 
             // Format based on field type
-            if (["Date", "Datetime"].includes(field.type as any)) {
+            if (["Date", "DateTime"].includes(field.type as any)) {
                 // Format: DD-MM-YYYY (UTC)
                 const day = String(now.getUTCDate()).padStart(2, '0');
                 const month = String(now.getUTCMonth() + 1).padStart(2, '0');
@@ -85,7 +85,7 @@ export function getDefaultValue(field: Zodula.Field) {
             const now = new Date();
 
             // Format based on field type
-            if (["Datetime"].includes(field.type as any)) {
+            if (["DateTime"].includes(field.type as any)) {
                 // Format: DD-MM-YYYY HH:mm:ss (UTC)
                 const day = String(now.getUTCDate()).padStart(2, '0');
                 const month = String(now.getUTCMonth() + 1).padStart(2, '0');

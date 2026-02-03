@@ -2,26 +2,31 @@
   {
     "id": "Desk User",
     "name": "Desk User",
-    "description": "User who can access Desk UI"
+    "description": "User who can access Desk UI",
+    "is_system": "1"
   },
   {
     "id": "Anonymous",
     "name": "Anonymous",
-    "description": "The person who is not logged in"
+    "description": "The person who is not logged in",
+    "is_system": "1"
   },
   {
     "id": "Authenticated",
     "name": "Authenticated",
-    "description": "The person who is logged in"
+    "description": "The person who is logged in",
+    "is_system": "1"
   },
   {
     "id": "OpenAPI User",
     "name": "OpenAPI User",
-    "description": "The person who can access the OpenAPI docs"
+    "description": "The person who can access the OpenAPI docs",
+    "is_system": "1"
   },
   {
     "id": "System Admin",
     "name": "System Admin",
-    "description": "The person who has all the permissions"
+    "description": "The person who has all the permissions",
+    "is_system": "1"
   }
 ]

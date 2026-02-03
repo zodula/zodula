@@ -781,7 +781,7 @@ export function PrintTemplateBuilder({
       const childFieldsCache = new Map<string, Array<{ field: string; order: number; required?: boolean; in_list_view?: boolean }>>();
       
       // Helper function to fetch child fields for a Reference Table
-      const fetchChildFields = async (referenceDoctype: string): Promise<Array<{ field: string; order: number; required?: boolean; in_list_view?: boolean }>> => {
+      const fetchChildFields = async (referenceDoctype: string, parentDoctype?: string): Promise<Array<{ field: string; order: number; required?: boolean; in_list_view?: boolean }>> => {
         // Check cache first
         if (childFieldsCache.has(referenceDoctype)) {
           return childFieldsCache.get(referenceDoctype)!;
@@ -826,14 +826,19 @@ export function PrintTemplateBuilder({
             ]);
             
             // Filter to only include fields that belong to the reference doctype
+            // Exclude fields that reference the parent doctype (for Extend and Reference Table)
             const fields = fieldsArray
               .filter((field: any) => {
                 const fieldDoctype = field.doctype || "";
                 const fieldName = field.name || "";
-                return fieldDoctype === referenceDoctype && !standardFieldNames.has(fieldName);
+                const fieldReference = field.reference || "";
+                // Exclude if it's a standard field, or if it references the parent doctype
+                const isParentReference = parentDoctype && fieldReference === parentDoctype;
+                return fieldDoctype === referenceDoctype && !standardFieldNames.has(fieldName) && !isParentReference;
               })
               .map((field: any, idx: number) => ({
                 field: field.name || "",
+                label: field.label || field.name || "",
                 order: idx,
                 required: field.required === 1 || field.required === true,
                 in_list_view: field.in_list_view === 1 || field.in_list_view === true
@@ -861,6 +866,7 @@ export function PrintTemplateBuilder({
             label: f.label || undefined,
             type: f.type,
             reference: f.reference || undefined,
+            no_print: f.no_print === 1 || (f.no_print === true as any),
           })),
         pageDimensions: pageDimensions || { width: 210, height: 297 },
         doctypeLabel,

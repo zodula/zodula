@@ -3,9 +3,6 @@ export default $doctype<"zodula__Print Template Item">({
         type: "Reference",
         label: "Print Template",
         reference: "zodula__Print Template",
-        reference_alias: "items",
-        reference_label: "Items",
-        reference_type: "One to Many",
         required: 1
     },
     type: {

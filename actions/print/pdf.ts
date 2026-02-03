@@ -100,7 +100,7 @@ function calculateAnchorPosition(
         offsetY = measuredAnchorHeight + spacing
       }
     }
-    
+
     newX = anchorX + offsetX
     newY = anchorY + offsetY
   } else {
@@ -271,7 +271,8 @@ async function renderTemplateItem(
   sessionContext?: any,
   allItems?: any[],
   measuredHeights?: Map<string, number>,
-  finalPositions?: Map<string, { x: number; y: number }>
+  finalPositions?: Map<string, { x: number; y: number }>,
+  language?: string
 ): Promise<string> {
   const {
     type,
@@ -528,7 +529,11 @@ async function renderTemplateItem(
                   if (tableFontStyleStr) {
                     headerStyles.push(tableFontStyleStr)
                   }
-                  return `<th style="${headerStyles.join("; ")}">${col.field}</th>`
+                  // Use label if available, otherwise fall back to field name
+                  // Translate the label if language is provided
+                  const labelText = col.label || col.field
+                  const headerText = language ? $zodula.utils.translate(labelText, language) : labelText
+                  return `<th style="${headerStyles.join("; ")}">${headerText}</th>`
                 }).join("")
                 headers = `<thead><tr>${headerCells}</tr></thead>`
               }
@@ -541,7 +546,8 @@ async function renderTemplateItem(
         }
       }
       
-      const labelText = label || ""
+      // Translate label if language is provided
+      const labelText = label ? (language ? $zodula.utils.translate(label, language) : label) : ""
       
       // Build alignment styles for content
       let contentAlignStyle = ""
@@ -626,7 +632,8 @@ async function renderTemplateItem(
         }
       }
       
-      const labelText = label || ""
+      // Translate label if language is provided
+      const labelText = label ? (language ? $zodula.utils.translate(label, language) : label) : ""
       
       // Build alignment styles for content
       let contentAlignStyle = ""
@@ -691,6 +698,9 @@ export default $action(async (ctx) => {
 
   const ids = Array.isArray(idsParam) ? idsParam : idsParam ? [idsParam] : []
   const baseUrl = ctx.request.url.split("/api")[0] || "http://localhost:3000"
+  
+  // Get language for translation (default to "en" if not provided)
+  const language = (lang as string) || process.env.ZODULA_PUBLIC_DEFAULT_LANGUAGE || "en"
   
   // Get session context
   const sessionContext: any = {}
@@ -805,6 +815,7 @@ export default $action(async (ctx) => {
       label: f.label || f.name || "",
       type: f.type || "",
       reference: f.reference || undefined,
+      no_print: f.no_print === 1 || f.no_print === true,
     })).filter((f: any) => f.name)
 
     // Parse tabs
@@ -817,7 +828,7 @@ export default $action(async (ctx) => {
     }
 
     // Helper function to fetch child fields for reference tables
-    const fetchChildFields = async (referenceDoctype: string): Promise<Array<{ field: string; order: number; required?: boolean; in_list_view?: boolean }>> => {
+    const fetchChildFields = async (referenceDoctype: string, parentDoctype?: string): Promise<Array<{ field: string; order: number; required?: boolean; in_list_view?: boolean }>> => {
       try {
         const { docs: childFieldDocs } = await $zodula.doctype("zodula__Field")
           .select()
@@ -834,10 +845,14 @@ export default $action(async (ctx) => {
           .filter((field: any) => {
             const fieldDoctype = field.doctype || ""
             const fieldName = field.name || ""
-            return fieldDoctype === referenceDoctype && !standardFieldNames.has(fieldName)
+            const fieldReference = field.reference || ""
+            // Exclude if it's a standard field, or if it references the parent doctype
+            const isParentReference = parentDoctype && fieldReference === parentDoctype
+            return fieldDoctype === referenceDoctype && !standardFieldNames.has(fieldName) && !isParentReference
           })
           .map((field: any, idx: number) => ({
             field: field.name || "",
+            label: field.label || field.name || "",
             order: idx,
             required: field.required === 1 || field.required === true,
             in_list_view: field.in_list_view === 1 || field.in_list_view === true
@@ -909,7 +924,7 @@ export default $action(async (ctx) => {
     // Render letter head items if any
     let letterHeadHtml = ""
     if (letterHeadItems.length > 0) {
-      const letterHeadPromises = letterHeadItems.map((item) => renderTemplateItem(item, doc, baseUrl, sessionContext, letterHeadItems))
+      const letterHeadPromises = letterHeadItems.map((item) => renderTemplateItem(item, doc, baseUrl, sessionContext, letterHeadItems, undefined, undefined, language))
       const letterHeadResults = await Promise.all(letterHeadPromises)
       letterHeadHtml = letterHeadResults.join("")
     }
@@ -1061,7 +1076,7 @@ export default $action(async (ctx) => {
       })
       
       const initialItemPromises = orderedItems.map((item) => 
-        renderTemplateItem(item, doc, baseUrl, sessionContext, orderedItems, initialMeasuredHeights)
+        renderTemplateItem(item, doc, baseUrl, sessionContext, orderedItems, initialMeasuredHeights, undefined, language)
       )
       const initialItemResults = await Promise.all(initialItemPromises)
       const initialItemsHtml = initialItemResults.join("")
@@ -1234,7 +1249,7 @@ export default $action(async (ctx) => {
         }
       
       const finalItemPromises = orderedItems.map((item) => 
-        renderTemplateItem(item, doc, baseUrl, sessionContext, orderedItems, measuredHeights, finalPositions)
+        renderTemplateItem(item, doc, baseUrl, sessionContext, orderedItems, measuredHeights, finalPositions, language)
       )
       const finalItemResults = await Promise.all(finalItemPromises)
       const finalItemsHtml = finalItemResults.join("")
@@ -1293,7 +1308,7 @@ export default $action(async (ctx) => {
         fallbackMeasuredHeights.set(item.id, item.transform_height || 30)
       })
       const fallbackItemPromises = items.map((item) => 
-        renderTemplateItem(item, doc, baseUrl, sessionContext, items, fallbackMeasuredHeights)
+        renderTemplateItem(item, doc, baseUrl, sessionContext, items, fallbackMeasuredHeights, undefined, language)
       )
       const fallbackItemResults = await Promise.all(fallbackItemPromises)
       const fallbackItemsHtml = fallbackItemResults.join("")

@@ -84,13 +84,20 @@ export class ZodulaDoctypeGetter<
           );
         }
       }
+      // Find relative field aliases using parentFieldName from relatives
+      const relativeFieldAliases = new Set<string>()
+      for (const relative of relatives) {
+        if (relative.parentFieldName) {
+          relativeFieldAliases.add(relative.parentFieldName)
+        }
+      }
+
       const fields =
         this.options.fields.length > 0
           ? this.options.fields
               ?.map((field) => String(field))
               .filter(
-                (field) =>
-                  !relatives.some((relative) => relative.alias === field)
+                (field) => !relativeFieldAliases.has(field)
               )
           : ["*"];
       let result = (await db.get(
@@ -98,25 +105,18 @@ export class ZodulaDoctypeGetter<
       )) as any;
 
       if (relatives.length > 0 && result) {
-        for (const relative of relatives.filter(
-          (relative) => relative.type !== "Reference"
-        )) {
-          const relativeRecords = await ZodulaDoctypeHelper.getRelativeRecords(
-            this.id,
-            relative,
-            this.options
-          );
-          // let relativeRecords = undefined
-          // if (relative.type === "One to One") {
-          //     relativeRecords = await zodula.doctype(relative.childDoctype).get(this.id).bypass(this.options.bypass)
-          // } else if (relative.type === "One to Many") {
-          //     relativeRecords = (await zodula.doctype(relative.childDoctype).select().where(relative.childFieldName as any, "=", this.id).bypass(this.options.bypass)).docs
-          // }
-          const relativeFieldAlias =
-            relative.alias ||
-            `${relative.childDoctype}${relative.type === "One to Many" ? SUFFIX_REF_TABLE : SUFFIX_EXTEND}`;
-          if (relativeRecords !== undefined) {
-            result[relativeFieldAlias] = relativeRecords;
+        for (const relative of relatives) {
+          // Only process if relative has a parentFieldName (meaning parent has Extend or Reference Table field)
+          if (relative.parentFieldName) {
+            const relativeRecords = await ZodulaDoctypeHelper.getRelativeRecords(
+              this.id,
+              relative,
+              this.options
+            );
+
+            if (relativeRecords !== undefined) {
+              result[relative.parentFieldName] = relativeRecords;
+            }
           }
         }
       }

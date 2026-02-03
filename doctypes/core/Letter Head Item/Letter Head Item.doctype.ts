@@ -3,9 +3,6 @@ export default $doctype<"zodula__Letter Head Item">({
         type: "Reference",
         label: "Letter Head",
         reference: "zodula__Letter Head",
-        reference_alias: "items",
-        reference_label: "Items",
-        reference_type: "One to Many",
         required: 1
     },
     type: {

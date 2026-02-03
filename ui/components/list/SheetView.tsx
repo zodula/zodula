@@ -1468,8 +1468,7 @@ export function SheetView({
                                   );
                                   const isIdField = columnKey === "id";
                                   const isReferenceField =
-                                    field?.type === "Reference" ||
-                                    field?.reference_type === "Reference";
+                                    field?.type === "Reference"
                                   return (isIdField || isReferenceField) &&
                                     cellValue
                                     ? "zd:hover:underline zd:cursor-pointer"

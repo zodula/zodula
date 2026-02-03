@@ -10,6 +10,8 @@ import { ClientFieldHelper } from "@/zodula/client/field";
 import { useForm } from "../../../hooks/use-form";
 import { useDnd } from "../../../hooks/use-dnd";
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
+import { useDocStore } from "../../../hooks/use-doc-store";
+import { useUIScriptStore } from "../../../zui";
 
 // Inline field editor component for table cells with client scripts
 const InlineFieldEditor = ({ field, value, onChange, formData, docId, readonly, doctype, onRowUpdate, fieldPath }: {
@@ -65,6 +67,14 @@ export const ReferenceTablePlugin = new FormPlugin({
     }, [doctypeDoc]);
 
     const { t } = useTranslation()
+    const { fetchDoc, getDoc } = useDocStore();
+    
+    // UI script execution for child doctype - will be called per row in handleFieldChange
+
+    // Helper function to get nested value from object using dot notation
+    const getNestedValue = (obj: any, path: string): any => {
+        return path.split('.').reduce((current, key) => current?.[key], obj);
+    };
 
     // Use props.value directly for table data
     const tableData = useMemo(() => {
@@ -88,16 +98,117 @@ export const ReferenceTablePlugin = new FormPlugin({
         props.onChange?.(newTableData);
     };
 
-    const handleFieldChange = (rowIndex: number, fieldName: string, value: any) => {
+    const handleFieldChange = async (rowIndex: number, fieldName: string, value: any) => {
         if (props.readonly) return;
 
-        // Calculate total_price if quantity or unit_price changed
         let updatedRow = { ...tableData[rowIndex], [fieldName]: value };
-        if (fieldName === 'quantity' || fieldName === 'unit_price') {
-            const quantity = parseFloat(fieldName === 'quantity' ? value : updatedRow.quantity) || 0;
-            const unitPrice = parseFloat(fieldName === 'unit_price' ? value : updatedRow.unit_price) || 0;
-            const totalPrice = quantity * unitPrice;
-            updatedRow.total_price = totalPrice;
+
+        // Handle fetch_from: Find all fields that depend on this field
+        const dependentFields: Array<{ fieldName: string; fetchPath: string }> = [];
+        
+        // Find all fields that have fetch_from pointing to the changed field
+        fields.forEach((field) => {
+            if (
+                field.fetch_from &&
+                field.fetch_from.startsWith(fieldName + ".")
+            ) {
+                // Extract the path after the source field (e.g., "product_name" from "product_code.product_name")
+                const fetchPath = field.fetch_from.substring(
+                    fieldName.length + 1
+                );
+                dependentFields.push({
+                    fieldName: field.name || "",
+                    fetchPath: fetchPath,
+                });
+            }
+        });
+
+        // Fetch data for dependent fields if the value is not empty
+        if (dependentFields.length > 0 && value) {
+            const sourceField = fields.find(f => f.name === fieldName);
+            
+            // Handle Reference field type - need to fetch the referenced document
+            if (sourceField?.reference) {
+                try {
+                    // Collect all unique root fields to fetch in one call
+                    const rootFields = dependentFields
+                        .map((df) => {
+                            const pathParts = df.fetchPath.split(".");
+                            return pathParts[0]; // Get the root field name
+                        })
+                        .filter((field): field is string => !!field);
+                    const fetchFields = [...new Set(rootFields)];
+
+                    // Fetch the referenced document with all needed fields
+                    await fetchDoc(
+                        sourceField.reference as Zodula.DoctypeName,
+                        value,
+                        fetchFields
+                    );
+
+                    // Get the fetched document from the cache
+                    const cachedDoc = getDoc(
+                        sourceField.reference as Zodula.DoctypeName,
+                        value
+                    );
+
+                    if (cachedDoc?.data) {
+                        const fetchedDoc = cachedDoc.data;
+                        // Update all dependent fields
+                        for (const dependentField of dependentFields) {
+                            // Support dot notation for nested fields
+                            const fetchedValue = getNestedValue(
+                                fetchedDoc,
+                                dependentField.fetchPath
+                            );
+
+                            if (fetchedValue !== undefined && fetchedValue !== null) {
+                                // Update the dependent field in the row
+                                updatedRow[dependentField.fieldName] = fetchedValue;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.warn(
+                        `Failed to fetch data for field ${fieldName} in Reference Table row:`,
+                        error
+                    );
+                    // Clear dependent fields if fetch fails
+                    for (const dependentField of dependentFields) {
+                        updatedRow[dependentField.fieldName] = null;
+                    }
+                }
+            }
+        } else if (dependentFields.length > 0 && !value) {
+            // Clear dependent fields if source field is cleared
+            for (const dependentField of dependentFields) {
+                updatedRow[dependentField.fieldName] = null;
+            }
+        }
+
+        // Execute UI scripts for the child doctype (for all field changes)
+        if (doctypeDoc?.id) {
+            // Merge parent form data with current row data for script context
+            const mergedFormData = { ...props.formData, ...updatedRow };
+            
+            // Get UI script store and execute scripts
+            const store = useUIScriptStore.getState();
+            
+            // Execute scripts with merged form data context
+            await store.executeScripts(doctypeDoc.id, "field_change", {
+                fieldName: fieldName,
+                value: value,
+                oldValue: tableData[rowIndex]?.[fieldName],
+                formData: mergedFormData,
+                getValue: (fieldName: string) => mergedFormData[fieldName] || updatedRow[fieldName],
+                getValues: () => mergedFormData,
+                setValue: (fieldName: string, newValue: any) => {
+                    // Update the row field when UI script calls set_value
+                    updatedRow[fieldName] = newValue;
+                },
+                doctype: doctypeDoc.id,
+                isCreate: true,
+            });
         }
 
         const newTableData = [...tableData];

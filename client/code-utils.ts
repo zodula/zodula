@@ -32,6 +32,7 @@ export interface PrintTemplateElement {
   tableConfig?: {
     columns?: Array<{
       field: string;
+      label?: string;
       width?: number;
       order?: number;
     }>;
@@ -66,6 +67,7 @@ export interface FieldConfig {
   label?: string;
   type: string;
   reference?: string;
+  no_print?: boolean | number; // If true or 1, field should not be included in print template
 }
 
 // Tab layout item interface
@@ -84,6 +86,7 @@ export interface Tab {
 // Child field interface
 export interface ChildField {
   field: string;
+  label?: string;
   order: number;
   required?: boolean;
   in_list_view?: boolean;
@@ -103,7 +106,7 @@ export async function generateTemplateFromTabs(options: {
   fields: FieldConfig[];
   pageDimensions: { width: number; height: number }; // in mm
   doctypeLabel: string;
-  fetchChildFields: (referenceDoctype: string) => Promise<ChildField[]>;
+  fetchChildFields: (referenceDoctype: string, parentDoctype?: string) => Promise<ChildField[]>;
   doctype: string;
 }): Promise<PrintTemplateElement[]> {
   const { tabs, fields, pageDimensions, doctypeLabel, fetchChildFields } = options;
@@ -118,9 +121,29 @@ export async function generateTemplateFromTabs(options: {
   const pageWidth = pageDimensions.width; // in mm, convert to px (1mm ≈ 3.78px)
   const pageWidthPx = pageWidth * 3.78;
   const margin = 20; // Margin in pixels
-  const fieldWidth = (pageWidthPx - margin * 2 - 10) / 2; // Two columns with gap
   const fieldHeight = 50; // Minimum 50px height for field elements
   const fieldSpacing = 10;
+  const gapBetweenFields = 10; // Gap between fields in a row
+  
+  // Calculate maximum number of columns by analyzing all tabs
+  let maxColumns = 2; // Default to 2 columns
+  for (const tab of tabs) {
+    if (tab.type !== "Tab" || !tab.layout) continue;
+    for (const item of tab.layout) {
+      if (Array.isArray(item)) {
+        // Count actual field items (not empty)
+        const fieldCount = item.filter(fieldItem => fieldItem.type === "field" && fieldItem.value).length;
+        if (fieldCount > maxColumns) {
+          maxColumns = fieldCount;
+        }
+      }
+    }
+  }
+  
+  // Calculate field width based on maximum columns
+  const availableWidth = pageWidthPx - margin * 2;
+  const totalGaps = (maxColumns - 1) * gapBetweenFields;
+  const fieldWidth = (availableWidth - totalGaps) / maxColumns;
   
   // Add header with doctype name
   const headerId = `element_${Date.now()}_header`;
@@ -175,16 +198,26 @@ export async function generateTemplateFromTabs(options: {
   currentY += 20 + fieldSpacing;
   
   // Start chaining from docid
-  const contentChainStartCode = docidCode;
+  let currentAnchorCode = docidCode;
+  let tabIndex = 0;
   
   // Process each tab
   for (const tab of tabs) {
     if (tab.type !== "Tab" || !tab.layout) continue;
     
+    // Add spacing between tabs (except for the first tab)
+    if (tabIndex > 0) {
+      // Find the last element from previous tab to anchor from
+      const lastElement = newElements.length > 0 ? newElements[newElements.length - 1] : null;
+      if (lastElement) {
+        currentAnchorCode = lastElement.code || lastElement.id;
+      }
+    }
+    
     let currentSection: string | null = null;
-    let currentAnchorCode = contentChainStartCode;
     let lastRowAnchorCode: string | null = null;
     let currentX = margin;
+    let tabFirstElementCode: string | null = null; // Track first element of this tab
     
     // Process layout items
     const processLayoutItem = async (item: TabLayoutItem | TabLayoutItem[]) => {
@@ -195,11 +228,21 @@ export async function generateTemplateFromTabs(options: {
             const fieldName = fieldItem.value;
             const fieldConfig = fields.find(f => f.name === fieldName);
             
-            if (fieldConfig) {
+            // Skip fields with no_print set to true or 1
+            if (fieldConfig && (fieldConfig.no_print === true || fieldConfig.no_print === 1)) {
+              // Skip this field but still move to next position
+              const nextX = currentX + fieldWidth + gapBetweenFields;
+              if (nextX + fieldWidth <= pageWidthPx - margin) {
+                currentX = nextX;
+              } else {
+                currentX = margin;
+                lastRowAnchorCode = null; // Reset for next row
+              }
+            } else if (fieldConfig) {
               // Check if it's a Reference Table
               if (fieldConfig.type === "Reference Table" && fieldConfig.reference && fieldConfig.reference !== options.doctype ) {
-                // Fetch child fields for the table
-                const childFields = await fetchChildFields(fieldConfig.reference);
+                // Fetch child fields for the table, excluding fields that reference the parent doctype
+                const childFields = await fetchChildFields(fieldConfig.reference, options.doctype);
                 
                 // Default select fields that are required or in_list_view
                 const defaultSelectedFields = childFields
@@ -214,7 +257,7 @@ export async function generateTemplateFromTabs(options: {
                 // Get columns for selected fields only, maintaining order
                 const selectedColumns = childFields
                   .filter(col => selectedFieldNames.includes(col.field))
-                  .map((col, idx) => ({ field: col.field, order: idx }));
+                  .map((col, idx) => ({ field: col.field, label: col.label, order: idx }));
                 
                 // Add table element with child fields - anchored to current anchor
                 const tableElementId = `element_${Date.now()}_${fieldName}`;
@@ -229,7 +272,13 @@ export async function generateTemplateFromTabs(options: {
                     const anchorX = anchorElement.transform?.x || 0;
                     const anchorHeight = anchorElement.transform?.height || fieldHeight;
                     // Calculate offset: we want new element at margin, so offsetX = margin - anchorX
-                    tableAnchorOffset = { x: margin - anchorX, y: anchorHeight + fieldSpacing };
+                    // Add extra spacing for new tab (30px)
+                    const tabSpacing = tabIndex > 0 && !tabFirstElementCode ? 30 : fieldSpacing;
+                    tableAnchorOffset = { x: margin - anchorX, y: anchorHeight + tabSpacing };
+                  }
+                  // Track first element of tab
+                  if (!tabFirstElementCode) {
+                    tabFirstElementCode = tableCode;
                   }
                 }
                 
@@ -290,28 +339,34 @@ export async function generateTemplateFromTabs(options: {
                       anchorOffset = { x: 0, y: fieldSpacing };
                     }
                   } else {
-                    // First element in tab - anchor to current chain element
+                    // First element in tab - anchor to current chain element with extra spacing for new tab
                     const anchorElement = newElements.find(el => (el.code && el.code === currentAnchorCode) || (!el.code && el.id === currentAnchorCode));
                     if (anchorElement) {
                       const anchorX = anchorElement.transform?.x || 0;
                       const anchorHeight = anchorElement.transform?.height || fieldHeight;
                       // Calculate offset: we want new element at margin, so offsetX = margin - anchorX
+                      // Add extra spacing for new tab (30px)
+                      const tabSpacing = tabIndex > 0 ? 30 : fieldSpacing;
                       anchorToCode = anchorElement.code || anchorElement.id;
-                      anchorOffset = { x: margin - anchorX, y: anchorHeight + fieldSpacing };
+                      anchorOffset = { x: margin - anchorX, y: anchorHeight + tabSpacing };
                     } else {
                       anchorToCode = currentAnchorCode;
-                      anchorOffset = { x: 0, y: fieldSpacing };
+                      anchorOffset = { x: 0, y: tabIndex > 0 ? 30 : fieldSpacing };
                     }
                   }
                   // Set as first element of this row (using code)
                   lastRowAnchorCode = fieldCode;
+                  // Track first element of tab
+                  if (!tabFirstElementCode) {
+                    tabFirstElementCode = fieldCode;
+                  }
                 } else {
                   // Same row - anchor to previous element in row
                   const previousElement = newElements.length > 0 ? newElements[newElements.length - 1] : null;
                   if (previousElement) {
                     const prevElementWidth = previousElement.transform?.width || fieldWidth;
                     anchorToCode = previousElement.code || previousElement.id;
-                    anchorOffset = { x: prevElementWidth + 10, y: 0 };
+                    anchorOffset = { x: prevElementWidth + gapBetweenFields, y: 0 };
                   }
                 }
                 
@@ -341,8 +396,9 @@ export async function generateTemplateFromTabs(options: {
                 currentAnchorCode = fieldCode;
                 
                 // Move to next column or next row
-                if (currentX + fieldWidth * 2 + 10 <= pageWidthPx - margin) {
-                  currentX += fieldWidth + 10;
+                const nextX = currentX + fieldWidth + gapBetweenFields;
+                if (nextX + fieldWidth <= pageWidthPx - margin) {
+                  currentX = nextX;
                 } else {
                   currentX = margin;
                   lastRowAnchorCode = null; // Reset for next row
@@ -351,8 +407,9 @@ export async function generateTemplateFromTabs(options: {
             }
           } else if (fieldItem.type === "empty") {
             // Skip empty field, move to next position
-            if (currentX + fieldWidth * 2 + 10 <= pageWidthPx - margin) {
-              currentX += fieldWidth + 10;
+            const nextX = currentX + fieldWidth + gapBetweenFields;
+            if (nextX + fieldWidth <= pageWidthPx - margin) {
+              currentX = nextX;
             } else {
               currentX = margin;
               lastRowAnchorCode = null; // Reset for next row
@@ -380,10 +437,20 @@ export async function generateTemplateFromTabs(options: {
         const fieldName = item.value;
         const fieldConfig = fields.find(f => f.name === fieldName);
         
-        if (fieldConfig) {
+        // Skip fields with no_print set to true or 1
+        if (fieldConfig && (fieldConfig.no_print === true || fieldConfig.no_print === 1)) {
+          // Skip this field but still move to next position
+          const nextX = currentX + fieldWidth + gapBetweenFields;
+          if (nextX + fieldWidth <= pageWidthPx - margin) {
+            currentX = nextX;
+          } else {
+            currentX = margin;
+            lastRowAnchorCode = null; // Reset for next row
+          }
+        } else if (fieldConfig) {
           if (fieldConfig.type === "Reference Table" && fieldConfig.reference) {
-            // Fetch child fields for the table
-            const childFields = await fetchChildFields(fieldConfig.reference);
+            // Fetch child fields for the table, excluding fields that reference the parent doctype
+            const childFields = await fetchChildFields(fieldConfig.reference, options.doctype);
             // Default select fields that are required or in_list_view
             const defaultSelectedFields = childFields
               .filter(col => col.required || col.in_list_view)
@@ -395,7 +462,7 @@ export async function generateTemplateFromTabs(options: {
             // Get columns for selected fields only, maintaining order
             const selectedColumns = childFields
               .filter(col => selectedFieldNames.includes(col.field))
-              .map((col, idx) => ({ field: col.field, order: idx }));
+              .map((col, idx) => ({ field: col.field, label: col.label, order: idx }));
             const tableElementId = `element_${Date.now()}_${fieldName}`;
             const tableCode = generateCode("table");
             
@@ -408,7 +475,13 @@ export async function generateTemplateFromTabs(options: {
                 const anchorX = anchorElement.transform?.x || 0;
                 const anchorHeight = anchorElement.transform?.height || fieldHeight;
                 // Calculate offset: we want new element at margin, so offsetX = margin - anchorX
-                tableAnchorOffset = { x: margin - anchorX, y: anchorHeight + fieldSpacing };
+                // Add extra spacing for new tab (30px)
+                const tabSpacing = tabIndex > 0 && !tabFirstElementCode ? 30 : fieldSpacing;
+                tableAnchorOffset = { x: margin - anchorX, y: anchorHeight + tabSpacing };
+              }
+              // Track first element of tab
+              if (!tabFirstElementCode) {
+                tabFirstElementCode = tableCode;
               }
             }
             
@@ -470,21 +543,27 @@ export async function generateTemplateFromTabs(options: {
                   anchorOffset = { x: 0, y: fieldSpacing };
                 }
               } else {
-                // First element in section - anchor to current chain element
+                // First element in section - anchor to current chain element with extra spacing for new tab
                 const anchorElement = newElements.find(el => (el.code && el.code === currentAnchorCode) || (!el.code && el.id === currentAnchorCode));
                 if (anchorElement) {
                   const anchorX = anchorElement.transform?.x || 0;
                   const anchorHeight = anchorElement.transform?.height || fieldHeight;
                   // Calculate offset: we want new element at margin, so offsetX = margin - anchorX
+                  // Add extra spacing for new tab (30px)
+                  const tabSpacing = tabIndex > 0 && !tabFirstElementCode ? 30 : fieldSpacing;
                   anchorToCode = anchorElement.code || anchorElement.id;
-                  anchorOffset = { x: margin - anchorX, y: anchorHeight + fieldSpacing };
+                  anchorOffset = { x: margin - anchorX, y: anchorHeight + tabSpacing };
                 } else {
                   anchorToCode = currentAnchorCode;
-                  anchorOffset = { x: 0, y: fieldSpacing };
+                  anchorOffset = { x: 0, y: tabIndex > 0 && !tabFirstElementCode ? 30 : fieldSpacing };
                 }
               }
               // Set as first element of this row (using code)
               lastRowAnchorCode = fieldCode;
+              // Track first element of tab
+              if (!tabFirstElementCode) {
+                tabFirstElementCode = fieldCode;
+              }
             } else {
               // Same row - anchor to previous element in row
               const previousElement = newElements.length > 0 ? newElements[newElements.length - 1] : null;
@@ -518,8 +597,9 @@ export async function generateTemplateFromTabs(options: {
             // Update current anchor to this field for next elements (using code)
             currentAnchorCode = fieldCode;
             
-            if (currentX + fieldWidth * 2 + 10 <= pageWidthPx - margin) {
-              currentX += fieldWidth + 10;
+            const nextX = currentX + fieldWidth + gapBetweenFields;
+            if (nextX + fieldWidth <= pageWidthPx - margin) {
+              currentX = nextX;
             } else {
               currentX = margin;
               lastRowAnchorCode = null; // Reset for next row
@@ -534,8 +614,13 @@ export async function generateTemplateFromTabs(options: {
       await processLayoutItem(item);
     }
     
-    // Add spacing after tab
-    currentY += 30;
+    // Update anchor for next tab - use the last element of this tab
+    const lastElement = newElements.length > 0 ? newElements[newElements.length - 1] : null;
+    if (lastElement) {
+      currentAnchorCode = lastElement.code || lastElement.id;
+    }
+    
+    tabIndex++;
   }
   
   return newElements;

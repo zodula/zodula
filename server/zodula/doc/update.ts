@@ -46,6 +46,12 @@ export class ZodulaDoctypeUpdate<
     const db = Database("main");
     const user = await this.session.user(true);
     const doctype = loader.from("doctype").get(this.doctypeName);
+    const organization = await this.session.organization(true);
+
+    if(!this.input.organization) {
+      this.input.organization = organization || "SYS";
+    }
+    
     const old = await zodula
       .doctype(this.doctypeName)
       .get(this.input.id!)
@@ -564,13 +570,28 @@ export class ZodulaDoctypeUpdate<
       const refDoctypeSchema = loader
         .from("doctype")
         .get(fieldConfig?.reference as Zodula.DoctypeName)?.schema;
-      const refDoctypeAlias = fieldConfig?.reference_alias as string;
       if (!fieldConfig || !refDoctypeSchema) continue;
 
-      let updatedPayload = { ...payload, [refDoctypeAlias]: result.id };
-      // Check if there's an existing record linked to this document via reference_alias
-      const existingQuery = `SELECT id FROM "${refDoctypeName}" WHERE "${refDoctypeAlias}" = ?`;
-      const existing = db.get(existingQuery, [result.id]) as any;
+      // Find the relative to get the child field name
+      const relative = doctype.relatives.find(
+        (rel: any) =>
+          rel.parentDoctype === this.doctypeName &&
+          rel.childDoctype === refDoctypeName &&
+          rel.parentFieldName === key
+      );
+      const childFieldName = relative?.childFieldName;
+
+      if (!childFieldName) {
+        throw new ErrorWithCode(
+          `Could not find child field name for relationship ${this.doctypeName}/${key} -> ${refDoctypeName}`,
+          { status: 500 }
+        );
+      }
+
+      let updatedPayload = { ...payload, [childFieldName]: result.id };
+      // Check if there's an existing record linked to this document via child field name
+      const existingQuery = `SELECT id FROM "${refDoctypeName}" WHERE "${childFieldName}" = ?`;
+      const existing = await db.get(existingQuery, [result.id]) as any;
 
       if (existing) {
         // Update existing record
@@ -613,19 +634,34 @@ export class ZodulaDoctypeUpdate<
       const refDoctypeSchema = loader
         .from("doctype")
         .get(fieldConfig?.reference as Zodula.DoctypeName)?.schema;
-      const refDoctypeAlias = fieldConfig?.reference_alias as string;
 
       if (!fieldConfig || !refDoctypeSchema) continue;
 
+      // Find the relative to get the child field name
+      const relative = doctype.relatives.find(
+        (rel: any) =>
+          rel.parentDoctype === this.doctypeName &&
+          rel.childDoctype === refDoctypeName &&
+          rel.parentFieldName === key
+      );
+      const childFieldName = relative?.childFieldName;
+
+      if (!childFieldName) {
+        throw new ErrorWithCode(
+          `Could not find child field name for relationship ${this.doctypeName}/${key} -> ${refDoctypeName}`,
+          { status: 500 }
+        );
+      }
+
       const existings = (await db.all(
-        `SELECT id FROM "${refDoctypeName}" WHERE "${refDoctypeAlias}" = ?`,
+        `SELECT id FROM "${refDoctypeName}" WHERE "${childFieldName}" = ?`,
         [result.id]
       )) as any[];
       (result as any)[key] = [];
 
       for (let index = 0; index < payloadArray?.length || 0; index++) {
         let payload = { ...payloadArray[index] };
-        payload[refDoctypeAlias] = result.id;
+        payload[childFieldName] = result.id;
 
         const isExist = existings.some(
           (existing: any) => existing.id === payload.id

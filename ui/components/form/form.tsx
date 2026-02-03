@@ -37,6 +37,7 @@ interface FormProps<T extends Record<string, Zodula.Field>> {
   tabs?: TabConfig[]; // Direct tab configuration for non-FormLayout forms
   translate?: boolean; // Enable/disable translation
   enableScripts?: boolean; // Enable client scripts
+  setFieldProperty?: (fieldName: string, property: string, value: any) => void; // Set field property from UI scripts
 }
 
 // Debug Component for Form Fields
@@ -258,6 +259,7 @@ export const Form = <T extends Record<string, Zodula.Field>>(
     setValue: props.onChange,
     getValue: (fieldName) => props.values?.[fieldName],
     getValues: () => props.values || {},
+    setFieldProperty: props.setFieldProperty,
     docId: props.docId,
     isCreate: !props.values?.doc_status,
     showToast: (message, type) => {

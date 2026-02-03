@@ -18,7 +18,7 @@ export interface DatePickerProps {
     minDate?: Date;
     maxDate?: Date;
     range?: boolean;
-    type?: 'Date' | 'Time' | 'Datetime';
+    type?: 'Date' | 'Time' | 'DateTime';
 }
 
 const DatePicker: React.FC<DatePickerProps> = ({
@@ -47,9 +47,9 @@ const DatePicker: React.FC<DatePickerProps> = ({
     const [hasUserInteracted, setHasUserInteracted] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Initialize default time for Datetime type on mount
+    // Initialize default time for DateTime type on mount
     useEffect(() => {
-        if (type === 'Datetime' && !value) {
+        if (type === 'DateTime' && !value) {
             const now = new Date();
             setSelectedTime({
                 hours: now.getHours(),
@@ -82,7 +82,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
                 if (date) {
                     setSelectedDate(date);
                     setCurrentDate(date);
-                    if (type === 'Datetime' || type === 'Time') {
+                    if (type === 'DateTime' || type === 'Time') {
                         setSelectedTime({
                             hours: date.getHours(),
                             minutes: date.getMinutes(),
@@ -100,8 +100,8 @@ const DatePicker: React.FC<DatePickerProps> = ({
             setSelectedRange({ start: null, end: null });
             setIsRangeMode(false);
             
-            // Set default time to now for Datetime type when no value is provided
-            if (type === 'Datetime') {
+            // Set default time to now for DateTime type when no value is provided
+            if (type === 'DateTime') {
                 const now = new Date();
                 setSelectedTime({
                     hours: now.getHours(),
@@ -135,7 +135,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
                 if (isValid(parsedDate)) {
                     return parsedDate;
                 }
-            } else if (fieldType === 'Datetime') {
+            } else if (fieldType === 'DateTime') {
                 // For datetime, combine date and time formats
                 let datetimeFormat: string;
                 if (dateFormat === 'dd-MM-yyyy') {
@@ -167,7 +167,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
         } else if (fieldType === 'Date') {
             // Use date-fns to format date
             return dateFormat(date, dateFormatString);
-        } else if (fieldType === 'Datetime') {
+        } else if (fieldType === 'DateTime') {
             // For datetime, combine date and time formats
             let datetimeFormat: string;
             if (dateFormatString === 'dd-MM-yyyy') {
@@ -326,8 +326,8 @@ const DatePicker: React.FC<DatePickerProps> = ({
             // Single date mode
             let finalDate = date;
             
-            // For Datetime type, preserve the selected time
-            if (type === 'Datetime') {
+            // For DateTime type, preserve the selected time
+            if (type === 'DateTime') {
                 finalDate = new Date(date);
                 finalDate.setHours(selectedTime.hours, selectedTime.minutes, selectedTime.seconds);
             }
@@ -359,8 +359,8 @@ const DatePicker: React.FC<DatePickerProps> = ({
             setInputValue(formattedTime);
             setHasUserInteracted(true);
             onChange?.(formattedTime);
-        } else if (type === 'Datetime') {
-            // For Datetime type, create a new date with current date and selected time
+        } else if (type === 'DateTime') {
+            // For DateTime type, create a new date with current date and selected time
             const now = new Date();
             const newDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, seconds);
             setSelectedDate(newDate);
@@ -405,7 +405,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
             setInputValue(formattedDate);
             setHasUserInteracted(true);
             onChange?.(formattedDate);
-        } else if (type === 'Datetime') {
+        } else if (type === 'DateTime') {
             // For datetime fields, use today with current time (now)
             const datetimeDate = new Date(now);
             setSelectedDate(datetimeDate);
@@ -417,10 +417,10 @@ const DatePicker: React.FC<DatePickerProps> = ({
             });
 
             // Update input value and trigger onChange
-            const formattedDatetime = formatDateToString(datetimeDate, format, type);
-            setInputValue(formattedDatetime);
+            const formattedDateTime = formatDateToString(datetimeDate, format, type);
+            setInputValue(formattedDateTime);
             setHasUserInteracted(true);
-            onChange?.(formattedDatetime);
+            onChange?.(formattedDateTime);
         }
         setIsOpen(false);
     };
@@ -599,9 +599,9 @@ const DatePicker: React.FC<DatePickerProps> = ({
             <Popover open={isOpen && !readOnly} onOpenChange={(open) => {
                 if (!readOnly) {
                     setIsOpen(open);
-                    // Initialize time picker with current time when opening for Time or Datetime type
+                    // Initialize time picker with current time when opening for Time or DateTime type
                     // But don't trigger onChange - only set the internal state
-                    if (open && (type === 'Time' || type === 'Datetime') && !selectedDate) {
+                    if (open && (type === 'Time' || type === 'DateTime') && !selectedDate) {
                         const now = new Date();
                         setSelectedTime({
                             hours: now.getHours(),
@@ -789,7 +789,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
                         )}
 
                         {/* Time picker for datetime and time fields */}
-                        {(type === 'Datetime' || type === 'Time') && (
+                        {(type === 'DateTime' || type === 'Time') && (
                             <div className="mt-4">
                                 <div className="zd:grid zd:grid-cols-3 zd:gap-2">
                                     <div>

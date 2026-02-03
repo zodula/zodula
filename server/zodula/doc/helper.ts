@@ -91,7 +91,7 @@ export class ZodulaDoctypeHelper {
             }
 
             // if input can parse to Date
-            if (["Date", "Datetime", "Time"].includes(config.type as any)) {
+            if (["Date", "DateTime", "Time"].includes(config.type as any)) {
                 const fieldType = config.type
                 if (value === "NOW()") {
                     value = format(new Date(), "yyyy-MM-dd HH:mm:ss")
@@ -110,7 +110,7 @@ export class ZodulaDoctypeHelper {
                         case "Date":
                             value = format(dateValue, "yyyy-MM-dd")
                             break
-                        case "Datetime":
+                        case "DateTime":
                             value = format(dateValue, "yyyy-MM-dd HH:mm:ss")
                             break
                         case "Time":
@@ -258,7 +258,19 @@ export class ZodulaDoctypeHelper {
         const records = await Promise.all(ids.map(async (doc) => {
             return await zodula.doctype(relative.childDoctype).get(doc?.id as string).bypass(options.bypass)
         }))
-        if (relative.type === "One to One") {
+        
+        // Check parent doctype's field to determine if it's Extend (single record) or Reference Table (array)
+        // Use parentFieldName from the relative instead of searching for it
+        let isExtend = false
+        if (relative.parentFieldName) {
+            const parentDoctype = loader.from("doctype").get(relative.parentDoctype)
+            const parentFieldConfig = parentDoctype.schema.fields[relative.parentFieldName]
+            if (parentFieldConfig && parentFieldConfig.type === "Extend") {
+                isExtend = true
+            }
+        }
+        
+        if (isExtend) {
             return options.unsafe ? records[0] : ZodulaDoctypeHelper.formatDocResult(records[0] as Zodula.SelectDoctype<TN>, loader.from("doctype").get(relative.childDoctype).schema)
         }
         return options.unsafe ? records : records.map(record => ZodulaDoctypeHelper.formatDocResult(record, loader.from("doctype").get(relative.childDoctype).schema))

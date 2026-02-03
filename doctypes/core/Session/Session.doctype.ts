@@ -6,7 +6,7 @@ export default $doctype({
         required: 1,
         on_delete: "CASCADE"
     },
-    expires_at: $f.Datetime({
+    expires_at: $f.DateTime({
         label: "Expires At",
         required: 1,
         default: "NOW()"

@@ -38,6 +38,11 @@ export default $doctype<"zodula__Organization">({
         label: "Tier Expires At",
         perm_level: "1",
     },
+    organization_roles: {
+        type: "Reference Table",
+        label: "Organization Roles",
+        reference: "zodula__Organization Role",
+    },
 }, {
     naming_series: "{{name}}",
     label: "Organization",

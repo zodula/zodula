@@ -33,6 +33,7 @@ export function AuditTrail({
 }: AuditTrailProps) {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { org } = useParams();
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -339,7 +340,7 @@ export function AuditTrail({
                       </span>
                       <span className="zd:text-muted-foreground">·</span>
                       <Link
-                        to={`/desk/doctypes/zodula__Audit Trail/form/${trail.id}`}
+                        to={`/desk/${org}/doctypes/zodula__Audit Trail/form/${trail.id}`}
                         className="zd:text-primary zd:hover:text-primary zd:transition-colors zd:opacity-0 zd:group-hover:opacity-100"
                       >
                         <ExternalLinkIcon className="zd:w-3 zd:h-3" />

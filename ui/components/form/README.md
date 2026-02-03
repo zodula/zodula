@@ -205,7 +205,7 @@ Here's a complete File model example showing all layout features:
             "readonly": true
         },
         "uploaded_at": {
-            "type": "Datetime",
+            "type": "DateTime",
             "label": "Uploaded At",
             "readonly": true
         },

@@ -400,17 +400,47 @@ export const useWorkspaceEdit = create<
           originalWorkspaceItemMap.set(item.id, item);
         });
 
-      // Prepare workspaces array with _deleted flag
-      const workspacesToApply = allEditedWorkspaces.map((workspace) => ({
-        id: workspace.id,
-        name: workspace.name,
-        idx: workspace.idx || 0,
-        workspace_parent: workspace.workspace_parent || null,
-        icon: workspace.icon || null,
-        app: workspace.app || "zodula",
-        is_system: workspace.is_system || 0,
-        _deleted: false,
-      }));
+      // Normalize workspace idx values by grouping by parent and sorting
+      // Group workspaces by their parent (null for root level)
+      const workspacesByParent = new Map<string | null, typeof allEditedWorkspaces>();
+      allEditedWorkspaces.forEach((workspace) => {
+        const parent = workspace.workspace_parent || null;
+        if (!workspacesByParent.has(parent)) {
+          workspacesByParent.set(parent, []);
+        }
+        workspacesByParent.get(parent)!.push(workspace);
+      });
+
+      // Normalize idx values for each parent group
+      const normalizedWorkspaces = new Map<string, typeof allEditedWorkspaces[0]>();
+      workspacesByParent.forEach((workspaces, parent) => {
+        // Sort workspaces by their current idx values to maintain order
+        const sortedWorkspaces = [...workspaces].sort(
+          (a, b) => (a.idx || 0) - (b.idx || 0)
+        );
+        // Reassign idx values sequentially (0, 10, 20, 30, ...)
+        sortedWorkspaces.forEach((workspace, index) => {
+          normalizedWorkspaces.set(workspace.id, {
+            ...workspace,
+            idx: index * 10,
+          });
+        });
+      });
+
+      // Prepare workspaces array with _deleted flag (using normalized idx)
+      const workspacesToApply = allEditedWorkspaces.map((workspace) => {
+        const normalized = normalizedWorkspaces.get(workspace.id) || workspace;
+        return {
+          id: workspace.id,
+          name: workspace.name,
+          idx: normalized.idx ?? 0,
+          workspace_parent: workspace.workspace_parent || null,
+          icon: workspace.icon || null,
+          app: workspace.app || "zodula",
+          is_system: workspace.is_system || 0,
+          _deleted: false,
+        };
+      });
 
       // Mark deleted workspaces
       allOriginalWorkspaces.forEach((originalWorkspace) => {

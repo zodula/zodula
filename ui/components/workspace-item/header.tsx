@@ -19,7 +19,7 @@ export const HeaderPlugin = new BaseWorkspaceItemPlugin(
         const Tag = `h${Math.min(Math.max(level, 1), 6)}` as any
 
         return (
-            <Tag className={cn("zd:font-semibold zd:text-foreground zd:mb-2 zd:flex zd:items-center zd:gap-2 zd:p-2 zd:justify-between zd:h-full zd:flex-[8]", fontSizes[level as keyof typeof fontSizes])}>
+            <Tag className={cn("zd:font-semibold zd:text-foreground zd:flex zd:items-center zd:gap-2 zd:px-2 zd:justify-between zd:h-full zd:flex-[8]", fontSizes[level as keyof typeof fontSizes])}>
                 {props.value || "Header"}
             </Tag>
         )

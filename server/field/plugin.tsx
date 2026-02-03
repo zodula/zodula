@@ -170,7 +170,7 @@ export const VirtualReferenceFieldPlugin = new BaseFieldPlugin({
 //     textZodSchema: () => null
 // })
 
-// Date, Time, Datetime field types
+// Date, Time, DateTime field types
 export const DateFieldPlugin = new BaseFieldPlugin({
     fieldType: "Date",
     sqlType: "TEXT",
@@ -179,8 +179,8 @@ export const DateFieldPlugin = new BaseFieldPlugin({
     textZodSchema: () => `z.string()`
 })
 
-export const DatetimeFieldPlugin = new BaseFieldPlugin({
-    fieldType: "Datetime",
+export const DateTimeFieldPlugin = new BaseFieldPlugin({
+    fieldType: "DateTime",
     sqlType: "TEXT",
     typescriptType: (fieldConfig) => "string",
     zodSchema: (fieldConfig) => z.string(),
@@ -249,7 +249,7 @@ export const REGISTERED_PLUGINS = {
     Reference: ReferenceFieldPlugin,
     "Virtual Reference": VirtualReferenceFieldPlugin,
     Date: DateFieldPlugin,
-    Datetime: DatetimeFieldPlugin,
+    DateTime: DateTimeFieldPlugin,
     Time: TimeFieldPlugin,
     "Reference Table": ReferenceTableFieldPlugin,
     Extend: ExtendFieldPlugin,

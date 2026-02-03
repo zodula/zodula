@@ -35,6 +35,7 @@ export default function DoctypePage() {
     if (doctypeDoc?.is_single) {
         return (
             <DocFormView
+                id={doctype}
                 doctype={doctype}
                 prefill={prefill}
             />

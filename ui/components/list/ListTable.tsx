@@ -8,7 +8,6 @@ import {
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { zodula } from "@/zodula/client";
-import { DocStatusBadge } from "../custom/doc-status-badge";
 import { cn } from "../../lib/utils";
 import { useTranslation } from "../../hooks/use-translation";
 
@@ -33,7 +32,6 @@ interface ListTableProps<
   count?: number;
   selected: Set<string>;
   setSelected: (selected: Set<string>) => void;
-  hideDocStatus?: boolean;
 }
 
 export function ListTable<TDoc extends Record<string, any>>({
@@ -46,7 +44,6 @@ export function ListTable<TDoc extends Record<string, any>>({
   count,
   selected,
   setSelected,
-  hideDocStatus = false,
 }: ListTableProps<TDoc>) {
   const { t } = useTranslation();
   // Calculate selectAll state based on selected items
@@ -83,14 +80,14 @@ export function ListTable<TDoc extends Record<string, any>>({
             {/* Data columns */}
             {columns.map((col, index) => {
               const isActive = sort === String(col.key);
-              const isDisplayed = index === 0;
+              const isDisplayField = index === 0;
               // const arrow = isActive ? (order === "asc" ? "▲" : "▼") : "";
               return (
                 <th
                   key={String(col.key)}
                   className={cn(
                     "zd:px-2 zd:py-2 zd:font-medium zd:whitespace-nowrap zd:bg-muted zd:min-w-[100px]",
-                    isDisplayed ? "zd:sticky zd:left-11" : ""
+                    isDisplayField ? "zd:sticky zd:left-11" : ""
                   )}
                 >
                   {col.sortable ? (
@@ -120,21 +117,9 @@ export function ListTable<TDoc extends Record<string, any>>({
             })}
             {/* Count column */}
             <th
-              className={cn(
-                "zd:sticky zd:right-18 zd:px-3 zd:py-1 zd:font-medium zd:text-right zd:bg-muted zd:min-w-[100px]",
-                hideDocStatus ? "zd:right-0" : ""
-              )}
+              className="zd:sticky zd:right-0 zd:px-3 zd:py-1 zd:font-medium zd:text-right zd:bg-muted zd:min-w-[100px] zd:rounded-r-lg"
             >
               {count ? `${docs.length} of ${count}` : ``}
-            </th>
-            {/* Actions column */}
-            <th
-              className={cn(
-                "zd:sticky zd:right-0 zd:px-3 zd:py-1 zd:font-medium zd:w-12 zd:bg-muted zd:rounded-r-lg zd:text-right",
-                hideDocStatus ? "zd:hidden" : ""
-              )}
-            >
-              {t("Status")}
             </th>
           </tr>
         </thead>
@@ -142,7 +127,7 @@ export function ListTable<TDoc extends Record<string, any>>({
           {docs.length === 0 ? (
             <tr>
               <td
-                colSpan={columns.length + 3}
+                colSpan={columns.length + 2}
                 className="zd:px-3 zd:py-6 zd:text-center zd:text-muted-foreground"
               >
                 {t("No docs")}
@@ -169,7 +154,7 @@ export function ListTable<TDoc extends Record<string, any>>({
                 </td>
                 {/* Data columns */}
                 {columns.map((col, index) => {
-                  const isDisplayed = index === 0;
+                  const isDisplayField = index === 0;
                   const Render = col.render as any;
                   const isUndefined = doc[col.key] === undefined;
                   return (
@@ -177,7 +162,7 @@ export function ListTable<TDoc extends Record<string, any>>({
                       key={String(col.key)}
                       className={cn(
                         "zd:z-10 zd:px-2 zd:py-2 zd:whitespace-nowrap zd:max-w-[200px] zd:bg-background zd:overflow-hidden zd:text-ellipsis",
-                        isDisplayed
+                        isDisplayField
                           ? "zd:sticky zd:left-11 zd:bg-background"
                           : ""
                       )}
@@ -190,12 +175,9 @@ export function ListTable<TDoc extends Record<string, any>>({
                     </td>
                   );
                 })}
-                {/* Time/Status column */}
+                {/* Time column */}
                 <td
-                  className={cn(
-                    "zd:sticky zd:right-18 zd:px-2 zd:py-1 zd:bg-background zd:text-right zd:text-sm zd:text-muted-foreground",
-                    hideDocStatus ? "zd:right-0" : ""
-                  )}
+                  className="zd:sticky zd:right-0 zd:px-2 zd:py-1 zd:bg-background zd:text-right zd:text-sm zd:text-muted-foreground"
                 >
                   <div className="zd:flex zd:items-center zd:justify-end zd:gap-1 zd:whitespace-nowrap">
                     <span>
@@ -204,15 +186,6 @@ export function ListTable<TDoc extends Record<string, any>>({
                         : "-"}
                     </span>
                   </div>
-                </td>
-                {/* Actions column */}
-                <td
-                  className={cn(
-                    "zd:sticky zd:w-12 zd:right-0 zd:px-3 zd:py-3 zd:bg-background",
-                    hideDocStatus ? "zd:hidden" : ""
-                  )}
-                >
-                  <DocStatusBadge status={doc.doc_status || 0} />
                 </td>
               </tr>
             ))

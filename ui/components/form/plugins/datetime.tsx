@@ -2,13 +2,13 @@ import React from "react";
 import { FormPlugin } from "../plugin";
 import { DatePicker } from "../../custom/date-picker";
 
-export const DatetimePlugin = new FormPlugin({
-  types: ["Datetime", "Date", "Time"],
+export const DateTimePlugin = new FormPlugin({
+  types: ["DateTime", "Date", "Time"],
   supportOperators: ["=", "!=", ">", ">=", "<", "<=", "IS NULL", "IS NOT NULL"],
   render: (props) => {
     return (
       <DatePicker
-        type={props.fieldOptions.type as "Datetime" | "Date" | "Time"}
+        type={props.fieldOptions.type as "DateTime" | "Date" | "Time"}
         value={props.value}
         readOnly={props.readonly}
         range={props.multiple}
@@ -38,7 +38,7 @@ export const DatetimePlugin = new FormPlugin({
       if (type === "Date") {
         return date.toLocaleDateString();
       } else {
-        // Datetime
+        // DateTime
         return date.toLocaleString();
       }
     } catch {
@@ -48,7 +48,7 @@ export const DatetimePlugin = new FormPlugin({
   renderFilter: (props) => {
     return (
       <DatePicker
-        type={props.fieldOptions.type as "Datetime" | "Date" | "Time"}
+        type={props.fieldOptions.type as "DateTime" | "Date" | "Time"}
         value={props.value}
         onChange={(value) => {
           props.onChange?.(value);

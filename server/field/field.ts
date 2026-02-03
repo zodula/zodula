@@ -126,12 +126,12 @@ export class Fields {
         return new BaseField("Select", _config).config
     }
 
-    static Datetime<C extends FieldConfig<Zodula.Field>>(config: C) {
+    static DateTime<C extends FieldConfig<Zodula.Field>>(config: C) {
         const _config = {
             ...config,
-            type: "Datetime"
-        } as Zodula.Field<"Datetime", C["required"] extends 1 ? 1 : 0>
-        return new BaseField("Datetime", _config).config
+            type: "DateTime"
+        } as Zodula.Field<"DateTime", C["required"] extends 1 ? 1 : 0>
+        return new BaseField("DateTime", _config).config
     }
 
     static Date<C extends FieldConfig<Zodula.Field>>(config: C) {

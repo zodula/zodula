@@ -243,11 +243,10 @@ export const WorkspaceView = () => {
 
     return (
         <div className="zd:flex zd:flex-col">
-            <span className="zd:text-sm zd:text-muted-foreground zd:min-h-7"></span>
             {currentItems.length > 0 ? (
                 <div
                     ref={containerRef}
-                    className="zd:flex zd:flex-wrap zd:gap-4 zd:justify-start"
+                    className="zd:flex zd:flex-wrap zd:gap-3 zd:justify-start"
                 // className="zd:grid zd:xl:grid-cols-2 zd:lg:grid-cols-3 zd:md:grid-cols-2 zd:grid-cols-1 zd:gap-4"
                 >
                     {currentItems.map((item, index) => renderWorkspaceItem(item, index))}

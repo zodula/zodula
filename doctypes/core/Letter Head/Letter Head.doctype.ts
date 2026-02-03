@@ -16,6 +16,12 @@ export default $doctype<"zodula__Letter Head">({
     disabled: {
         type: "Check",
         label: "Disabled"
+    },
+    items: {
+        type: "Reference Table",
+        label: "Items",
+        reference: "zodula__Letter Head Item",
+        required: 0
     }
 }, {
     label: "Letter Head",
