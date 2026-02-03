@@ -488,11 +488,13 @@ export class DoctypeLoader implements DoctypePlugin {
         const comparePath = doctypePath.replace(".doctype.ts", "");
         const app = loader.from("app").getAppByPath(comparePath);
         const appName = app?.packageName as Zodula.AppName || "";
-        const filename = path.basename(comparePath).split("/").pop() || "";
-        const doctypeName = `${appName}__${filename}` as Zodula.DoctypeName;
+        // Extract doctype folder name from path: apps/<app>/doctypes/<domain>/<doctype>/<doctype>.doctype.ts
+        const pathParts = comparePath.split("/");
+        const doctypeFolderName = pathParts[pathParts.length - 1] || "";
+        const doctypeName = `${appName}__${doctypeFolderName}` as Zodula.DoctypeName;
         const domain = LoaderHelper.getDomainByPath(comparePath);
         const domainName = domain?.name || "";
-        if (filename.startsWith("_")) {
+        if (doctypeFolderName.startsWith("_")) {
             logger.warn(`Skipping doctype ${doctypeName} because it starts with _`);
             return null;
         }
@@ -550,13 +552,13 @@ export class DoctypeLoader implements DoctypePlugin {
     /**
      * Loads all doctype definitions from the filesystem
      * 
-     * Scans for .doctype.ts files in apps/zodula/doctype/core/ directories and processes them.
+     * Scans for .doctype.ts files in apps/{app}/doctypes/{domain}/{doctype}/{doctype}.doctype.ts directories and processes them.
      * Handles field relationships, event registration, and metadata extraction.
      * 
      * @returns Promise resolving to array of loaded doctype metadata
      */
     async load(): Promise<DoctypeMetadata[]> {
-        const doctypesGlob = new Glob("apps/*/doctypes/*/*.doctype.ts");
+        const doctypesGlob = new Glob("apps/*/doctypes/*/*/*.doctype.ts");
         events.clear()
         this.doctypes = []
         const _relatives = new Map<Zodula.DoctypeName, DoctypeRelative[]>()

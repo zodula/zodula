@@ -942,7 +942,7 @@ export function DocFormView({
             enableScripts={true}
           />
           <div className="">
-            <AuditTrail doctype={doctype} docId={id!} />
+            {!!doc?.id && <AuditTrail doctype={doctype} docId={id!} />}
             {/* Create at and Updated at */}
             <div className="zd:flex zd:gap-2 zd:items-center zd:mt-2">
               <span className="zd:text-sm zd:text-muted-foreground">
