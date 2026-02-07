@@ -177,7 +177,7 @@ export function useDocListAll<DT extends Zodula.DoctypeName = Zodula.DoctypeName
             try {
                 // Fetch all records without any filters, limits, or sorting
                 const response = await zodula?.doc?.select_docs(doctype, {
-                    limit: 100000, // No limit - fetch all
+                    limit: -1, // No limit - fetch all
                     filters: [],
                     sort: "idx",
                     order: "asc",

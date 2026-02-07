@@ -9,6 +9,8 @@ import { Badge } from "../ui/badge";
 import { plugins } from "../form/plugins";
 import { cn } from "../../lib/utils";
 import { useTranslation } from "../../hooks/use-translation";
+import { useDocList } from "../../hooks/use-doc-list";
+import { ClientFieldHelper } from "@/zodula/client/field";
 
 const OPERATORS: { value: IOperator; label: string }[] = [
   { value: "=", label: "Equals" },
@@ -39,6 +41,7 @@ interface FilterPopupProps {
   onClearFilters?: () => void;
   open: boolean;
   onOpenChange?: (open: boolean) => void;
+  doctype?: Zodula.DoctypeName;
 }
 
 export function FilterPopup({
@@ -48,17 +51,75 @@ export function FilterPopup({
   onClearFilters,
   open,
   onOpenChange,
+  doctype,
 }: FilterPopupProps) {
   const { t } = useTranslation();
-  // Helper function to get the appropriate plugin for a field
+
+  // Fetch all fields to get child fields for Reference Table fields
+  const { docs: allFields } = useDocList({
+    doctype: "zodula__Field",
+    limit: -1,
+    sort: "idx",
+    order: "asc",
+  }, [doctype]);
+
+  // Build map of reference table fields to their child fields
+  const referenceTableChildFields = useMemo(() => {
+    const map = new Map<string, any[]>();
+    
+    for (const field of fields) {
+      if (field.type === "Reference Table" && field.reference) {
+        const childFields = allFields.filter(
+          (f: any) => 
+            f.doctype === field.reference && 
+            f.name !== field.reference &&
+            !ClientFieldHelper.isStandardField(f.name || "")
+        );
+        if (childFields.length > 0) {
+          map.set(field.name || "", childFields);
+        }
+      }
+    }
+    
+    return map;
+  }, [fields, allFields]);
+
+  // Helper function to parse field path (e.g., "items.unit" -> { parentField: "items", childField: "unit" })
+  const parseFieldPath = (fieldPath: string) => {
+    if (!fieldPath || !fieldPath.includes(".")) {
+      return { parentField: fieldPath, childField: null };
+    }
+    const parts = fieldPath.split(".", 2);
+    if (parts.length < 2) {
+      return { parentField: fieldPath, childField: null };
+    }
+    const [parentField, childField] = parts;
+    return { parentField: parentField || fieldPath, childField: childField || null };
+  };
+
+  // Helper function to get the appropriate plugin for a field (supports dot notation)
   const getFieldPlugin = (fieldName: string) => {
+    const { parentField, childField } = parseFieldPath(fieldName);
+    
+    if (childField) {
+      // For reference table fields, find the child field
+      const childFields = referenceTableChildFields.get(parentField);
+      if (childFields) {
+        const childFieldObj = childFields.find((f: any) => f.name === childField);
+        if (childFieldObj) {
+          return plugins.find((plugin) => plugin.types.includes(childFieldObj.type as any));
+        }
+      }
+      return null;
+    }
+    
     const field = fields.find((f) => f.name === fieldName);
     if (!field) return null;
 
     return plugins.find((plugin) => plugin.types.includes(field.type as any));
   };
 
-  // Get supported operators for a field
+  // Get supported operators for a field (supports dot notation)
   const getSupportedOperators = (fieldName: string) => {
     const plugin = getFieldPlugin(fieldName);
     if (plugin?.supportOperators) {
@@ -67,20 +128,48 @@ export function FilterPopup({
     return OPERATORS; // Default to all operators if no supportOperators specified
   };
 
-  // Convert fields to options for the field selector
+  // Convert fields to options for the field selector (including nested reference table fields)
   const fieldOptions = useMemo(
-    () => [
-      { value: "", label: "" },
-      ...fields.map(
-        (field) =>
-          ({
+    () => {
+      const options: SelectOption[] = [{ value: "", label: "" }];
+      
+      // Add regular fields
+      for (const field of fields) {
+        // Skip standard fields
+        if (ClientFieldHelper.isStandardField(field.name || "")) {
+          continue;
+        }
+        
+        if (field.type === "Reference Table" && field.reference) {
+          // Add the reference table field itself as a group header
+          const childFields = referenceTableChildFields.get(field.name || "");
+          if (childFields && childFields.length > 0) {
+            // Add nested fields
+            for (const childField of childFields) {
+              const childFieldName = childField.name || "";
+              const parentFieldName = field.name || "";
+              if (childFieldName && parentFieldName) {
+                options.push({
+                  value: `${parentFieldName}.${childFieldName}`,
+                  label: `${t(field.label || parentFieldName)} → ${t(childField.label || childFieldName)}`,
+                  subtitle: `${parentFieldName}.${childFieldName}`,
+                });
+              }
+            }
+          }
+        } else if (field.type !== "Extend") {
+          // Add regular fields (exclude Extend fields)
+          options.push({
             value: (field.name as string) || "",
             label: t(field.label || field.name || ""),
             subtitle: field.name || "",
-          }) satisfies SelectOption
-      ),
-    ],
-    [fields, t]
+          });
+        }
+      }
+      
+      return options;
+    },
+    [fields, referenceTableChildFields, t]
   );
   const [filterRows, setFilterRows] = useState<FilterRow[]>(() => {
     if (filters.length === 0) {
@@ -226,7 +315,7 @@ export function FilterPopup({
                     const newOperator = supportedOps.find(op => op.value === row.operator)?.value || supportedOps[0]?.value || "=";
                     updateFilterRow(row.id, { field: value, operator: newOperator as IOperator });
                   }}
-                  className="zd:w-40"
+                  className="zd:w-80"
                 />
 
                 <Select
@@ -249,7 +338,19 @@ export function FilterPopup({
 
                 {getValueInputType(row.operator) !== "hidden" &&
                   (() => {
-                    const field = fields.find((f) => f.name === row.field);
+                    const { parentField, childField } = parseFieldPath(row.field);
+                    let field: Zodula.Field | undefined;
+                    
+                    if (childField) {
+                      // For reference table fields, find the child field
+                      const childFields = referenceTableChildFields.get(parentField);
+                    if (childFields && childField) {
+                      field = childFields.find((f: any) => f.name === childField) as any;
+                    }
+                    } else {
+                      field = fields.find((f) => f.name === row.field);
+                    }
+                    
                     const plugin = field ? getFieldPlugin(row.field) : null;
 
                     if (plugin && field) {

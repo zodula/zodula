@@ -827,21 +827,25 @@ export function PrintTemplateBuilder({
             
             // Filter to only include fields that belong to the reference doctype
             // Exclude fields that reference the parent doctype (for Extend and Reference Table)
+            // Also exclude fields with no_print set to true, 1, or "1"
             const fields = fieldsArray
               .filter((field: any) => {
                 const fieldDoctype = field.doctype || "";
                 const fieldName = field.name || "";
                 const fieldReference = field.reference || "";
-                // Exclude if it's a standard field, or if it references the parent doctype
+                // Check no_print - exclude fields with no_print set to 1 or true
+                const fieldNoPrint = field.no_print === 1 || field.no_print === true;
+                // Exclude if it's a standard field, if it references the parent doctype, or if no_print is set
                 const isParentReference = parentDoctype && fieldReference === parentDoctype;
-                return fieldDoctype === referenceDoctype && !standardFieldNames.has(fieldName) && !isParentReference;
+                return fieldDoctype === referenceDoctype && !standardFieldNames.has(fieldName) && !isParentReference && !fieldNoPrint;
               })
               .map((field: any, idx: number) => ({
                 field: field.name || "",
                 label: field.label || field.name || "",
                 order: idx,
                 required: field.required === 1 || field.required === true,
-                in_list_view: field.in_list_view === 1 || field.in_list_view === true
+                in_list_view: field.in_list_view === 1 || field.in_list_view === true,
+                no_print: field.no_print === 1 || field.no_print === true
               }))
               .filter((col: any) => col.field); // Filter out empty field names
             
@@ -2582,7 +2586,7 @@ export function PrintTemplateBuilder({
           <div
             ref={paperRef}
             key={`paper-${format}-${customWidth}-${customHeight}`}
-            className="zd:relative zd:m-auto zd:bg-background"
+            className="zd:relative zd:m-auto zd:bg-background zd:border zd:border-primary"
             style={{
               width: `${pageDimensions?.width || 210}mm`,
               minHeight: `${dynamicPageHeight}mm`,

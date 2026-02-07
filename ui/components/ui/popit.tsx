@@ -86,7 +86,7 @@ function AlertDialog({
     <Dialog open={dialog.isOpen} onClose={onClose} className="relative z-50">
       <div className="zd:fixed zd:inset-0 zd:bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" aria-hidden="true" />
       <div className="zd:fixed zd:inset-0 zd:flex zd:items-center zd:justify-center zd:p-4">
-        <DialogContent className="zd:mx-auto zd:max-w-sm zd:rounded zd:bg-background zd:p-6 zd:shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+        <DialogContent className="zd:mx-auto zd:max-w-[600px] zd:w-[90vw] zd:rounded zd:bg-background zd:p-6 zd:shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
           <div className="zd:flex zd:items-start zd:gap-4">
             <div className="zd:flex-1">
               <DialogTitle className="zd:text-lg zd:font-semibold zd:text-foreground">
@@ -181,7 +181,7 @@ function PromptDialog({
     <Dialog open={dialog.isOpen} onClose={onClose} className="relative z-50">
       <div className="zd:fixed zd:inset-0 zd:bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" aria-hidden="true" />
       <div className="zd:fixed zd:inset-0 zd:flex zd:items-center zd:justify-center zd:p-4">
-        <Dialog.Panel className="zd:mx-auto zd:max-w-sm zd:rounded zd:bg-background zd:p-6 zd:shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+        <Dialog.Panel className="zd:mx-auto zd:max-w-[600px] zd:w-[90vw] zd:rounded zd:bg-background zd:p-6 zd:shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
           <div className="zd:flex zd:items-start zd:gap-4">
             <div className="zd:flex-1">
               <Dialog.Title className="zd:text-lg zd:font-semibold zd:text-foreground">
@@ -250,7 +250,7 @@ function ConfirmDialog({
     <Dialog open={dialog.isOpen} onClose={onClose} className="zd:relative zd:z-50">
       <div className="zd:fixed zd:inset-0 zd:bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" aria-hidden="true" />
       <div className="zd:fixed zd:inset-0 zd:flex zd:items-center zd:justify-center zd:p-4">
-        <Dialog.Panel className="zd:mx-auto zd:max-w-sm zd:rounded zd:bg-background zd:p-6 zd:shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+        <Dialog.Panel className="zd:mx-auto zd:max-w-[600px] zd:w-[90vw] zd:rounded zd:bg-background zd:p-6 zd:shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
           <div className="zd:flex zd:items-start zd:gap-4">
             <div className="zd:flex-1">
               <Dialog.Title className="zd:text-lg zd:font-semibold zd:text-foreground">
@@ -276,7 +276,10 @@ function ConfirmDialog({
               variant={variant === "destructive" ? "solid" : "outline"}
               onClick={onConfirm}
               className={cn(
-                variant === "destructive" ? "zd:bg-destructive zd:text-primary-foreground zd:hover:bg-destructive/90" : "zd:bg-background zd:text-foreground zd:hover:bg-accent zd:hover:text-accent-foreground zd:hover:border-accent zd:active:bg-accent/80"
+                variant === "destructive" && "zd:bg-destructive zd:text-primary-foreground zd:hover:bg-destructive/90",
+                variant === "warning" && "zd:bg-warning zd:text-warning-foreground zd:hover:bg-warning/90",
+                variant === "success" && "zd:bg-success zd:text-success-foreground zd:hover:bg-success/90",
+                variant === "default" && "zd:bg-primary zd:text-primary-foreground zd:hover:bg-primary/90",
               )}
             >
               {confirmText}

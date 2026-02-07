@@ -6,6 +6,7 @@ import { logger } from "../../server/logger";
 import type {
   DoctypeMetadata,
   DoctypeRelative,
+  DoctypeChild,
 } from "../../server/loader/plugins/doctype";
 import { Database } from "@/zodula/server/database";
 
@@ -14,6 +15,7 @@ interface ProcessedEntities {
   doctypes: string[];
   fields: string[];
   relatives: string[];
+  children: string[];
   apps: string[];
 }
 
@@ -98,9 +100,12 @@ async function upsertFieldsBatch(
       description: fieldSchema.description || null,
       options: fieldSchema.options || null,
       filters: fieldSchema.filters || null,
+      sort: fieldSchema.sort || null,
+      order: fieldSchema.order || null,
       default: fieldSchema.default || null,
       plain: fieldSchema.plain ? 1 : 0,
       reference: fieldSchema.reference || null,
+      reference_field: fieldSchema.reference_field || null,
       is_auto_generated: fieldSchema.is_auto_generated ? 1 : 0,
       unique: fieldSchema.unique ? 1 : 0,
       group: fieldSchema.group || null,
@@ -111,7 +116,6 @@ async function upsertFieldsBatch(
       no_copy: fieldSchema.no_copy ? 1 : 0,
       no_print: fieldSchema.no_print ? 1 : 0,
       accept: fieldSchema.accept || null,
-      on_delete: fieldSchema.on_delete || null,
       min_length: fieldSchema.min_length || null,
       length: fieldSchema.length || null,
       min: fieldSchema.min || null,
@@ -130,6 +134,7 @@ async function upsertFieldsBatch(
       organization: "SYS",
       in_quick_entry: fieldSchema.in_quick_entry ? 1 : 0 || null,
       perm_level: fieldSchema.perm_level || "0",
+      only_once: fieldSchema.only_once ? 1 : 0 || null,
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Field">>;
 
@@ -227,7 +232,6 @@ async function upsertRelativesBatch(
       parent_doctype: relativeItem.parentDoctype,
       child_doctype: relativeItem.childDoctype,
       child_field_name: relativeItem.childFieldName,
-      parent_field_name: relativeItem.parentFieldName,
       idx: relativeIdx++,
       vector: "[]",
       organization: "SYS",
@@ -295,12 +299,114 @@ async function upsertRelativesBatch(
   }
 }
 
+// Children processing functions
+async function upsertChildrenBatch(
+  trx: Bunely,
+  children: DoctypeChild[],
+  startIdx: number
+): Promise<{ processedChildIds: string[] }> {
+  const processedChildIds: string[] = [];
+  const basePayload = createBasePayload();
+  let childIdx = startIdx;
+
+  // Prepare all child payloads
+  const childPayloads: Required<
+    Zodula.SelectDoctype<"zodula__Doctype Children">
+  >[] = [];
+  const childIds: string[] = [];
+
+  for (const childItem of children) {
+    const newId = `${childItem.parentDoctype}--${childItem.childDoctype}--${childItem.parentFieldName}`;
+    childIds.push(newId);
+
+    const childPayload = {
+      id: newId,
+      parent_doctype: childItem.parentDoctype,
+      child_doctype: childItem.childDoctype,
+      parent_field_name: childItem.parentFieldName,
+      child_field_name: childItem.childFieldName,
+      type: childItem.type,
+      idx: childIdx++,
+      vector: "[]",
+      organization: "SYS",
+      ...basePayload,
+    } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype Children">>;
+
+    childPayloads.push(childPayload);
+  }
+
+  try {
+    // Handle empty children array
+    if (childIds.length === 0) {
+      return { processedChildIds: [] };
+    }
+
+    // Check which children already exist
+    const existingChildren = await trx
+      .select("id")
+      .from("zodula__Doctype Children")
+      .where("id", "IN", childIds)
+      .execute();
+
+    const existingIds = new Set(existingChildren.map((c) => c.id));
+
+    // Separate payloads for insert vs update
+    const insertPayloads: Required<
+      Zodula.SelectDoctype<"zodula__Doctype Children">
+    >[] = [];
+    const updatePayloads: Required<
+      Zodula.SelectDoctype<"zodula__Doctype Children">
+    >[] = [];
+
+    for (const payload of childPayloads) {
+      if (existingIds.has(payload.id)) {
+        updatePayloads.push(payload);
+      } else {
+        insertPayloads.push(payload);
+      }
+    }
+
+    // Batch insert new children
+    if (insertPayloads.length > 0) {
+      await trx
+        .insert("zodula__Doctype Children")
+        .values(insertPayloads)
+        .execute();
+    }
+
+    // Batch update existing children
+    if (updatePayloads.length > 0) {
+      for (const payload of updatePayloads) {
+        await trx
+          .update("zodula__Doctype Children")
+          .set(payload)
+          .where("id", "=", payload.id)
+          .execute();
+      }
+    }
+
+    processedChildIds.push(...childIds);
+    return { processedChildIds };
+  } catch (error) {
+    console.error(`Failed to batch upsert children:`, error);
+    return { processedChildIds: [] };
+  }
+}
+
 async function processRelatives(
   trx: Bunely,
   doctype: DoctypeMetadata,
   startIdx: number
 ): Promise<{ processedRelativeIds: string[] }> {
   return await upsertRelativesBatch(trx, doctype.relatives, startIdx);
+}
+
+async function processChildren(
+  trx: Bunely,
+  doctype: DoctypeMetadata,
+  startIdx: number
+): Promise<{ processedChildIds: string[] }> {
+  return await upsertChildrenBatch(trx, doctype.children, startIdx);
 }
 
 // App processing functions
@@ -398,6 +504,14 @@ async function cleanupOrphanedEntities(
         .execute();
     }
 
+    // Remove orphaned children
+    if (processedEntities.children.length > 0) {
+      await trx
+        .delete("zodula__Doctype Children")
+        .where("id", "NOT IN", processedEntities.children)
+        .execute();
+    }
+
     // Remove orphaned apps
     if (processedEntities.apps.length > 0) {
       await trx
@@ -440,6 +554,7 @@ async function upsertDoctype(
       is_child_doctype: doctype.config.is_child_doctype ? 1 : 0,
       is_global: doctype.config.is_global ? 1 : 0,
       is_quick_entry: doctype.config.is_quick_entry ? 1 : 0,
+      additional_connections: doctype.config.additional_connections || null,
       organization: "SYS",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype">>;
@@ -477,12 +592,14 @@ export const applyPredefine = async (): Promise<void> => {
       doctypes: [],
       fields: [],
       relatives: [],
+      children: [],
       apps: [],
     };
 
     let doctypeIdx = 0;
     let fieldIdx = 0;
     let relativeIdx = 0;
+    let childIdx = 0;
 
     // Process all doctypes
     for (const doctype of doctypes) {
@@ -499,10 +616,11 @@ export const applyPredefine = async (): Promise<void> => {
         processedEntities.doctypes.push(doctype.name);
         doctypeIdx++;
 
-        // Process fields and relatives in parallel for this doctype
-        const [fieldResults, relativeResults] = await Promise.all([
+        // Process fields, relatives, and children in parallel for this doctype
+        const [fieldResults, relativeResults, childResults] = await Promise.all([
           processFields(trx, doctype, fieldIdx),
           processRelatives(trx, doctype, relativeIdx),
+          processChildren(trx, doctype, childIdx),
         ]);
 
         processedEntities.fields.push(...fieldResults.processedFieldIds);
@@ -512,6 +630,9 @@ export const applyPredefine = async (): Promise<void> => {
           ...relativeResults.processedRelativeIds
         );
         relativeIdx += relativeResults.processedRelativeIds.length;
+
+        processedEntities.children.push(...childResults.processedChildIds);
+        childIdx += childResults.processedChildIds.length;
       } catch (error) {
         console.error(`Error processing doctype ${doctype.name}:`, error);
         // Continue with next doctype
@@ -537,7 +658,7 @@ export const applyPredefine = async (): Promise<void> => {
     }
 
     logger.info(
-      `Processed: ${processedEntities.doctypes.length} doctypes, ${processedEntities.fields.length} fields, ${processedEntities.relatives.length} relatives, ${processedEntities.apps.length} apps`
+      `Processed: ${processedEntities.doctypes.length} doctypes, ${processedEntities.fields.length} fields, ${processedEntities.relatives.length} relatives, ${processedEntities.children.length} children, ${processedEntities.apps.length} apps`
     );
   } catch (error) {
     console.error("Critical error in applyPredefine:", error);

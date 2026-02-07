@@ -2,14 +2,14 @@ import { format, isValid, parse } from "date-fns"
 import type { FieldType } from "../../field/type"
 import { zodula } from ".."
 import { Database } from "../../database/database"
-import type { DoctypeRelative } from "../../loader/plugins/doctype"
+import type { DoctypeRelative, DoctypeChild } from "../../loader/plugins/doctype"
 import { loader } from "../../loader"
 import { parseDate } from "@/zodula/client/utils"
 import { ErrorWithCode } from "@/zodula/error"
 import { ClientFieldHelper } from "@/zodula/client/field"
 
 export interface GETOptions<TN extends Zodula.DoctypeName = Zodula.DoctypeName> {
-    fields: (keyof Zodula.SelectDoctype<TN>)[],
+    fields: (keyof Zodula.SelectDoctype<TN> | "*")[],
     bypass: boolean,
     override: boolean,
     unsafe: boolean
@@ -240,14 +240,29 @@ export class ZodulaDoctypeHelper {
         options: {
             bypass: boolean
             doctype: any
-            user: any
-            roles: string[]
         }
     ): Promise<{ can: boolean }> {
-        const { bypass, user, roles } = options
+        const { bypass } = options
+        if(bypass) {
+            return { can: true }
+        }
+        const user = await zodula.session.user(true);
+        const userRoles = await zodula.session.roles(data?.organization);
+        const userOrganizations = await zodula.session.organizations(true)
+        const doctype = loader.from("doctype").get(doctypeName);
+        let can = await ZodulaDoctypeHelper.can(doctypeName, action, data?.owner === user.id, userRoles, bypass)
 
-        // Check basic permissions
-        const can = await ZodulaDoctypeHelper.can(doctypeName, action, data?.owner === user.id, roles, bypass)
+        if(can && (action !== "can_get" && action !== "can_select")) {
+            if(!userOrganizations.includes(data?.organization || "SYS")) {
+                can = false
+            }
+            if(userRoles.includes("System Admin")) {
+                can = true
+            }
+            if(doctype?.name === "zodula__Organization" && data?.organization === "SYS") {
+                can = true
+            }
+        }
 
         return { can }
     }
@@ -259,21 +274,24 @@ export class ZodulaDoctypeHelper {
             return await zodula.doctype(relative.childDoctype).get(doc?.id as string).bypass(options.bypass)
         }))
         
-        // Check parent doctype's field to determine if it's Extend (single record) or Reference Table (array)
-        // Use parentFieldName from the relative instead of searching for it
-        let isExtend = false
-        if (relative.parentFieldName) {
-            const parentDoctype = loader.from("doctype").get(relative.parentDoctype)
-            const parentFieldConfig = parentDoctype.schema.fields[relative.parentFieldName]
-            if (parentFieldConfig && parentFieldConfig.type === "Extend") {
-                isExtend = true
-            }
-        }
+        // For relatives, return all records (they are one-way relationships)
+        return options.unsafe ? records : records.map(record => ZodulaDoctypeHelper.formatDocResult(record, loader.from("doctype").get(relative.childDoctype).schema))
+    }
+
+    static async getChildRecords<TN extends Zodula.DoctypeName = Zodula.DoctypeName>(id: string, child: DoctypeChild, options: GETOptions<TN>) {
+        const db = Database("main")
+        const ids = await db.all(`SELECT id FROM "${child.childDoctype}" WHERE "${child.childFieldName}" = '${id}' ORDER BY "idx" ASC`) as any[]
+        const records = await Promise.all(ids.map(async (doc) => {
+            return await zodula.doctype(child.childDoctype).get(doc?.id as string).bypass(options.bypass)
+        }))
+        
+        // Check child type to determine if it's Extend (single record) or Reference Table (array)
+        const isExtend = child.type === "Extend"
         
         if (isExtend) {
-            return options.unsafe ? records[0] : ZodulaDoctypeHelper.formatDocResult(records[0] as Zodula.SelectDoctype<TN>, loader.from("doctype").get(relative.childDoctype).schema)
+            return options.unsafe ? records[0] : ZodulaDoctypeHelper.formatDocResult(records[0] as Zodula.SelectDoctype<TN>, loader.from("doctype").get(child.childDoctype).schema)
         }
-        return options.unsafe ? records : records.map(record => ZodulaDoctypeHelper.formatDocResult(record, loader.from("doctype").get(relative.childDoctype).schema))
+        return options.unsafe ? records : records.map(record => ZodulaDoctypeHelper.formatDocResult(record, loader.from("doctype").get(child.childDoctype).schema))
     }
 
     static validateDoc<TN extends Zodula.DoctypeName>(
@@ -311,10 +329,9 @@ export class ZodulaDoctypeHelper {
         }
 
         // check for required
-        for (const [fieldName, value] of Object.entries(input)) {
-            const fieldConfig = doctype.fields[fieldName as keyof typeof doctype.fields]
-            if (!fieldConfig) continue
-            if (fieldConfig.required && (value === undefined || value === null || value === "")) {
+        for (const [fieldName, fieldConfig] of Object.entries(doctype.fields)) {
+            const value = input[fieldName as keyof typeof input]
+            if (fieldConfig.required === 1 && (value === undefined || value === null || value === "")) {
                 throw new ErrorWithCode(`Field ${fieldName} is required`, {
                     status: 400,
                 })

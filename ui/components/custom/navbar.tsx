@@ -30,7 +30,8 @@ export interface NavbarProps {
 
 export const Navbar = ({ children }: NavbarProps) => {
   const { doc: zodula__WebsiteSetting } = useDocAll({
-    doctype: "zodula__Global Setting"
+    doctype: "zodula__Global Setting",
+    id: "zodula__Global Setting"
   });
   const { org } = useParams();
   const [searchTerm, setSearchTerm] = useState<string>("");
@@ -194,7 +195,8 @@ export const Navbar = ({ children }: NavbarProps) => {
                         "zodula__Global Setting",
                         zodula__WebsiteSetting?.id || "",
                         "logo",
-                        (zodula__WebsiteSetting?.logo as string) || ""
+                        (zodula__WebsiteSetting?.logo as string) || "",
+                        "SYS"
                       ) + "?w=40&h=40"
                     : "/public/zodula/zodula-logo.png"
                 }

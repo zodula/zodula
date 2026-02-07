@@ -18,7 +18,7 @@ const badgeVariants = cva(
         warning:
           "zd:border-transparent zd:bg-warning zd:text-warning-foreground zd:[a&]:hover:bg-warning/90 zd:focus-visible:ring-warning/20 dark:zd:focus-visible:ring-warning/40",
         success:
-          "zd:border-transparent zd:bg-success zd:text-success-foreground zd:[a&]:hover:bg-success/90 zd:focus-visible:ring-success/20 dark:zd:focus-visible:ring-success/40",
+          "zd:border-transparent zd:bg-green-100 zd:text-green-800 zd:[a&]:hover:bg-success/90 zd:focus-visible:ring-success/20 dark:zd:focus-visible:ring-success/40",
         outline:
           "zd:border zd:border-border zd:text-foreground zd:[a&]:hover:bg-accent zd:[a&]:hover:text-accent-foreground",
         // Status-specific variants for beautiful color-coded badges
@@ -27,7 +27,7 @@ const badgeVariants = cva(
         submitted:
           "zd:border-transparent zd:bg-green-100 zd:text-green-800 zd:dark:bg-green-900/20 zd:dark:text-green-400",
         cancelled:
-          "zd:border-transparent zd:bg-gray-100 zd:text-gray-800 zd:dark:bg-gray-900/20 zd:dark:text-gray-400",
+          "zd:border-transparent zd:bg-pink-100 zd:text-pink-800 zd:dark:bg-pink-900/20 zd:dark:text-pink-400",
         pending:
           "zd:border-transparent zd:bg-blue-100 zd:text-blue-800 zd:dark:bg-blue-900/20 zd:dark:text-blue-400",
         approved:
@@ -73,4 +73,6 @@ function Badge({
   )
 }
 
-export { Badge, badgeVariants }
+type BadgeVariant = VariantProps<typeof badgeVariants>
+
+export { Badge, badgeVariants, type BadgeVariant }

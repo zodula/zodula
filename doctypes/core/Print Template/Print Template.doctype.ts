@@ -58,6 +58,12 @@ export default $doctype<"zodula__Print Template">({
         type: "Reference",
         reference: "zodula__Language"
     },
+    default_letter_head: {
+        type: "Reference",
+        reference: "zodula__Letter Head",
+        label: "Default Letter Head",
+        description: "Default letter head to use when printing with this template"
+    },
     guided_background: {
         type: "File",
         label: "Guided Background",
@@ -67,6 +73,7 @@ export default $doctype<"zodula__Print Template">({
         type: "Reference Table",
         label: "Items",
         reference: "zodula__Print Template Item",
+        reference_field: "print_template",
         required: 0
     }
 }, {

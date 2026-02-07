@@ -75,7 +75,7 @@ export function elementToItemPayload(
   return payload;
 }
 
-// Convert Letter Head Item payload (same structure)
+// Convert Letter Head Item payload (same structure as Print Template Item)
 export function elementToLetterHeadItemPayload(
   element: PrintTemplateElement,
   letterHeadId: string,
@@ -83,7 +83,7 @@ export function elementToLetterHeadItemPayload(
 ): Zodula.InsertDoctype<"zodula__Letter Head Item"> {
   const payload: Zodula.InsertDoctype<"zodula__Letter Head Item"> = {
     letter_head: letterHeadId,
-    type: element.type,
+    type: element.type as any,
     value: typeof element.value === "string" ? element.value : "",
     align: element.align || "left",
     vertical_align: element.verticalAlign || "middle",
@@ -93,6 +93,20 @@ export function elementToLetterHeadItemPayload(
     transform_height: element.transform?.height || 30,
     idx: idx,
   };
+  
+  // Style fields (font size/weight/style/decoration)
+  if (element.style?.fontSize !== undefined) {
+    (payload as any).style_font_size = element.style.fontSize;
+  }
+  if (element.style?.fontWeight !== undefined) {
+    (payload as any).style_font_weight = element.style.fontWeight;
+  }
+  if (element.style?.fontStyle !== undefined) {
+    (payload as any).style_font_style = element.style.fontStyle;
+  }
+  if (element.style?.textDecoration !== undefined) {
+    (payload as any).style_text_decoration = element.style.textDecoration;
+  }
   
   // Set field-specific values
   if (element.type === "field") {
@@ -119,6 +133,20 @@ export function elementToLetterHeadItemPayload(
     payload.label_position = element.labelPosition || "left";
   }
   
+  // Add anchor configuration - always save if anchorTo is explicitly set (including null)
+  if (element.anchorTo !== undefined || element.anchorPosition !== undefined || element.anchorOffset !== undefined) {
+    (payload as any).anchor_config = JSON.stringify({
+      anchorTo: element.anchorTo ?? null,
+      anchorPosition: element.anchorPosition ?? null,
+      anchorOffset: element.anchorOffset ?? null
+    });
+  }
+  
+  // Add code field if present
+  if (element.code) {
+    (payload as any).code = element.code;
+  }
+  
   return payload;
 }
 
@@ -127,9 +155,9 @@ export function itemToElement(
   item: Zodula.SelectDoctype<"zodula__Print Template Item">
 ): PrintTemplateElement {
   // For image type, use image field; for field type, use field_name; otherwise use value
-  let value = item.value || "";
+  let value: string | File = item.value || "";
   if (item.type === "image" && item.image) {
-    value = item.image;
+    value = item.image as any; // Can be File or string
   } else if (item.type === "field" && item.field_name) {
     value = item.field_name;
   }
@@ -137,7 +165,7 @@ export function itemToElement(
   const element: PrintTemplateElement = {
     id: item.id,
     type: item.type as any,
-    value: value,
+    value: value as string | File,
     align: (item.align as any) || "left",
     verticalAlign: (item.vertical_align as any) || "middle",
     transform: {
@@ -225,17 +253,22 @@ export function itemToElement(
     }
   }
   
+  // Add code field if present
+  if ((item as any).code) {
+    element.code = (item as any).code;
+  }
+  
   return element;
 }
 
-// Convert Letter Head Item to PrintTemplateElement
+// Convert Letter Head Item to PrintTemplateElement (same structure as Print Template Item)
 export function letterHeadItemToElement(
   item: Zodula.SelectDoctype<"zodula__Letter Head Item">
 ): PrintTemplateElement {
   // For image type, use image field; for field type, use field_name; otherwise use value
-  let value = item.value || "";
+  let value: string | File = item.value || "";
   if (item.type === "image" && item.image) {
-    value = item.image;
+    value = item.image as any; // Can be File or string
   } else if (item.type === "field" && item.field_name) {
     value = item.field_name;
   }
@@ -243,16 +276,37 @@ export function letterHeadItemToElement(
   const element: PrintTemplateElement = {
     id: item.id,
     type: item.type as any,
-    value: value,
+    value: value as string | File,
     align: (item.align as any) || "left",
     verticalAlign: (item.vertical_align as any) || "middle",
     transform: {
       x: item.transform_x || 0,
       y: item.transform_y || 0,
       width: item.transform_width || 200,
-      height: item.transform_height || 30,
+      height: (() => {
+        const h = item.transform_height || 30;
+        return h;
+      })(),
     },
+    style: {},
   };
+  
+  // Populate style from stored fields
+  if ((item as any).style_font_size !== undefined) {
+    element.style = { ...(element.style || {}), fontSize: (item as any).style_font_size as any };
+  }
+  if ((item as any).style_font_weight !== undefined) {
+    element.style = { ...(element.style || {}), fontWeight: (item as any).style_font_weight };
+  }
+  if ((item as any).style_font_style !== undefined) {
+    element.style = { ...(element.style || {}), fontStyle: (item as any).style_font_style };
+  }
+  if ((item as any).style_text_decoration !== undefined) {
+    element.style = { ...(element.style || {}), textDecoration: (item as any).style_text_decoration };
+  }
+  if (element.style && Object.keys(element.style).length === 0) {
+    delete (element as any).style;
+  }
   
   // Parse fields for Reference Table/Extend types
   if (item.fields && typeof item.fields === "string") {
@@ -263,6 +317,20 @@ export function letterHeadItemToElement(
     }
   } else if (Array.isArray(item.fields)) {
     element.fields = item.fields;
+  }
+  
+  // Parse table config for Reference Table fields
+  if ((item as any).table_config) {
+    const tableConfig = (item as any).table_config;
+    if (typeof tableConfig === "string") {
+      try {
+        element.tableConfig = JSON.parse(tableConfig);
+      } catch (e) {
+        // Ignore parse errors
+      }
+    } else if (typeof tableConfig === "object") {
+      element.tableConfig = tableConfig as any;
+    }
   }
   
   // Add reference element properties
@@ -295,6 +363,11 @@ export function letterHeadItemToElement(
       element.anchorPosition = anchorConfig.anchorPosition;
       element.anchorOffset = anchorConfig.anchorOffset;
     }
+  }
+  
+  // Add code field if present
+  if ((item as any).code) {
+    element.code = (item as any).code;
   }
   
   return element;

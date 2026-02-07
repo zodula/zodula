@@ -43,7 +43,7 @@ export const Section: React.FC<SectionProps> = ({
         <div className="zd:flex zd:flex-col zd:gap-4">
             {title && !hideLabel && (
                 <div
-                    className={`zd:flex zd:items-center zd:justify-between zd:cursor-pointer zd:transition-colors ${collapsible
+                    className={`zd:flex zd:items-center zd:justify-between zd:transition-colors ${collapsible
                         ? 'zd:rounded zd:p-2 zd:-m-2'
                         : ''
                         }`}

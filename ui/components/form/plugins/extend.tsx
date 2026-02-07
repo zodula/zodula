@@ -66,20 +66,47 @@ export const ExtendPlugin = new FormPlugin({
         if (!fields || !doctypeDoc) return {};
 
         const processedFields: Record<string, any> = {};
+        
+        // Get doc_status from parent document (props.formData) or from extend field value (props.value)
+        const docStatus = props.formData?.doc_status ?? props.value?.doc_status ?? 0;
 
         fields.forEach((field) => {
             if (field.doctype === doctypeDoc?.id && field.reference !== props.fieldOptions.doctype) {
                 if (Object.keys(ClientFieldHelper.standardFields()).includes(field.name)) return;
+                
+                // Check doc_status based readonly conditions
+                let statusBasedReadonly = false;
+                
+                // Access field config properties (allow_on_submit and only_once are direct properties on field)
+                // Support both field.config.allow_on_submit (if config exists) and field.allow_on_submit (direct property)
+                const allowOnSubmit = (field as any).config?.allow_on_submit ?? field.allow_on_submit;
+                const onlyOnce = (field as any).config?.only_once ?? field.only_once;
+                
+                // Condition 1: doc_status == 1 && field.config.allow_on_submit !== 1
+                if (docStatus === 1 && allowOnSubmit !== 1) {
+                    statusBasedReadonly = true;
+                }
+                // Condition 2: doc_status == 0 && field.config.only_once == 1
+                else if (docStatus === 0 && onlyOnce === 1) {
+                    statusBasedReadonly = true;
+                }
+                // Condition 3: doc_status !== 1 && doc_status !== 0
+                else if (docStatus !== 1 && docStatus !== 0) {
+                    statusBasedReadonly = true;
+                }
+                
                 processedFields[field.name] = {
                     label: field.label || field.name,
                     ...field,
                     type: field.type as any,
+                    // Set readonly based on field's readonly property and status-based conditions
+                    readonly: (field.readonly === 1 || statusBasedReadonly) ? 1 : (field.readonly || 0),
                 } satisfies Zodula.Field;
             }
         });
 
         return processedFields as Record<string, Zodula.Field>;
-    }, [fields, doctypeDoc, props.fieldOptions.doctype]);
+    }, [fields, doctypeDoc, props.fieldOptions.doctype, props.formData, props.value]);
 
     // Helper function to set nested field values in objects
     const setNestedField = (obj: any, fieldPath: string, value: any) => {

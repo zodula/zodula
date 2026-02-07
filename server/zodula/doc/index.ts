@@ -41,8 +41,8 @@ export class ZodulaDoctype<TN extends Zodula.DoctypeName = Zodula.DoctypeName> {
         return new ZodulaDoctypeSubmit<TN>(this.doctypeName, id)
     }
 
-    cancel(id: string) {
-        return new ZodulaDoctypeCancel<TN>(this.doctypeName, id)
+    cancel(id: string, input?: { updated_at?: string }) {
+        return new ZodulaDoctypeCancel<TN>(this.doctypeName, id, input)
     }
 
     async get_file_url(docId: string, fieldName: string) {
@@ -58,7 +58,7 @@ export class ZodulaDoctype<TN extends Zodula.DoctypeName = Zodula.DoctypeName> {
                 status: 404
             })
         }
-        const file_path = path.join(process.cwd(), ".zodula_data", "files", this.doctypeName, docId, fieldName, file as string)
+        const file_path = path.join(process.cwd(), ".zodula_data", "files", doc?.organization || "SYS", this.doctypeName, docId, fieldName, file as string)
         return file_path
     }
 }

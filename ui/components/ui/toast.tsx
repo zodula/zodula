@@ -1,8 +1,9 @@
 import * as React from "react"
 import { createPortal } from "react-dom"
 import { cva, type VariantProps } from "class-variance-authority"
-import { X, CheckCircle, AlertCircle, AlertTriangle, Info } from "lucide-react"
+import { X, CheckCircle, AlertCircle, AlertTriangle, Info, Maximize2 } from "lucide-react"
 import { cn } from "@/zodula/ui/lib/utils"
+import { alert } from "./popit"
 
 // Toast component variants
 const toastVariants = cva(
@@ -182,13 +183,63 @@ const ToastClose = React.forwardRef<
 ))
 ToastClose.displayName = "ToastClose"
 
+const ToastDialog = React.forwardRef<
+  HTMLButtonElement,
+  React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    title?: string
+    description?: string
+    variant?: ToastItem["variant"]
+  }
+>(({ className, title, description, variant, ...props }, ref) => {
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation()
+    
+    // Use toast title for alert title, description for alert message
+    // If no description, use title as message; if no title, use description as title
+    const alertTitle = title || "Toast Details"
+    const alertMessage = description || title || "No message"
+    
+    // Map toast variant to alert variant
+    let alertVariant: "default" | "destructive" | "warning" = "default"
+    if (variant === "destructive") {
+      alertVariant = "destructive"
+    } else if (variant === "warning") {
+      alertVariant = "warning"
+    }
+    
+    alert({
+      title: alertTitle,
+      message: alertMessage,
+      variant: alertVariant
+    })
+    
+    props.onClick?.(e)
+  }
+
+  return (
+    <button
+      ref={ref}
+      className={cn(
+        "zd:absolute zd:right-10 zd:top-2 zd:flex zd:h-6 zd:w-6 zd:items-center zd:justify-center zd:rounded-full zd:bg-gray-100 zd:text-gray-500 zd:opacity-0 zd:transition-all zd:duration-200 zd:hover:bg-gray-200 zd:hover:text-gray-700 zd:hover:scale-110 zd:focus:opacity-100 zd:focus:outline-none zd:focus:ring-2 zd:focus:ring-gray-400 zd:focus:ring-offset-1 zd:group-hover:opacity-100 zd:active:scale-95",
+        className ?? ""
+      )}
+      onClick={handleClick}
+      title="Show as dialog"
+      {...props}
+    >
+      <Maximize2 className="zd:h-3 zd:w-3" />
+    </button>
+  )
+})
+ToastDialog.displayName = "ToastDialog"
+
 const ToastTitle = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("zd:text-sm zd:font-semibold", className ?? "")}
+    className={cn("zd:text-sm zd:font-semibold zd:whitespace-pre-line", className ?? "")}
     {...props}
   />
 ))
@@ -200,7 +251,7 @@ const ToastDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("zd:text-sm zd:opacity-90", className ?? "")}
+    className={cn("zd:text-sm zd:opacity-90 zd:whitespace-pre-line", className ?? "")}
     {...props}
   />
 ))
@@ -430,6 +481,11 @@ export const ToastPortal: React.FC<{ className?: string }> = ({ className }) => 
               {toast.action.label}
             </ToastAction>
           )}
+          <ToastDialog
+            title={toast.title}
+            description={toast.description}
+            variant={toast.variant}
+          />
           {config.showCloseButton && (
             <ToastClose 
               onClick={() => {

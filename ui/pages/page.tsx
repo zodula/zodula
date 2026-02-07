@@ -49,7 +49,7 @@ export default function Page() {
                 {/* Action Buttons */}
                 <div className="zd:flex zd:flex-col sm:zd:flex-row zd:gap-4 zd:justify-center">
                     <Button 
-                        onClick={() => push("/desk/System/doctypes/zodula__Global Setting")}
+                        onClick={() => push("/desk/SYS/doctypes/zodula__Global Setting")}
                         className="zd:flex zd:items-center zd:space-x-2"
                     >
                         <span>Configure Homepage</span>

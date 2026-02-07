@@ -16,6 +16,7 @@ export class ZodulaDoctypeCancel<
 > {
   private doctypeName: TN;
   private session: ZodulaSession = new ZodulaSession();
+  private input: { updated_at?: string } = {};
   private options: CancelOptions = {
     bypass: false,
     fields: [],
@@ -23,9 +24,13 @@ export class ZodulaDoctypeCancel<
 
   constructor(
     doctypeName: TN,
-    private id: string
+    private id: string,
+    input?: { updated_at?: string }
   ) {
     this.doctypeName = doctypeName;
+    if (input) {
+      this.input = input;
+    }
   }
 
   fields(fields: (keyof Zodula.SelectDoctype<TN>)[]) {
@@ -55,7 +60,6 @@ export class ZodulaDoctypeCancel<
     }
 
     // Check permissions
-    const roles = await zodula.session.roles();
     const { can } =
       await ZodulaDoctypeHelper.checkPermission(
         this.doctypeName,
@@ -64,8 +68,6 @@ export class ZodulaDoctypeCancel<
         {
           bypass: this.options.bypass,
           doctype,
-          user,
-          roles,
         }
       );
 
@@ -101,6 +103,13 @@ export class ZodulaDoctypeCancel<
         { status: 400 }
       );
     }
+    // Validate updated_at for optimistic locking
+    if (this.input.updated_at !== undefined && this.input.updated_at !== old.updated_at) {
+      throw new ErrorWithCode(
+        `Document has been modified. Please refresh and try again.`,
+        { status: 409 }
+      );
+    }
   }
 
   private async prepareDocumentData(
@@ -120,10 +129,6 @@ export class ZodulaDoctypeCancel<
       formatted as Zodula.SelectDoctype<TN>,
       doctype.schema
     );
-    await ZodulaDoctypeHelper.ensureReferenceDoc(
-      doctype.schema,
-      formatted as Zodula.SelectDoctype<TN>
-    );
     return formatted;
   }
 
@@ -139,11 +144,22 @@ export class ZodulaDoctypeCancel<
       .trigger(this.doctypeName, "before_cancel", {
         old,
         doc: prepared,
-        input: undefined,
+        input: this.input as any,
       });
 
+    // Remove Reference Table and Extend fields before updating
+    let mainDocument = { ...prepared };
+    Object.keys(mainDocument).forEach((key) => {
+      const fieldConfig = doctype.schema.fields[key as keyof Zodula.DoctypeSchema] as any;
+      if (fieldConfig?.type === "Reference Table" || fieldConfig?.type === "Extend") {
+        delete mainDocument[key as keyof Zodula.SelectDoctype<TN>];
+      }
+    });
+
+    await this.checkRelatives(doctype, this.id);
+
     // Update main document
-    const result = await this.updateMainDocument(db, doctype, prepared);
+    const result = await this.updateMainDocument(db, doctype, mainDocument);
 
     // Create audit trail for cancel action
     await this.createAuditTrail(old, result);
@@ -154,10 +170,37 @@ export class ZodulaDoctypeCancel<
       .trigger(this.doctypeName, "after_cancel", {
         old,
         doc: result,
-        input: undefined,
+        input: this.input as any,
       });
 
     return ZodulaDoctypeHelper.formatDocResult<TN>(result, doctype.schema);
+  }
+
+  private async checkRelatives(doctype: any, id: string) {
+    const connections = await $zodula.utils.getDoctypeConnections(doctype.name, id);
+    const submittedDoctypes = [] as { doctype: string, ids: string[] }[]
+    for (const connection of connections) {
+      let q = $zodula.doctype(connection.doctype as any).select().bypass(true)
+      for (const filter of connection.filters) {
+        q = q.where(filter[0], filter[1] as any, filter[2])
+      }
+      const results = await q
+      const ids = [] as string[]
+      for (const result of results.docs) {
+        if (result.doc_status === 1) {
+          ids.push(result.id)
+        }
+      }
+      ids?.length > 0 && submittedDoctypes.push({ doctype: connection.doctype, ids: ids })
+    }
+    if (submittedDoctypes.length > 0) {
+      let text = `The following documents are linked to this document and cannot be cancelled:\n`
+      for (const submittedDoctype of submittedDoctypes) {
+        text += `${submittedDoctype.doctype}\n`
+        text += `- ${submittedDoctype.ids.join(", ")}`
+      }
+      throw new ErrorWithCode(text, { status: 400 })
+    }
   }
 
   private async updateMainDocument(
@@ -181,10 +224,7 @@ export class ZodulaDoctypeCancel<
     const query = `UPDATE "${doctype?.name}" SET ${setClause} WHERE id = "${this.id}"`;
     await db.run(query);
 
-    const returned = await db.get(
-      `SELECT ${returnFields} FROM "${doctype?.name}" WHERE id = ?`,
-      [this.id]
-    ) as any;
+    const returned = await zodula.doctype(this.doctypeName).get(this.id).bypass(true);
     return returned;
   }
 

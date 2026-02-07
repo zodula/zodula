@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FormPlugin } from "../plugin";
 import { Select, type SelectAction } from "../../ui/select";
-import { ArrowRight, FilterIcon, PlusIcon } from "lucide-react";
+import { ArrowRight, FilterIcon, PlusIcon, ArrowUpDown } from "lucide-react";
 import { Link, useRouter } from "../../router";
 import { useParams } from "react-router";
 import { zodula } from "@/zodula/client";
@@ -37,11 +37,17 @@ const ReferenceInput = (props: {
   const [isFocused, setIsFocused] = useState(false);
   const isVirtual = props.fieldOptions.type === "Virtual Reference";
   
-  const referenceDoctype = zodula.utils.getFieldValueFromDoc(
-    props.fieldOptions.reference as string,
-    props.formData,
-    props.fieldOptions
-  ) as Zodula.DoctypeName | undefined;
+  const referenceDoctype = useMemo(() => {
+    const reference = zodula.utils.getFieldValueFromDoc(
+      props.fieldOptions.reference as string,
+      props.formData,
+      props.fieldOptions
+    ) as Zodula.DoctypeName | undefined;
+    if(reference?.includes("{{")) {
+      return ""
+    }
+    return reference;
+  }, [props.fieldOptions.reference, props.formData, props.fieldOptions]);
 
   // Get doctype metadata to check if it's quick entry
   const { doc: referenceDoctypeDoc } = useDoc({
@@ -52,7 +58,7 @@ const ReferenceInput = (props: {
   // Get fields for the reference doctype
   const { docs: referenceFields } = useDocList({
     doctype: "zodula__Field",
-    limit: 1000000,
+    limit: -1,
     sort: "idx",
     order: "asc",
     q: "",
@@ -61,20 +67,66 @@ const ReferenceInput = (props: {
     ] : []
   }, [referenceDoctype]);
   const filters = useMemo(() => {
+    // Check for child field property overrides first (from parent form scripts)
+    const childExtendFieldPropertyOverrides = (props as any).childExtendFieldPropertyOverrides;
+    const childTableFieldPropertyOverrides = (props as any).childTableFieldPropertyOverrides;
+    
+    if (props.fieldPath) {
+      // Extract child field name, index (if Reference Table), and field name from fieldPath
+      // fieldPath format for Reference Table: "sales_invoices_references.0.sales_invoice"
+      // fieldPath format for Extend: "address.city"
+      const pathParts = props.fieldPath.split('.');
+      const lastIndex = pathParts.length - 1;
+      
+      if (pathParts.length >= 2 && pathParts[0] && lastIndex >= 0 && pathParts[lastIndex]) {
+        const childFieldName = pathParts[0]; // e.g., "sales_invoices_references" or "address"
+        const fieldName = pathParts[lastIndex]; // e.g., "sales_invoice" or "city"
+        
+        // Check if it's a Reference Table (has numeric index in path)
+        if (pathParts.length >= 3) {
+          const possibleIndex = parseInt(pathParts[1] || "0", 10);
+          if (!isNaN(possibleIndex)) {
+            // It's a Reference Table field
+            const childOverrides = childTableFieldPropertyOverrides?.[childFieldName]?.[possibleIndex]?.[fieldName];
+            if (childOverrides?.filters) {
+              try {
+                return typeof childOverrides.filters === 'string' 
+                  ? JSON.parse(childOverrides.filters) 
+                  : childOverrides.filters;
+              } catch (e) {
+                // Fall through to fieldOptions.filters
+              }
+            }
+          }
+        }
+        
+        // Check for Extend field overrides (no index in path)
+        if (pathParts.length === 2) {
+          const childOverrides = childExtendFieldPropertyOverrides?.[childFieldName]?.[fieldName];
+          if (childOverrides?.filters) {
+            try {
+              return typeof childOverrides.filters === 'string' 
+                ? JSON.parse(childOverrides.filters) 
+                : childOverrides.filters;
+            } catch (e) {
+              // Fall through to fieldOptions.filters
+            }
+          }
+        }
+      }
+    }
+    
+    // Fall back to field options filters
     try {
       return JSON.parse(props.fieldOptions.filters || "[]");
     } catch (e) {
       return [];
     }
-  }, [props.fieldOptions.filters]);
+  }, [props.fieldOptions.filters, (props as any).childExtendFieldPropertyOverrides, (props as any).childTableFieldPropertyOverrides, props.fieldPath]);
   useEffect(() => {
     async function getDoctype() {
       if (!isFocused) return;
-      const reference = zodula.utils.getFieldValueFromDoc(
-        props.fieldOptions.reference as string,
-        props.formData,
-        props.fieldOptions
-      );
+      const reference = referenceDoctype;
       if (!reference) return;
       const doctype = await zodula.doc.get_doc(
         "zodula__Doctype",
@@ -84,7 +136,7 @@ const ReferenceInput = (props: {
       setDoctype(doctype);
     }
     getDoctype();
-  }, [props.fieldOptions.reference, props.formData, isFocused]);
+  }, [referenceDoctype, isFocused]);
   // Extract search query from value in multiple mode
   const getSearchQuery = (value: string): string => {
     if (!props.multiple) {
@@ -157,11 +209,15 @@ const ReferenceInput = (props: {
     // Extract the search query based on multiple mode
     const searchQuery = getSearchQuery(value);
     
+    // Get sort and order from field options, with defaults
+    const sortField = props.fieldOptions.sort || "updated_at";
+    const orderDirection = props.fieldOptions.order || "asc";
+    
     const res = await zodula.doc.select_docs(reference as any, {
       q: searchQuery,
       limit: 10000,
-      sort: "updated_at",
-      order: "asc",
+      sort: sortField,
+      order: orderDirection,
       filters: filters,
     });
     setOptions(
@@ -202,6 +258,21 @@ const ReferenceInput = (props: {
         },
       });
     }
+    // Show sort and order if configured
+    if (props.fieldOptions.sort || props.fieldOptions.order) {
+      const sortField = props.fieldOptions.sort || "updated_at";
+      const orderDirection = props.fieldOptions.order || "asc";
+      _actions.push({
+        label: "",
+        disabled: true,
+        description: `Sort: ${sortField}, Order: ${orderDirection}`,
+        icon: <ArrowUpDown />,
+        onClick: (e: React.MouseEvent) => {
+          e.preventDefault();
+          e.stopPropagation();
+        },
+      });
+    }
     if (
       !doctype?.is_single &&
       !doctype?.is_system_generated &&
@@ -216,6 +287,25 @@ const ReferenceInput = (props: {
           // Unfocus the input when opening dialog
           setIsFocused(false);
           
+          // Extract prefill data: match fields from current form that exist in target doctype
+          const prefill: Record<string, any> = {};
+          if (props.formData && referenceFields) {
+            const targetFieldNames = new Set(
+              referenceFields.map((field: any) => field.name).filter(Boolean)
+            );
+            
+            // Match fields from current form to target doctype fields
+            Object.keys(props.formData).forEach((fieldName) => {
+              if (targetFieldNames.has(fieldName)) {
+                const value = props.formData[fieldName];
+                // Only include non-empty values
+                if (value !== undefined && value !== null && value !== "") {
+                  prefill[fieldName] = value;
+                }
+              }
+            });
+          }
+          
           // Check if doctype is quick entry
           const isQuickEntry = referenceDoctypeDoc?.is_quick_entry === 1;
           
@@ -224,7 +314,8 @@ const ReferenceInput = (props: {
             const result = await popup(QuickEntryDialog, undefined, {
               doctype: referenceDoctype,
               fields: referenceFields as any,
-              org: organizationId
+              org: organizationId,
+              prefill: prefill
             });
             
             if (result?.id) {
@@ -244,6 +335,7 @@ const ReferenceInput = (props: {
                 cbUrl: window.location.pathname,
                 fromField: props.fieldPath || props.fieldKey,
                 fromDoc: props.formData,
+                prefill: prefill
               },
             });
           }
@@ -291,12 +383,12 @@ const ReferenceInput = (props: {
       //     props.onChange?.(option.value);
       // }}
       className={cn(
-        "zd:rounded-md",
+        "zd:rounded-md zd:border-l-3",
         !isVirtual ? "zd:hover:ring-primary zd:hover:ring-1" : ""
       )}
       onBlur={async () => {
         // Clear value if it doesn't match any existing option
-        if (props.value && options.length <= 0) {
+        if (props.value && options.length <= 0 && !!referenceDoctype) {
           props.onChange?.("");
         }
         props.onBlur?.(props.value);
@@ -311,7 +403,9 @@ const ReferenceInput = (props: {
           {!!props.value && !props.multiple && (
             <Link
               to={`/desk/${organizationId}/doctypes/${referenceDoctype || ""}/form/${props.value || ""}`}
-              className="no-print"
+              className={cn(
+                "no-print",
+              )}
             >
               <ArrowRight />
             </Link>

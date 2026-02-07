@@ -95,13 +95,6 @@ export function ListView({
     setHasActiveFilter(!!searchQuery || (filters?.length ?? 0) > 0);
   }, [searchQuery, filters]);
 
-  const listViewFields = useMemo(() => {
-    if (!fields || !doctypeDoc) return [];
-    return fields
-      .filter((field: any) => field.doctype === doctype && field.in_list_view)
-      .sort((a: any, b: any) => a.name.localeCompare(b.name));
-  }, [fields, doctypeDoc]);
-
   // Get all available columns (all fields, not just list view fields)
   const allAvailableColumns: ListColumn[] = useMemo(() => {
     // if (columns && columns?.length > 0) return columns;
@@ -121,52 +114,51 @@ export function ListView({
 
     // Create columns from ALL fields, not just list view fields
     const cols: ListColumn[] = [];
+    // ID
+    cols.push({
+      key: "id",
+      label: t("ID"),
+      sortable: true,
+      render: (doc: any) => {
+        return doc.organization === "SYS" ? <span className="zd:underline">{doc.id}</span> : <span className="">{doc.id}</span>;
+      },
+    });
 
     // First column: display field or id
-    const displayField = (doctypeDoc as any).display_field || "id";
+    const displayField = (doctypeDoc as any)?.display_field || "id";
     const displayFieldInfo = fields.find(
       (field: any) => field.name === displayField
     );
-    const displayPlugin = displayFieldInfo
-      ? plugins.find((plugin) => plugin.types.includes(displayFieldInfo.type))
-      : null;
+    const displayPlugin = plugins.find((plugin) =>
+      plugin.types.includes(displayFieldInfo?.type)
+    );
 
+    if (displayField !== "id") {
       cols.push({
-        key: "id",
-        label: "ID",
+        key: displayField,
+        label: t(displayFieldInfo?.label || displayFieldInfo?.name || displayField),
         sortable: true,
-        render:
-          (doc: any) => {
-            const isSysOrg = doc.organization === "SYS";
-            return isSysOrg ? (
-              <span className="zd:font-bold">{doc.id}</span>
-            ) : (
-              doc.id
-            );
-          },
+        render: displayPlugin
+          ? (doc: any) =>
+            displayPlugin.cellRender({
+              fieldOptions: displayFieldInfo,
+              value: doc[displayField],
+              doc: doc,
+            })
+          : undefined,
       });
+    }
 
     // Add doc_status column right after display field
     if (!hideDocStatus) {
       const { DocStatusBadge } = require("../custom/doc-status-badge");
-      const isInvoice = doctype === "zerp__Sales Invoice" || doctype === "zerp__Purchase Invoice";
       cols.push({
         key: "doc_status",
         label: t("Status"),
         sortable: true,
         render: (doc: any) => {
-          // For Invoice doctypes, show payment_status when doc_status === 1
-          if (isInvoice && doc.doc_status === 1 && doc.payment_status) {
-            const Badge = require("../ui/badge").Badge;
-            const status = doc.payment_status || "Unpaid";
-            const variant = status === "Paid" ? "success" : status === "Partially Paid" ? "warning" : "default";
-            return (
-              <Badge variant={variant as any} size="sm">
-                {status}
-              </Badge>
-            );
-          }
           // Default: show doc_status badge
+          // Custom badges can be added via UI scripts using context.addBadge("doc_status")
           return <DocStatusBadge status={doc.doc_status || 0} />;
         },
       });
@@ -188,11 +180,11 @@ export function ListView({
           sortable: field.type !== "Reference Table" && field.type !== "Extend",
           render: plugin
             ? (doc: any) =>
-                plugin.cellRender({
-                  fieldOptions: field,
-                  value: doc[field.name],
-                  doc: doc,
-                })
+              plugin.cellRender({
+                fieldOptions: field,
+                value: doc[field.name],
+                doc: doc,
+              })
             : undefined,
         });
       }
@@ -220,7 +212,7 @@ export function ListView({
       if (
         field.name !== displayField &&
         field.name !== "doc_status" &&
-        (field.in_list_view === 1 || field.required === 1) &&
+        (field.in_list_view === 1) &&
         !zodula.utils.isStandardField(field.name)
       ) {
         defaultCols.push(field.name);
@@ -268,10 +260,6 @@ export function ListView({
     );
   }, [fields]);
 
-  const handleLastUpdated = () => {
-    onSort("updated_at");
-  };
-
   // Debounced search effect
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -282,10 +270,6 @@ export function ListView({
 
     return () => clearTimeout(timeoutId);
   }, [searchInput, searchQuery, onSearch]);
-
-  const handleFilter = () => {
-    setFilterPopupOpen(true);
-  };
 
   const handleFilterPopupOpenChange = (open: boolean) => {
     setFilterPopupOpen(open);
@@ -331,11 +315,9 @@ export function ListView({
   // Execute list scripts for on_format event
   const customRenderers = useRef<Record<string, (doc: any) => React.ReactNode>>({});
   const badgeConfigs = useRef<Record<string, { variant?: string; size?: string; getValue?: (doc: any) => any }>>({});
-  
+
   useEffect(() => {
     const store = useUIScriptStore.getState();
-    const scripts = store.getScripts(doctype);
-    
     // Execute on_format events to allow scripts to customize column rendering
     const executeFormatScripts = async () => {
       const context = {
@@ -357,10 +339,10 @@ export function ListView({
           badgeConfigs.current[fieldName] = config;
         }
       };
-      
-      await store.executeScripts(doctype, 'on_format', context);
+
+      await store.executeScripts(doctype as any, 'on_format', context);
     };
-    
+
     if (docs.length > 0) {
       executeFormatScripts();
     }
@@ -373,16 +355,22 @@ export function ListView({
         // Check if there's a custom renderer from scripts
         const customRenderer = customRenderers.current[String(col.key)];
         const badgeConfig = badgeConfigs.current[String(col.key)];
-        
+
         // If badge config exists, create a badge renderer
         if (badgeConfig) {
           return {
             ...col,
             label: t(col.label || col.key || ""),
             render: (doc: any) => {
-              const Badge = require("../ui/badge").Badge;
               const valueOrObj = badgeConfig.getValue ? badgeConfig.getValue(doc) : doc[String(col.key)];
+
+              // If getValue returns null, fall back to default column renderer
+              if (valueOrObj === null) {
+                return col.render ? col.render(doc) : doc[String(col.key)];
+              }
+
               // Handle both string values and objects with status/variant
+              const Badge = require("../ui/badge").Badge;
               const displayValue = typeof valueOrObj === 'object' && valueOrObj !== null ? valueOrObj.status : valueOrObj;
               const variant = typeof valueOrObj === 'object' && valueOrObj !== null ? valueOrObj.variant : badgeConfig.variant;
               return (
@@ -393,22 +381,31 @@ export function ListView({
             }
           };
         }
-        
+
         // If custom renderer exists, use it
         if (customRenderer) {
           return {
-        ...col,
-        label: t(col.label || col.key || ""),
+            ...col,
+            label: t(col.label || col.key || ""),
             render: customRenderer
           };
         }
-        
+
         return {
           ...col,
           label: t(col.label || col.key || ""),
         };
       });
   }, [allAvailableColumns, derivedColumns, t, customRenderers, badgeConfigs]);
+
+  const searchFieldsLabels = useMemo(() => {
+    const searchFields = doctypeDoc?.search_fields?.split("\n");
+    if(!searchFields) return [];
+    return searchFields.map((field: string) => {
+      const fieldInfo = fields.find((f: any) => f.name === field);
+      return fieldInfo ? t(fieldInfo.label || fieldInfo.name || field) : field;
+    });
+  }, [doctypeDoc, fields]);
 
   return (
     <div className="zd:flex zd:flex-col zd:gap-4 zd:pb-12">
@@ -417,7 +414,7 @@ export function ListView({
           t(`Search By`) +
           " " +
           t(
-            `${!doctypeDoc?.search_fields ? "ID" : doctypeDoc?.search_fields?.split("\n").join(", ")}`
+            `${!searchFieldsLabels.length ? "ID" : searchFieldsLabels.join(", ")}`
           )
         }
         hasActiveFilter={hasActiveFilter}
@@ -436,6 +433,8 @@ export function ListView({
         onFilterPopupOpenChange={handleFilterPopupOpenChange}
         onColumnSettings={handleColumnSettings}
         hasCustomColumns={hasCustomColumns}
+        allFields={fields}
+        doctype={doctype as any}
       />
 
       {error ? (

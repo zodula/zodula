@@ -16,7 +16,7 @@ interface useDocResult<TDoc extends Zodula.SelectDoctype<Zodula.DoctypeName> = Z
     doc: TDoc | null;
     loading: boolean;
     error: string | null;
-    reload: () => void;
+    reload: () => Promise<TDoc | null>;
     relativeLoading: boolean;
     relativeError: string | null;
     relatives: Zodula.SelectDoctype<"zodula__Doctype Relative">[];
@@ -108,15 +108,43 @@ export function useDoc<DT extends Zodula.DoctypeName = Zodula.DoctypeName, TDoc 
     }, [...deps, effectiveId, doctype]);
 
     const reload = useCallback(async () => {
-        if (!doctype) return;
+        if (!doctype || !effectiveId) return null;
 
         // Clear any pending fetches for this doc
         const fetchKey = `${doctype}:${effectiveId}`;
         pendingFetches.delete(fetchKey);
 
-        // Refetch immediately
-        await loadDoc();
-    }, [doctype, effectiveId, loadDoc]);
+        // Force a fresh fetch by directly calling the API
+        setLoading(true);
+        setError(null);
+
+        const fetchPromise = (async () => {
+            try {
+                const response = await zodula?.doc?.get_doc(doctype as Zodula.DoctypeName, effectiveId, {
+                    fields: fields && fields.length > 0 ? fields : undefined,
+                });
+                return response as TDoc;
+            } catch (e: any) {
+                throw e;
+            }
+        })();
+
+        pendingFetches.set(fetchKey, fetchPromise);
+
+        try {
+            const result = await fetchPromise;
+            setDoc(result);
+            setLoading(false);
+            setError(null);
+            return result;
+        } catch (e: any) {
+            setError(e?.message || "Failed to load doc");
+            setLoading(false);
+            return null;
+        } finally {
+            pendingFetches.delete(fetchKey);
+        }
+    }, [doctype, effectiveId, fields]);
 
     return {
         doc,

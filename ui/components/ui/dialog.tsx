@@ -76,7 +76,7 @@ interface DialogDescriptionProps {
 function DialogDescription({ children, className = "" }: DialogDescriptionProps) {
   return (
     <p className={cn(
-      "zd:text-sm zd:text-muted-foreground",
+      "zd:text-sm zd:text-muted-foreground zd:whitespace-pre-line",
       className
     )}>
       {children}

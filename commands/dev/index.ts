@@ -49,7 +49,7 @@ export default new Command("dev")
         console.log(`👀 Watching ${appsPath} for changes...`)
 
         watch(appsPath, { recursive: true }, (eventType, filename) => {
-            if (filename && !filename.includes('node_modules') && !filename.includes('.git')) {
+            if (filename && !filename.includes('node_modules') && !filename.includes('.git') && !filename.includes('fixture.json')) {
                 debouncedRestart()
             }
         })

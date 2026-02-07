@@ -52,16 +52,19 @@ export class ZodulaDoctypeInsert<
       if(!this.input.organization) {
         this.input.organization = organization || "SYS";
       }
+      if(doctype.config.is_global === 1) {
+        this.input.organization = "SYS";
+      }
+
+      // Prepare the document data
+      let prepared = await this.prepareDocumentData(user, doctype);
 
       // Validate readonly fields
       ZodulaDoctypeHelper.validateDoc(
-        this.input,
+        prepared,
         doctype.schema,
         this.options.bypass
       );
-
-      // Prepare the document data
-      const prepared = await this.prepareDocumentData(user, doctype);
 
       // Validate unique constraints
       await ZodulaDoctypeHelper.validateUniqueFields(
@@ -73,7 +76,6 @@ export class ZodulaDoctypeInsert<
       await this.applyFileInsert(prepared, this.doctypeName, doctype.schema);
 
       // Check permissions
-      const roles = await zodula.session.roles(this.input.organization);
       const { can } =
         await ZodulaDoctypeHelper.checkPermission(
           this.doctypeName,
@@ -82,8 +84,6 @@ export class ZodulaDoctypeInsert<
           {
             bypass: this.options.bypass,
             doctype,
-            user,
-            roles,
           }
         );
 
@@ -171,6 +171,7 @@ export class ZodulaDoctypeInsert<
             process.cwd(),
             ".zodula_data",
             "files",
+            prepared.organization || "SYS",
             "doctypes",
             doctypeName,
             docId,
@@ -182,6 +183,7 @@ export class ZodulaDoctypeInsert<
           process.cwd(),
           ".zodula_data",
           "files",
+          prepared.organization || "SYS",
           doctypeName,
           docId,
           fieldName,
@@ -195,6 +197,7 @@ export class ZodulaDoctypeInsert<
             process.cwd(),
             ".zodula_data",
             "files",
+            prepared.organization || "SYS",
             doctypeName,
             docId,
             fieldName
@@ -207,6 +210,7 @@ export class ZodulaDoctypeInsert<
                 process.cwd(),
                 ".zodula_data",
                 "files",
+                prepared.organization || "SYS",
                 doctypeName,
                 docId,
                 fieldName,
@@ -248,6 +252,11 @@ export class ZodulaDoctypeInsert<
   }
 
   private async executeBeforeTriggers(prepared: Zodula.SelectDoctype<TN>) {
+    await loader.from("doctype").trigger(this.doctypeName, "before_change", {
+      old: undefined as any,
+      doc: prepared,
+      input: this.input,
+    });
     await loader.from("doctype").trigger(this.doctypeName, "before_insert", {
       old: undefined as any,
       doc: prepared,
@@ -256,6 +265,11 @@ export class ZodulaDoctypeInsert<
   }
 
   private async executeAfterTriggers(result: Zodula.SelectDoctype<TN>) {
+    await loader.from("doctype").trigger(this.doctypeName, "after_change", {
+      old: undefined as any,
+      doc: result,
+      input: this.input,
+    });
     await loader.from("doctype").trigger(this.doctypeName, "after_insert", {
       old: undefined as any,
       doc: result,
@@ -298,11 +312,6 @@ export class ZodulaDoctypeInsert<
     doctype: any,
     prepared: Zodula.SelectDoctype<TN>
   ) {
-    const returnFields =
-      this.options.fields.length > 0 && !this.options.fields.includes("*")
-        ? this.options.fields.map((field: any) => `"${field}"`)
-        : "*";
-
     const preparedFields = Object.keys(prepared).map(
       (field: any) => `"${field}"`
     );
@@ -311,9 +320,7 @@ export class ZodulaDoctypeInsert<
     );
     const query = `INSERT INTO "${doctype?.name}" (${preparedFields}) VALUES (${preparedValues.map((v) => "?").join(", ")})`;
     await db.run(query, preparedValues);
-    const returned = (await db.get(
-      `SELECT ${returnFields} FROM "${doctype?.name}" WHERE id = '${prepared.id}'`
-    )) as any;
+    const returned = await zodula.doctype(this.doctypeName).get(prepared.id!).bypass(true).fields(this.options.fields as any[])
     return returned;
   }
 
@@ -354,14 +361,14 @@ export class ZodulaDoctypeInsert<
 
       if (!fieldConfig || !refDoctypeSchema) continue;
 
-      // Find the relative to get the child field name
-      const relative = doctype.relatives.find(
-        (rel: any) =>
-          rel.parentDoctype === this.doctypeName &&
-          rel.childDoctype === refDoctypeName &&
-          rel.parentFieldName === key
+      // Find the child to get the child field name
+      const child = doctype.children.find(
+        (c: any) =>
+          c.parentDoctype === this.doctypeName &&
+          c.parentFieldName === key &&
+          c.type === "Extend"
       );
-      const childFieldName = relative?.childFieldName;
+      const childFieldName = child?.childFieldName;
 
       if (!childFieldName) {
         throw new ErrorWithCode(
@@ -412,14 +419,14 @@ export class ZodulaDoctypeInsert<
 
       if (!fieldConfig || !refDoctypeSchema) continue;
 
-      // Find the relative to get the child field name
-      const relative = doctype.relatives.find(
-        (rel: any) =>
-          rel.parentDoctype === this.doctypeName &&
-          rel.childDoctype === refDoctypeName &&
-          rel.parentFieldName === key
+      // Find the child to get the child field name
+      const child = doctype.children.find(
+        (c: any) =>
+          c.parentDoctype === this.doctypeName &&
+          c.parentFieldName === key &&
+          c.type === "Reference Table"
       );
-      const childFieldName = relative?.childFieldName;
+      const childFieldName = child?.childFieldName;
 
       if (!childFieldName) {
         throw new ErrorWithCode(

@@ -12,7 +12,7 @@ interface CSVDialogProps {
 export const CSVDialog = ({ isOpen, onClose, initialData }: CSVDialogProps) => {
     const { docs: fields } = useDocList({
         doctype: "zodula__Field",
-        limit: 1000000,
+        limit: -1,
         sort: "idx",
         order: "asc",
         q: "",

@@ -291,6 +291,22 @@ export const extendDoctype = () => {
             });
             const docid = (ctx as any).params.id;
             const input = ctx.body;
+            const isSingle = doctypeMeta.config.is_single === 1;
+            if(isSingle) {
+              const isExist = await trx
+                .select()
+                .from(doctypeMeta.name)
+                .where("id", "=", docid)
+                .first();
+              if(!isExist) {
+                // create new document
+                const result = await zodula
+                  .doctype(doctypeMeta.name)
+                  .insert(input)
+                  .bypass(true)
+                return ctx.json(result);
+              }
+            }
             const result = await zodula
               .doctype(doctypeMeta.name)
               .update(docid, input)
@@ -367,7 +383,7 @@ export const extendDoctype = () => {
             let query = zodula
               .doctype(doctypeName)
               .select()
-              .limit(+limit)
+              .limit(+limit === -1 ? -1 : +limit)
               .page(+page)
               .sort(sort as any, order as "asc" | "desc")
               .q(q as string)

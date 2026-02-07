@@ -29,6 +29,8 @@ export interface FormControlProps {
   fieldPath?: string; // The nested field path for reference table fields
   showDescription?: boolean;
   org?: string;
+  childExtendFieldPropertyOverrides?: Record<string, Record<string, Record<string, any>>>; // Child Extend field property overrides
+  childTableFieldPropertyOverrides?: Record<string, Record<number, Record<string, Record<string, any>>>>; // Child Reference Table field property overrides
 }
 
 const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
@@ -56,6 +58,8 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
       fieldPath,
       showDescription = true,
       org,
+      childExtendFieldPropertyOverrides,
+      childTableFieldPropertyOverrides,
     },
     ref
   ) => {
@@ -104,6 +108,8 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
                 fieldPath={fieldPath}
                 docId={docId}
                 org={org}
+                childExtendFieldPropertyOverrides={childExtendFieldPropertyOverrides}
+                childTableFieldPropertyOverrides={childTableFieldPropertyOverrides}
               />
               {!!field.description && showDescription && (
                 <p className="zd:text-muted-foreground zd:mt-1">
@@ -160,3 +166,6 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
 FormControl.displayName = "FormControl";
 
 export { FormControl };
+
+
+

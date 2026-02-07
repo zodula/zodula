@@ -5,6 +5,7 @@ import { useRouter } from "@/zodula/ui/components/router";
 import { zodula } from "@/zodula/client";
 import { toast } from "@/zodula/ui/components/ui/toast";
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
+import { useOrganization } from "../../hooks/use-organization";
 
 type QuickEntryField = {
   name?: string;
@@ -25,6 +26,7 @@ interface QuickEntryDialogProps {
     doctype: Zodula.DoctypeName;
     fields: QuickEntryField[];
     org: string;
+    prefill?: Record<string, any>;
   };
 }
 
@@ -39,6 +41,7 @@ export function QuickEntryDialog({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { organization} = useOrganization();
 
   const quickEntryFields = useMemo(() => {
     if (!initialData?.fields) return [];
@@ -58,16 +61,32 @@ export function QuickEntryDialog({
     if (!isOpen || !initialData) return;
 
     const defaults: Record<string, any> = {};
+    
+    // First, apply prefill values (if provided)
+    if (initialData.prefill) {
+      Object.keys(initialData.prefill).forEach((fieldName) => {
+        const value = initialData.prefill![fieldName];
+        // Only set if the field exists in quick entry fields
+        const fieldExists = quickEntryFields.some(f => f.name === fieldName);
+        if (fieldExists && value !== undefined && value !== null && value !== "") {
+          defaults[fieldName] = value;
+        }
+      });
+    }
+    
+    // Then, apply default values (prefill takes precedence)
     quickEntryFields.forEach((field) => {
-      if (field.default !== undefined) {
-        defaults[field.name || ""] = field.default || "";
+      const fieldName = field.name || "";
+      // Only set default if prefill didn't already set it
+      if (defaults[fieldName] === undefined && field.default !== undefined) {
+        defaults[fieldName] = field.default || "";
       }
     });
 
     setFormData(defaults);
     setFieldErrors({});
     setSubmitError(null);
-  }, [isOpen, initialData?.doctype, quickEntryFields]);
+  }, [isOpen, initialData?.doctype, initialData?.prefill, quickEntryFields]);
 
   const isEmpty = (value: any) => {
     if (value === null || value === undefined) return true;
@@ -131,7 +150,10 @@ export function QuickEntryDialog({
   const handleOpenFullForm = () => {
     if (!initialData) return;
     router.push(`/desk/${initialData.org}/doctypes/${initialData.doctype}/form`, {
-      state: { resetForm: true },
+      state: { 
+        resetForm: true,
+        prefill: initialData.prefill
+      },
     });
     onClose();
   };
@@ -171,6 +193,7 @@ export function QuickEntryDialog({
               onChange={handleChange}
               error={fieldErrors[field.name || ""]}
               formData={formData}
+              org={organization?.id || ""}
             />
           ))}
         </div>

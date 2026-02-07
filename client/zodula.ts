@@ -1,4 +1,4 @@
-import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
+import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosRequestHeaders, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import * as zodulaUtils from './utils';
 import { ZodulaDoc } from './doc';
 import { ZodulaClientRealtime } from './realtime';
@@ -32,7 +32,7 @@ export class Zodula {
                 const orgId = this.getOrganization ? this.getOrganization() : null;
                 if (orgId) {
                     if (!config.headers) {
-                        config.headers = {};
+                        config.headers = {} as AxiosRequestHeaders;
                     }
                     (config.headers as any)["x-organization"] = orgId;
                 } else {
@@ -40,7 +40,7 @@ export class Zodula {
                     const selectedOrganization = localStorage.getItem("zodula-selected-organization");
                     if (selectedOrganization) {
                         if (!config.headers) {
-                            config.headers = {};
+                            config.headers = {} as AxiosRequestHeaders;
                         }
                         (config.headers as any)["x-organization"] = selectedOrganization;
                     }

@@ -42,10 +42,43 @@ export class FixturesLoader implements FixturesPlugin {
         }
         return fixture
     }
-    validate(): Promise<void> {
-        if (this.fixtures.length !== new Set(this.fixtures.map((fixture) => fixture.name)).size) {
-            throw new Error("Duplicate fixture names");
+    async validate(): Promise<void> {
+        const idMap = new Map<string, Array<{ fixture: FixturesMetadata; index: number }>>();
+        
+        // Load all fixture files and collect IDs
+        for (const fixture of this.fixtures) {
+            const fixtureData = await import(path.resolve(fixture.file));
+            const fixtureArray = Array.isArray(fixtureData.default) ? fixtureData.default : fixtureData.default ? [fixtureData.default] : [];
+            
+            for (let i = 0; i < fixtureArray.length; i++) {
+                const item = fixtureArray[i];
+                if (item && typeof item === 'object' && 'id' in item) {
+                    const id = String(item.id);
+                    if (!idMap.has(id)) {
+                        idMap.set(id, []);
+                    }
+                    idMap.get(id)!.push({ fixture, index: i });
+                }
+            }
         }
-        return Promise.resolve();
+        
+        // Find duplicate IDs
+        const duplicates: Array<{ id: string; locations: Array<{ fixture: FixturesMetadata; index: number }> }> = [];
+        for (const [id, locations] of idMap.entries()) {
+            if (locations.length > 1) {
+                duplicates.push({ id, locations });
+            }
+        }
+        
+        if (duplicates.length > 0) {
+            const duplicateMessages = duplicates.map(({ id, locations }) => {
+                const locationDetails = locations.map(loc => 
+                    `  - ${loc.fixture.file} (app: ${loc.fixture.appName}, index: ${loc.index})`
+                ).join('\n');
+                return `ID "${id}" appears ${locations.length} times:\n${locationDetails}`;
+            });
+            
+            throw new Error(`Duplicate fixture IDs found:\n${duplicateMessages.join('\n\n')}`);
+        }
     }
 }

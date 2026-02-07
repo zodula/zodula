@@ -28,6 +28,9 @@ interface ListToolbarProps {
     // Column settings props
     onColumnSettings?: () => void;
     hasCustomColumns?: boolean;
+    // Additional props for FilterPopup
+    allFields?: Zodula.Field[];
+    doctype?: Zodula.DoctypeName;
 }
 
 export function ListToolbar({
@@ -49,7 +52,10 @@ export function ListToolbar({
     onFilterPopupOpenChange,
     // Column settings props
     onColumnSettings,
-    hasCustomColumns = false
+    hasCustomColumns = false,
+    // Additional props for FilterPopup
+    allFields = [],
+    doctype
 }: ListToolbarProps) {
     const { t } = useTranslation()
     return (
@@ -58,7 +64,7 @@ export function ListToolbar({
             <div className="zd:flex zd:items-center zd:gap-2">
                 <Input
                     // placeholder is search from display fields
-                    placeholder={searchPlaceholder || "Search By ID"}
+                    placeholder={searchPlaceholder || `Search By ${t("ID")}`}
                     className="zd:w-full"
                     value={searchValue}
                     onChange={(e) => onSearchChange?.(e.target.value)}
@@ -73,7 +79,7 @@ export function ListToolbar({
             {/* Right side - Filter, Sort, and Last Updated controls */}
             <div className="zd:flex zd:items-center zd:gap-2">
                 <FilterPopup
-                    fields={sortFields}
+                    fields={allFields.length > 0 ? allFields : sortFields}
                     filters={filters}
                     onApplyFilters={onApplyFilters}
                     onClearFilters={onClearFilter}
@@ -81,6 +87,7 @@ export function ListToolbar({
                     onOpenChange={e => {
                         onFilterPopupOpenChange?.(e);
                     }}
+                    doctype={doctype}
                 />
 
                 {hasActiveFilter && (
@@ -113,8 +120,11 @@ export function ListToolbar({
                 {/* Column Settings Dropdown */}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="zd:w-8 zd:h-8 zd:p-0">
+                        <Button variant="outline" className="zd:relative zd:w-8 zd:h-8 zd:p-0">
                             <Settings className="zd:w-4 zd:h-4" />
+                            {hasCustomColumns && (
+                                <div className="zd:absolute zd:right-0 zd:top-0 zd:w-2 zd:h-2 zd:bg-amber-500 zd:rounded-full"></div>
+                            )}
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
@@ -122,7 +132,7 @@ export function ListToolbar({
                             <Columns3CogIcon className="zd:h-4 zd:w-4" />
                             {t("Column Settings")}
                             {hasCustomColumns && (
-                                <div className="zd:ml-auto zd:w-2 zd:h-2 zd:bg-amber-500 zd:rounded-full"></div>
+                                <div className="zd:absolute zd:right-0 zd:top-0 zd:w-2 zd:h-2 zd:bg-amber-500 zd:rounded-full"></div>
                             )}
                         </DropdownMenuItem>
                     </DropdownMenuContent>

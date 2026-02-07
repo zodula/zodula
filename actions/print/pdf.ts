@@ -2,7 +2,7 @@ import { z } from "bxo"
 import puppeteer from "puppeteer"
 import path from "path"
 import { getFieldValueFromDoc } from "@/zodula/client/utils"
-import { PAGE_FORMATS, generateTemplateFromTabs, type PrintTemplateElement } from "@/zodula/client/code-utils"
+import { PAGE_FORMATS, generateTemplateFromTabs, type PrintTemplateElement, type ChildField } from "@/zodula/client/code-utils"
 // @ts-ignore - binba may not have type definitions
 import { Template } from "binba"
 
@@ -828,7 +828,7 @@ export default $action(async (ctx) => {
     }
 
     // Helper function to fetch child fields for reference tables
-    const fetchChildFields = async (referenceDoctype: string, parentDoctype?: string): Promise<Array<{ field: string; order: number; required?: boolean; in_list_view?: boolean }>> => {
+    const fetchChildFields = async (referenceDoctype: string, parentDoctype?: string): Promise<ChildField[]> => {
       try {
         const { docs: childFieldDocs } = await $zodula.doctype("zodula__Field")
           .select()
@@ -846,16 +846,20 @@ export default $action(async (ctx) => {
             const fieldDoctype = field.doctype || ""
             const fieldName = field.name || ""
             const fieldReference = field.reference || ""
-            // Exclude if it's a standard field, or if it references the parent doctype
+            // Check no_print - exclude fields with no_print set to 1 or true
+            const fieldNoPrint = field.no_print === 1 || field.no_print === true
+            // Exclude if it's a standard field, if it references the parent doctype, or if no_print is set
             const isParentReference = parentDoctype && fieldReference === parentDoctype
-            return fieldDoctype === referenceDoctype && !standardFieldNames.has(fieldName) && !isParentReference
+            const shouldInclude = fieldDoctype === referenceDoctype && !standardFieldNames.has(fieldName) && !isParentReference && !fieldNoPrint
+            return shouldInclude
           })
           .map((field: any, idx: number) => ({
             field: field.name || "",
             label: field.label || field.name || "",
             order: idx,
             required: field.required === 1 || field.required === true,
-            in_list_view: field.in_list_view === 1 || field.in_list_view === true
+            in_list_view: field.in_list_view === 1 || field.in_list_view === true,
+            no_print: field.no_print === 1 || field.no_print === true
           }))
           .filter((col: any) => col.field)
       } catch (error) {

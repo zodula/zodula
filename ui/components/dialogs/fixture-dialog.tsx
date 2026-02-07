@@ -14,7 +14,7 @@ interface FixtureDialogProps {
 export const FixtureDialog = ({ isOpen, onClose, initialData }: FixtureDialogProps) => {
     const { docs: fields } = useDocList({
         doctype: "zodula__Field",
-        limit: 1000000,
+        limit: -1,
         sort: "idx",
         order: "asc",
         q: "",

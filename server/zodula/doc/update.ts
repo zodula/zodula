@@ -8,6 +8,7 @@ import type { Bunely } from "bunely";
 import path from "path";
 import fs from "fs/promises";
 import { ErrorWithCode } from "@/zodula/error";
+import { getDoctypeConnections } from "../utils";
 
 interface UpdateOptions {
   bypass: boolean;
@@ -46,32 +47,37 @@ export class ZodulaDoctypeUpdate<
     const db = Database("main");
     const user = await this.session.user(true);
     const doctype = loader.from("doctype").get(this.doctypeName);
-    const organization = await this.session.organization(true);
+    const isGlobal = doctype.config.is_global === 1;
 
-    if(!this.input.organization) {
-      this.input.organization = organization || "SYS";
-    }
-    
     const old = await zodula
       .doctype(this.doctypeName)
       .get(this.input.id!)
       .bypass(true)
       .unsafe();
+
+    this.input.organization = isGlobal ? "SYS" : old?.organization;
+
+    if (old?.organization !== this.input.organization) {
+      throw new ErrorWithCode("Cannot change organization through update api", {
+        status: 400,
+      });
+    }
+
     this.input.doc_status = this.input.doc_status
       ? +this.input.doc_status!
       : old?.doc_status || 0;
     // Validate document exists and can be updated
     await this.validateDocument(old);
 
+    // Prepare the document data
+    let prepared = await this.prepareDocumentData(old, user, doctype);
+
     // Validate readonly fields
     ZodulaDoctypeHelper.validateDoc(
-      this.input,
+      prepared,
       doctype.schema,
       this.options.bypass
     );
-
-    // Prepare the document data
-    let prepared = await this.prepareDocumentData(old, user, doctype);
 
     // Get roles once for permission checks
     const roles = await zodula.session.roles();
@@ -107,8 +113,6 @@ export class ZodulaDoctypeUpdate<
         {
           bypass: this.options.bypass,
           doctype,
-          user,
-          roles,
         }
       );
 
@@ -147,6 +151,7 @@ export class ZodulaDoctypeUpdate<
               process.cwd(),
               ".zodula_data",
               "files",
+              prepared.organization || "SYS",
               doctypeName,
               docId,
               fieldName
@@ -157,6 +162,7 @@ export class ZodulaDoctypeUpdate<
             process.cwd(),
             ".zodula_data",
             "files",
+            prepared.organization || "SYS",
             doctypeName,
             docId,
             fieldName,
@@ -169,6 +175,7 @@ export class ZodulaDoctypeUpdate<
               process.cwd(),
               ".zodula_data",
               "files",
+              prepared.organization || "SYS",
               doctypeName,
               docId,
               fieldName
@@ -181,6 +188,7 @@ export class ZodulaDoctypeUpdate<
                   process.cwd(),
                   ".zodula_data",
                   "files",
+                  prepared.organization || "SYS",
                   doctypeName,
                   docId,
                   fieldName,
@@ -200,11 +208,12 @@ export class ZodulaDoctypeUpdate<
             process.cwd(),
             ".zodula_data",
             "files",
+            prepared.organization || "SYS",
             doctypeName,
             docId,
             fieldName
           );
-          await fs.rmdir(fileDir, { recursive: true }).catch(() => {});
+          await fs.rmdir(fileDir, { recursive: true }).catch(() => { });
         }
 
         // if folder have no files, delete it
@@ -212,12 +221,13 @@ export class ZodulaDoctypeUpdate<
           process.cwd(),
           ".zodula_data",
           "files",
+          prepared.organization || "SYS",
           doctypeName,
           docId
         );
         const files = await fs.readdir(fileDir).catch(() => []);
         if (files.length === 0) {
-          await fs.rmdir(fileDir, { recursive: true }).catch(() => {});
+          await fs.rmdir(fileDir, { recursive: true }).catch(() => { });
         }
 
         // if doctype folder have no files, delete it
@@ -225,11 +235,12 @@ export class ZodulaDoctypeUpdate<
           process.cwd(),
           ".zodula_data",
           "files",
+          prepared.organization || "SYS",
           doctypeName
         );
         const doctypeFiles = await fs.readdir(doctypeDir).catch(() => []);
         if (doctypeFiles.length === 0) {
-          await fs.rmdir(doctypeDir, { recursive: true }).catch(() => {});
+          await fs.rmdir(doctypeDir, { recursive: true }).catch(() => { });
         }
       }
     }
@@ -253,11 +264,12 @@ export class ZodulaDoctypeUpdate<
       );
     }
 
+
     // Prevent changing doc_status through update - use submit/cancel methods instead
     if (
       this.input.doc_status !== undefined &&
       this.input.doc_status !== old.doc_status &&
-      !this.options.override
+      !this.options.bypass
     ) {
       throw new ErrorWithCode(
         `Cannot change doc_status through update API. Use submit() or cancel() methods instead.`,
@@ -313,6 +325,7 @@ export class ZodulaDoctypeUpdate<
     }
 
     // Extract field names from naming_series using {{field}} pattern
+    // Only check actual field values, not dynamic values like {YYYY}, {MM}, {DD}, etc.
     const fieldRegex = /\{\{(.*?)\}\}/g;
     const fieldMatches = namingSeries.match(fieldRegex) || [];
     const fieldsInNamingSeries = fieldMatches.map((match: string) =>
@@ -334,6 +347,7 @@ export class ZodulaDoctypeUpdate<
     }
 
     // Check if any field used in naming_series has changed
+    // Only regenerate ID if actual field values have changed, not due to dynamic values
     let hasFieldChanges = false;
     for (const fieldName of fieldsInNamingSeries) {
       const oldValue = old[fieldName as keyof Zodula.SelectDoctype<TN>];
@@ -345,25 +359,64 @@ export class ZodulaDoctypeUpdate<
       }
     }
 
+    // If fields haven't changed, don't regenerate ID (even if dynamic values would produce different ID)
     if (!hasFieldChanges) {
       return false;
     }
 
-    // Generate new ID based on updated field values
+    // find relatives and then change id of them
+    // const relatives = doctype.relatives.filter((rel: any) => rel.parentDoctype === this.doctypeName);
+    const oldId = old?.id
     const newId = await naming(this.doctypeName, prepared as any);
-    // If the new ID is different from the current ID, we need to rename
-    if (newId !== this.input.id) {
-      // Update the prepared document with the new ID
-      prepared.id = newId as any;
 
-      await db.run(`UPDATE "${this.doctypeName}" SET id = ? WHERE id = ?`, [newId, this.input.id]);
-
-      // Update the input ID for the rest of the update process
-      this.input.id = newId as any;
-      return true;
+    const children = doctype.children
+    for(const child of children) {
+      await db.run(`UPDATE "${child.childDoctype}" SET "${child.childFieldName}" = ? WHERE "${child.childFieldName}" = ?`, [newId, oldId]);
     }
 
-    return false;
+    // update connections
+    const connections = await getDoctypeConnections(doctype.name, oldId)
+    for(const connection of connections) {
+      const fieldPath = connection.field
+      const fieldParts = fieldPath.split(".")
+      if(fieldParts.length > 2) {
+        throw new ErrorWithCode(`Invalid field path: ${fieldPath}`, { status: 400 })
+      }
+      const parentField = fieldParts[0]
+      const childField = fieldParts[1]
+      let q = zodula.doctype(connection.doctype as any).select().bypass(true)
+      for (const filter of connection.filters) {
+        q = q.where(filter[0], filter[1] as any, filter[2])
+      }
+      const results = await q
+      for(const result of results.docs) {
+        if(!childField) {
+          // This is a normal field, so we can update it
+          await db.run(`UPDATE "${connection.doctype}" SET ${connection.field} = ? WHERE ${connection.field} = ?`, [newId, oldId]);
+        } else {
+          // This is a child field, so we need to update the child document
+          const parentDoctype = loader.from("doctype").get(connection.doctype as any)
+          const parentFieldConfig = parentDoctype.schema.fields[parentField as keyof Zodula.DoctypeSchema] as any
+          const childDoctype = parentFieldConfig.reference as Zodula.DoctypeName
+
+          await db.run(`UPDATE "${childDoctype}" SET ${childField} = ? WHERE ${childField} = ?`, [newId, oldId]);
+        }
+      }
+    }
+
+    // update audit trail
+    await db.run(`UPDATE 'zodula__Audit Trail' SET doctype_id = ? WHERE doctype_id = ? AND doctype = ?`, [newId, oldId, this.doctypeName]);
+
+    // Fields have changed, so generate new ID based on updated field values
+
+    // Update the prepared document with the new ID
+    prepared.id = newId as any;
+
+    await db.run(`UPDATE "${this.doctypeName}" SET id = ? WHERE id = ?`, [newId, this.input.id]);
+
+    // Update the input ID for the rest of the update process
+    this.input.id = newId as any;
+    return true;
   }
 
   private async executeUpdate(
@@ -502,10 +555,6 @@ export class ZodulaDoctypeUpdate<
     doctype: any,
     prepared: Zodula.SelectDoctype<TN>
   ) {
-    const returnFields =
-      this.options.fields.length > 0
-        ? this.options.fields.map((field: any) => `"${field}"`)
-        : "*";
     // Filter out Extend and Reference Table fields as they are handled separately
     const filteredPrepared = Object.entries(prepared).filter(([key, value]) => {
       const fieldConfig = doctype.schema.fields[
@@ -528,10 +577,8 @@ export class ZodulaDoctypeUpdate<
     const query = `UPDATE "${doctype?.name}" SET ${setClause} WHERE id = ?`;
     await db.run(query, [...values, this.input.id!]);
 
-    const returned = (await db.get(
-      `SELECT * FROM "${doctype?.name}" WHERE id = ?`,
-      [this.input.id!]
-    )) as any;
+
+    const returned = await zodula.doctype(this.doctypeName).get(this.input.id!).bypass(true).fields(this.options.fields as any[]);
     return returned;
   }
 
@@ -572,14 +619,14 @@ export class ZodulaDoctypeUpdate<
         .get(fieldConfig?.reference as Zodula.DoctypeName)?.schema;
       if (!fieldConfig || !refDoctypeSchema) continue;
 
-      // Find the relative to get the child field name
-      const relative = doctype.relatives.find(
-        (rel: any) =>
-          rel.parentDoctype === this.doctypeName &&
-          rel.childDoctype === refDoctypeName &&
-          rel.parentFieldName === key
+      // Find the child to get the child field name
+      const child = doctype.children.find(
+        (c: any) =>
+          c.parentDoctype === this.doctypeName &&
+          c.parentFieldName === key &&
+          c.type === "Extend"
       );
-      const childFieldName = relative?.childFieldName;
+      const childFieldName = child?.childFieldName;
 
       if (!childFieldName) {
         throw new ErrorWithCode(
@@ -595,26 +642,30 @@ export class ZodulaDoctypeUpdate<
 
       if (existing) {
         // Update existing record
-        let formattedPayload = { ...updatedPayload };
+        let formattedPayload = { ...updatedPayload, doc_status: undefined };
         ZodulaDoctypeHelper.formatDoc(
           formattedPayload as Zodula.SelectDoctype<TN>,
           refDoctypeSchema
         );
+        await zodula.doctype(refDoctypeName).update(existing.id, { doc_status: result.doc_status }).bypass(true);
         (result as any)[key] = await zodula
           .doctype(refDoctypeName)
           .update(existing.id, formattedPayload)
           .bypass(this.options.bypass);
+
       } else {
         // Insert new record
-        let formattedPayload = { ...updatedPayload };
+        let formattedPayload = { ...updatedPayload, doc_status: undefined };
         ZodulaDoctypeHelper.formatDoc(
           formattedPayload as Zodula.SelectDoctype<TN>,
           refDoctypeSchema
         );
+        await zodula.doctype(refDoctypeName).update(result.id, { doc_status: result.doc_status }).bypass(true);
         (result as any)[key] = await zodula
           .doctype(refDoctypeName)
           .insert(formattedPayload)
           .bypass(this.options.bypass);
+
       }
     }
   }
@@ -637,14 +688,14 @@ export class ZodulaDoctypeUpdate<
 
       if (!fieldConfig || !refDoctypeSchema) continue;
 
-      // Find the relative to get the child field name
-      const relative = doctype.relatives.find(
-        (rel: any) =>
-          rel.parentDoctype === this.doctypeName &&
-          rel.childDoctype === refDoctypeName &&
-          rel.parentFieldName === key
+      // Find the child to get the child field name
+      const child = doctype.children.find(
+        (c: any) =>
+          c.parentDoctype === this.doctypeName &&
+          c.parentFieldName === key &&
+          c.type === "Reference Table"
       );
-      const childFieldName = relative?.childFieldName;
+      const childFieldName = child?.childFieldName;
 
       if (!childFieldName) {
         throw new ErrorWithCode(
@@ -662,6 +713,7 @@ export class ZodulaDoctypeUpdate<
       for (let index = 0; index < payloadArray?.length || 0; index++) {
         let payload = { ...payloadArray[index] };
         payload[childFieldName] = result.id;
+        payload.doc_status = undefined;
 
         const isExist = existings.some(
           (existing: any) => existing.id === payload.id
@@ -673,7 +725,8 @@ export class ZodulaDoctypeUpdate<
               ...payload,
               idx: index,
             })
-            .bypass(this.options.bypass);
+            .bypass(this.options.bypass)
+
         } else {
           payload = await zodula
             .doctype(refDoctypeName)
@@ -684,7 +737,7 @@ export class ZodulaDoctypeUpdate<
             .bypass(this.options.bypass);
         }
 
-        let formattedPayload = { ...payload };
+        let formattedPayload = { ...payload, doc_status: undefined };
         ZodulaDoctypeHelper.formatDoc(
           formattedPayload as Zodula.SelectDoctype<TN>,
           refDoctypeSchema

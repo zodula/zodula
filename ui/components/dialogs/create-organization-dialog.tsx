@@ -3,6 +3,7 @@ import { Button } from "@/zodula/ui/components/ui/button";
 import { Input } from "@/zodula/ui/components/ui/input";
 import { zodula } from "@/zodula/client";
 import { cn } from "@/zodula/ui/lib/utils";
+import { useTranslation } from "../../hooks/use-translation";
 
 interface CreateOrganizationDialogProps {
   isOpen: boolean;
@@ -17,7 +18,7 @@ export function CreateOrganizationDialog({
   const [name, setName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
+  const { t } = useTranslation();
   const handleCreate = async () => {
     if (!name.trim()) {
       setError("Name is required");
@@ -30,6 +31,7 @@ export function CreateOrganizationDialog({
     try {
       const created = await zodula.doc.create_doc("zodula__Organization", {
         name: name.trim(),
+        tier_level: "0",
       });
       onClose(created);
     } catch (err: any) {
@@ -68,6 +70,9 @@ export function CreateOrganizationDialog({
             className={cn(error ? "zd:border-destructive" : "")}
             disabled={isLoading}
           />
+          <p>
+            {t('The organization name must be unique and short, like "ORG1", "ORG2", "ORG3", etc. because it will be used as an abbreviation in naming series.')}
+          </p>
           {error && (
             <p className="zd:mt-1 zd:text-sm zd:text-destructive">{error}</p>
           )}

@@ -41,3 +41,69 @@ export const getUserFromSid = async (sid: string) => {
 export const translate = (key: string, language: string = process.env.ZODULA_PUBLIC_DEFAULT_LANGUAGE || "en") => {
     return translateTranslation(key, language)
 }
+
+export async function getDoctypeConnections(doctype: Zodula.DoctypeName, id: string) {
+    const doctypeMeta = loader.from("doctype").get(doctype)
+    const doctypeRelatives = doctypeMeta.relatives
+    let additionalConnections = JSON.parse(doctypeMeta.config.additional_connections?.replaceAll("{{id}}", `${id}`) || "[]") as { doctype: string, filters: any[][], field: string }[] 
+    let connections = [] as { doctype: string, filters: any[][], field: string }[]
+    
+    // Get all children to check for child table relationships
+    const allChildren = loader.from("doctype").getAllChildren()
+    
+    // Find connections from child tables:
+    // For each child, check if the child doctype has a field that references the target doctype
+    for (const child of allChildren) {
+        try {
+            const childDoctypeMeta = loader.from("doctype").get(child.childDoctype)
+            
+            // Check if child doctype is a child table (is_child_doctype = 1)
+            if (childDoctypeMeta.config.is_child_doctype !== 1) {
+                continue
+            }
+            
+            // Check if the child doctype has any field that references the target doctype
+            for (const [fieldName, fieldConfig] of Object.entries(childDoctypeMeta.schema.fields)) {
+                if (fieldConfig.reference === doctype) {
+                    // Create connection using parent doctype and field path
+                    const fieldPath = `${child.parentFieldName}.${fieldName}`
+                    connections.push({
+                        doctype: child.parentDoctype,
+                        filters: [[fieldPath, "=", id]],
+                        field: fieldPath
+                    })
+                }
+            }
+        } catch (error) {
+            // Child doctype not found, skip
+            continue
+        }
+    }
+    
+    // Add connections from relatives (one-way: child references parent)
+    // Filter out relatives that are child tables (they're handled by children above)
+    for (const relative of doctypeRelatives) {
+        // Check if this relative is a child table relationship by checking if the child doctype is a child table
+        let isChildTable = false
+        try {
+            const childDoctypeMeta = loader.from("doctype").get(relative.childDoctype)
+            isChildTable = childDoctypeMeta.config.is_child_doctype === 1
+        } catch (error) {
+            // Child doctype not found, skip
+            continue
+        }
+        
+        // Only add if it's not a child table (child tables are handled by children above)
+        if (!isChildTable) {
+            const childDoctype = loader.from("doctype").get(relative.childDoctype)
+            if(childDoctype)
+            connections.push({ doctype: relative.childDoctype, filters: [[relative.childFieldName, "=", id]], field: relative.childFieldName })
+        }
+    }
+    
+    for (const connection of additionalConnections) {
+        connections.push({ doctype: connection.doctype, filters: connection.filters, field: connection.field || "" })
+    }
+    connections = connections.filter((connection) => connection.doctype !== doctype)
+    return connections
+}

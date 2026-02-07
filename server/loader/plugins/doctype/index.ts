@@ -5,7 +5,6 @@ import { loader } from "../..";
 import { ZodulaDoctypeHelper } from "../../../zodula/doc/helper";
 import prettier, { doc } from "prettier";
 
-import { z } from "bxo";
 import type { FieldTypes } from "@/zodula/server/field/type";
 import { ClientFieldHelper } from "@/zodula/client/field";
 import { FieldHelper } from "../../../field";
@@ -88,12 +87,14 @@ export interface DoctypeMetadata {
     schema: Zodula.DoctypeSchema;
     /** Doctype configuration without fields */
     config: Omit<Zodula.DoctypeSchema, "fields">;
-    /** List of relative relationships */
+    /** List of relative relationships (one-way: child references parent) */
     relatives: DoctypeRelative[];
+    /** List of child relationships (parent has Reference Table or Extend fields) */
+    children: DoctypeChild[];
 }
 
 /**
- * Represents a relationship between two doctypes
+ * Represents a relationship between two doctypes (one-way: child references parent)
  */
 export interface DoctypeRelative {
     /** The parent doctype that will contain the relative field */
@@ -102,8 +103,22 @@ export interface DoctypeRelative {
     childDoctype: Zodula.DoctypeName;
     /** The field name in the child doctype */
     childFieldName: string;
-    /** The field name in the parent doctype that references the child doctype */
+}
+
+/**
+ * Represents a child relationship from parent to child (via Reference Table or Extend fields)
+ */
+export interface DoctypeChild {
+    /** The parent doctype that contains the Reference Table or Extend field */
+    parentDoctype: Zodula.DoctypeName;
+    /** The child doctype being referenced */
+    childDoctype: Zodula.DoctypeName;
+    /** The field name in the parent doctype (Reference Table or Extend field) */
     parentFieldName: string;
+    /** The field name in the child doctype that references the parent */
+    childFieldName: string;
+    /** The type of relationship: "Reference Table" or "Extend" */
+    type: "Reference Table" | "Extend";
 }
 
 /**
@@ -241,13 +256,14 @@ export class DoctypeLoader implements DoctypePlugin {
 
 
     /**
-     * Processes doctype fields, sorts them, and detects relatives
+     * Processes doctype fields, sorts them, and detects relatives and children
      */
     private processDoctypeFields(
         doctypeWithConfig: DoctypeHandler | undefined,
         standardFields: Record<string, Zodula.Field>,
         doctypeName: Zodula.DoctypeName,
-        relatives: Map<Zodula.DoctypeName, DoctypeRelative[]>
+        relatives: Map<Zodula.DoctypeName, DoctypeRelative[]>,
+        children: Map<Zodula.DoctypeName, DoctypeChild[]>
     ): Record<string, Zodula.Field> {
         let fields = {
             ...doctypeWithConfig?.fields || {},
@@ -262,7 +278,7 @@ export class DoctypeLoader implements DoctypePlugin {
         }
 
         const sortedFields = this.sortFields(fields);
-        return this.buildSortedFields(fields, sortedFields, doctypeName, relatives);
+        return this.buildSortedFields(fields, sortedFields, doctypeName, relatives, children);
     }
 
     /**
@@ -277,21 +293,25 @@ export class DoctypeLoader implements DoctypePlugin {
     }
 
     /**
-     * Builds sorted fields object and detects relatives
+     * Builds sorted fields object and detects relatives and children
      */
     private buildSortedFields(
         fields: Record<string, Zodula.Field>,
         sortedFields: string[],
         doctypeName: Zodula.DoctypeName,
-        relatives: Map<Zodula.DoctypeName, DoctypeRelative[]>
+        relatives: Map<Zodula.DoctypeName, DoctypeRelative[]>,
+        children: Map<Zodula.DoctypeName, DoctypeChild[]>
     ): Record<string, Zodula.Field> {
+        // Process children first (Reference Table and Extend fields)
+        this.processChildren(fields, doctypeName, children);
+
         return sortedFields.reduce((acc, field) => {
             acc[field] = {
                 ...fields[field as keyof typeof fields],
                 name: field
             } as Zodula.Field;
 
-            // Detect relatives from field references
+            // Detect relatives from field references (excluding Reference Table and Extend)
             this.processFieldReference(fields, field, doctypeName, relatives);
             return acc;
         }, {} as Record<string, Zodula.Field>);
@@ -299,7 +319,8 @@ export class DoctypeLoader implements DoctypePlugin {
 
     /**
      * Processes field references and builds relatives for storage in Doctype Relative records
-     * Stores: parent_doctype, child_doctype, child_field_name, parent_field_name
+     * Stores: parent_doctype, child_doctype, child_field_name
+     * This is one-way: tracks when a child doctype references a parent doctype
      */
     private processFieldReference(
         fields: Record<string, Zodula.Field>,
@@ -319,38 +340,73 @@ export class DoctypeLoader implements DoctypePlugin {
             return;
         }
 
-        const relativesList = relatives.get(reference as Zodula.DoctypeName) || [];
-
-        // Find the parent field name by checking the parent doctype's fields
-        // We need to find which field in the parent doctype references this child doctype
-        let parentFieldName = "";
-        try {
-            const parentDoctype = this.get(reference as Zodula.DoctypeName);
-            const parentFields = parentDoctype.schema.fields;
-            
-            // Find the field in parent doctype that references the child doctype
-            for (const [parentField, parentFieldConfig] of Object.entries(parentFields)) {
-                if (parentFieldConfig.reference === doctypeName && 
-                    (parentFieldConfig.type === "Extend" || parentFieldConfig.type === "Reference Table")) {
-                    parentFieldName = parentField;
-                    break;
-                }
-            }
-        } catch (error) {
-            // Parent doctype might not be loaded yet, we'll set parentFieldName later
-            parentFieldName = "";
+        // Skip Reference Table and Extend fields - they are handled by processChildren
+        if (fieldConfig.type === "Reference Table" || fieldConfig.type === "Extend") {
+            return;
         }
 
-        // Create relative with parent field name
+        const relativesList = relatives.get(reference as Zodula.DoctypeName) || [];
+
+        // Create relative (one-way: child references parent)
         const relative: DoctypeRelative = {
             parentDoctype: reference as Zodula.DoctypeName,
             childDoctype: doctypeName,
-            childFieldName: fieldName,
-            parentFieldName: parentFieldName
+            childFieldName: fieldName
         };
 
         relativesList.push(relative);
         relatives.set(reference as Zodula.DoctypeName, relativesList);
+    }
+
+    /**
+     * Processes Reference Table and Extend fields to build children relationships
+     * Stores: parent_doctype, child_doctype, parent_field_name, child_field_name, type
+     * Validates that reference_field is provided for Reference Table and Extend fields
+     */
+    private processChildren(
+        fields: Record<string, Zodula.Field>,
+        doctypeName: Zodula.DoctypeName,
+        children: Map<Zodula.DoctypeName, DoctypeChild[]>
+    ): void {
+        for (const [fieldName, fieldConfig] of Object.entries(fields)) {
+            // Only process Reference Table and Extend fields
+            if (fieldConfig.type !== "Reference Table" && fieldConfig.type !== "Extend") {
+                continue;
+            }
+
+            const reference = fieldConfig?.reference;
+            if (!reference || ClientFieldHelper.isStandardField(fieldName)) {
+                continue;
+            }
+
+            // Don't create self-references
+            if (reference === doctypeName) {
+                continue;
+            }
+
+            // Validate that reference_field is provided
+            const childFieldName = fieldConfig.reference_field;
+            if (!childFieldName) {
+                throw new Error(
+                    `Reference Table/Extend field "${fieldName}" in doctype "${doctypeName}" must have "reference_field" specified. ` +
+                    `This field indicates which field in the child doctype "${reference}" links back to the parent.`
+                );
+            }
+
+            const childrenList = children.get(doctypeName) || [];
+
+            // Create child relationship
+            const child: DoctypeChild = {
+                parentDoctype: doctypeName,
+                childDoctype: reference as Zodula.DoctypeName,
+                parentFieldName: fieldName,
+                childFieldName: childFieldName,
+                type: fieldConfig.type as "Reference Table" | "Extend"
+            };
+
+            childrenList.push(child);
+            children.set(doctypeName, childrenList);
+        }
     }
 
 
@@ -419,7 +475,8 @@ export class DoctypeLoader implements DoctypePlugin {
      */
     private async loadSingleDoctype(
         doctypePath: string,
-        relatives: Map<Zodula.DoctypeName, DoctypeRelative[]>
+        relatives: Map<Zodula.DoctypeName, DoctypeRelative[]>,
+        children: Map<Zodula.DoctypeName, DoctypeChild[]>
     ): Promise<DoctypeMetadata | null> {
         const comparePath = doctypePath.replace(".doctype.ts", "");
         const app = loader.from("app").getAppByPath(comparePath);
@@ -445,7 +502,7 @@ export class DoctypeLoader implements DoctypePlugin {
         config.label = doctypeWithConfig?.config?.label || doctypeName;
 
         this.processDoctypeEvents(doctypeWithConfig, doctypeName);
-        const fields = this.processDoctypeFields(doctypeWithConfig, standardFields, doctypeName, relatives);
+        const fields = this.processDoctypeFields(doctypeWithConfig, standardFields, doctypeName, relatives, children);
 
         const doctypeMetadata: DoctypeMetadata = {
             name: doctypeName,
@@ -457,7 +514,8 @@ export class DoctypeLoader implements DoctypePlugin {
                 ...config
             },
             config: config || {},
-            relatives: []
+            relatives: [],
+            children: []
         };
 
         this.validateDoctypeMetadata(doctypeMetadata);
@@ -465,39 +523,19 @@ export class DoctypeLoader implements DoctypePlugin {
     }
 
     /**
-     * Assigns relatives to their respective doctypes
-     * Relatives are detected from field references and stored with Doctype Relative fields
-     * Also updates parentFieldName for relatives that didn't have it set during initial processing
+     * Assigns relatives and children to their respective doctypes
      */
-    private assignRelativesToDoctypes(relatives: Map<Zodula.DoctypeName, DoctypeRelative[]>): void {
-        // First pass: assign relatives
+    private assignRelativesAndChildrenToDoctypes(
+        relatives: Map<Zodula.DoctypeName, DoctypeRelative[]>,
+        children: Map<Zodula.DoctypeName, DoctypeChild[]>
+    ): void {
         this.doctypes.forEach(doctype => {
             const doctypeRelatives = relatives.get(doctype.name) || [];
             doctype.relatives = doctypeRelatives;
-        });
 
-        // Second pass: update parentFieldName for relatives that don't have it yet
-        for (const [parentDoctypeName, relativesList] of relatives.entries()) {
-            for (const relative of relativesList) {
-                if (!relative.parentFieldName) {
-                    try {
-                        const parentDoctype = this.get(parentDoctypeName);
-                        const parentFields = parentDoctype.schema.fields;
-                        
-                        // Find the field in parent doctype that references the child doctype
-                        for (const [parentField, parentFieldConfig] of Object.entries(parentFields)) {
-                            if (parentFieldConfig.reference === relative.childDoctype && 
-                                (parentFieldConfig.type === "Extend" || parentFieldConfig.type === "Reference Table")) {
-                                relative.parentFieldName = parentField;
-                                break;
-                            }
-                        }
-                    } catch (error) {
-                        // Parent doctype not found, leave parentFieldName empty
-                    }
-                }
-            }
-        }
+            const doctypeChildren = children.get(doctype.name) || [];
+            doctype.children = doctypeChildren;
+        });
     }
 
 
@@ -514,14 +552,15 @@ export class DoctypeLoader implements DoctypePlugin {
         events.clear()
         this.doctypes = []
         const _relatives = new Map<Zodula.DoctypeName, DoctypeRelative[]>()
+        const _children = new Map<Zodula.DoctypeName, DoctypeChild[]>()
 
         for await (const doctypePath of doctypesGlob.scan(".")) {
-            const doctypeMetadata = await this.loadSingleDoctype(doctypePath, _relatives);
+            const doctypeMetadata = await this.loadSingleDoctype(doctypePath, _relatives, _children);
             if (doctypeMetadata) {
                 this.doctypes.push(doctypeMetadata);
             }
         }
-        this.assignRelativesToDoctypes(_relatives);
+        this.assignRelativesAndChildrenToDoctypes(_relatives, _children);
         return this.doctypes;
     }
 
@@ -549,19 +588,25 @@ export class DoctypeLoader implements DoctypePlugin {
         return doctype;
     }
 
+    getAllChildren(): DoctypeChild[] {
+        return this.doctypes.flatMap((doctype) => doctype.children || []);
+    }
+
     /**
      * Validates all loaded doctypes and generates type definitions
      * 
      * Performs the following operations:
      * 1. Validates doctype names for duplicates
-     * 2. Processes relative fields and adds them to parent doctypes
-     * 3. Reorders fields based on below_field attributes
-     * 4. Generates TypeScript type definitions
+     * 2. Validates that Reference Table and Extend fields have reference_field
+     * 3. Processes relative fields and adds them to parent doctypes
+     * 4. Reorders fields based on below_field attributes
+     * 5. Generates TypeScript type definitions
      * 
      * @throws Error if validation fails
      */
     async validate(): Promise<void> {
         this.validateDoctypeNames();
+        this.validateChildrenFields();
         this.processRelativeFields();
         await this.generateTypeDefinitions();
     }
@@ -572,6 +617,45 @@ export class DoctypeLoader implements DoctypePlugin {
     private validateDoctypeNames(): void {
         if (this.doctypes.length !== new Set(this.doctypes.map((doctype) => doctype.name)).size) {
             throw new Error("Duplicate doctype names");
+        }
+    }
+
+    /**
+     * Validates that all Reference Table and Extend fields have reference_field specified
+     * This validation is performed after all doctypes are loaded to ensure proper error reporting
+     */
+    private validateChildrenFields(): void {
+        for (const doctype of this.doctypes) {
+            for (const [fieldName, fieldConfig] of Object.entries(doctype.schema.fields)) {
+                // Only check Reference Table and Extend fields
+                if (fieldConfig.type !== "Reference Table" && fieldConfig.type !== "Extend") {
+                    continue;
+                }
+
+                // Skip standard fields
+                if (ClientFieldHelper.isStandardField(fieldName)) {
+                    continue;
+                }
+
+                const reference = fieldConfig?.reference;
+                if (!reference) {
+                    continue;
+                }
+
+                // Don't validate self-references
+                if (reference === doctype.name) {
+                    continue;
+                }
+
+                // Validate that reference_field is provided
+                if (!fieldConfig.reference_field) {
+                    throw new Error(
+                        `Reference Table/Extend field "${fieldName}" in doctype "${doctype.name}" must have "reference_field" specified. ` +
+                        `This field indicates which field in the child doctype "${reference}" links back to the parent. ` +
+                        `Example: reference_field: "sales_invoice" (the field name in the child doctype that references this parent)`
+                    );
+                }
+            }
         }
     }
 

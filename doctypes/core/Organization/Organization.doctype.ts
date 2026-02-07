@@ -42,11 +42,15 @@ export default $doctype<"zodula__Organization">({
         type: "Reference Table",
         label: "Organization Roles",
         reference: "zodula__Organization Role",
+        reference_field: "organization",
     },
 }, {
     naming_series: "{{name}}",
     label: "Organization",
     is_global: 1,
+})
+.on("before_insert", async ({input}) => {
+    input && (input.organization = "SYS");
 })
 .on("before_delete", async ({doc, old, input}) => {
     if(doc.owner !== (await $zodula.session.user()).id && !(await $zodula.session.roles()).includes("System Admin")){

@@ -443,8 +443,12 @@ const Select = ({
   // Handle search input change
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    setSearchValue(newValue);
-    setFocusedIndex(-1);
+    
+    // Only update searchValue if searchable is true (it's used for filtering)
+    if (searchable) {
+      setSearchValue(newValue);
+      setFocusedIndex(-1);
+    }
 
     if (allowFreeText) {
       if (multiple) {
@@ -541,8 +545,27 @@ const Select = ({
     : searchValue ||
       (selectedOption ? getDisplayText(selectedOption, displayMode) : value);
 
+  // Determine if input should be read-only
+  // Input is read-only when: explicit readOnly prop is true, OR when both searchable and allowFreeText are false
+  const isInputReadOnly = readOnly || (!searchable && !allowFreeText);
+
+  // Handle container click to open dropdown when readonly
+  const handleContainerClick = () => {
+    if (!disabled && !readOnly && isInputReadOnly) {
+      handleInputFocus();
+    }
+  };
+
   return (
-    <div ref={containerRef} className={cn("zd:relative", className ?? "")}>
+    <div
+      ref={containerRef}
+      className={cn(
+        "zd:relative",
+        !disabled && isInputReadOnly ? "zd:cursor-pointer" : "",
+        className ?? ""
+      )}
+      onClick={handleContainerClick}
+    >
       <Input
         id={id}
         ref={inputRef}
@@ -554,15 +577,22 @@ const Select = ({
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={disabled}
-        readOnly={readOnly}
+        readOnly={isInputReadOnly}
         autoComplete={autocomplete}
         className={cn(
-          "zd:cursor-text",
           !allowFreeText && !searchable && !clearable ? "zd:select-none" : "",
           inputClassName ?? "",
-          readOnly ? "zd:cursor-default zd:text-muted-foreground" : "",
-          disabled ? "zd:cursor-default zd:text-muted-foreground" : ""
+          disabled
+            ? "zd:cursor-default zd:text-muted-foreground"
+            : isInputReadOnly
+              ? "zd:cursor-pointer zd:text-muted-foreground"
+              : "zd:cursor-text"
         )}
+        wrapperStyle={
+          !disabled && isInputReadOnly
+            ? { cursor: "pointer" }
+            : undefined
+        }
         prefix={prefix}
         suffix={
           <div className="zd:flex zd:items-center zd:gap-1 no-print">

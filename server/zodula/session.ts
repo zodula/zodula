@@ -16,6 +16,7 @@ export class ZodulaSession {
       updated_by: "1",
       doc_status: 1,
       owner: "1",
+      organization: "SYS",
     } satisfies Zodula.SelectDoctype<"zodula__User">;
   }
 
@@ -25,6 +26,7 @@ export class ZodulaSession {
     const organizationsOwner = (await db
       .select("*")
       .from("zodula__Organization")
+      .where("owner", "=", user.id)
       .execute()) as Zodula.SelectDoctype<"zodula__Organization">[];
     const organizationsUser = (await db
       .select("*")
@@ -32,8 +34,8 @@ export class ZodulaSession {
       .where("user", "=", user.id)
       .execute()) as Zodula.SelectDoctype<"zodula__Organization Role">[];
     return [
-      ...organizationsOwner,
-      ...organizationsUser.map((organization) => organization.organization),
+      ...organizationsOwner?.map((organization) => organization.id),
+      ...organizationsUser.map((organization) => organization.organizationId),
     ];
   }
 

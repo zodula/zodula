@@ -11,40 +11,17 @@ export const CurrencyPlugin = new FormPlugin({
         doctype: "zodula__Global Setting",
         id: "zodula__Global Setting"
     })
-    const formatCurrency = (value: any) => {
-        if (value === null || value === undefined || value === "") return "";
-        const numValue = typeof value === "string" ? parseFloat(value) : value;
-        if (isNaN(numValue)) return "";
-        return numValue.toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        });
-    };
-
-    const parseCurrency = (value: string) => {
-        // Remove currency symbols and commas, then parse
-        const cleaned = value.replace(/[$,]/g, "");
-        const parsed = parseFloat(cleaned);
-        return isNaN(parsed) ? "" : parsed;
-    };
-
-    const inputValue = useMemo(() => {
-        if (props.value === null || props.value === undefined || props.value === "") return "";
-        return formatCurrency(props.value);
-    }, [props.value]);
-
     return (
         <Input
             placeholder="0.00"
             type="text"
-            value={inputValue}
+            value={props.value || ""}
             readOnly={props.readonly}
             prefix={props?.fieldOptions?.currency_symbol || websiteSetting?.currency_symbol || "$"}
             onChange={(e) => {
                 // Don't allow changes if readonly
                 if (!props.readonly) {
-                    const parsed = parseCurrency(e.target.value);
-                    props.onChange?.(parsed);
+                    props.onChange?.(e.target.value);
                 }
             }}
         />
@@ -56,11 +33,7 @@ export const CurrencyPlugin = new FormPlugin({
         return <span className="zd:text-muted-foreground zd:italic">-</span>;
     }
 
-    const numValue = typeof props.value === "string" ? parseFloat(props.value) : props.value;
-    if (isNaN(numValue)) {
-        return <span className="zd:text-muted-foreground zd:italic">-</span>;
-    }
-    return <>{numValue}</>
+    return <>{props.value}</>
 
     },
     renderFilter: (props) => {
@@ -68,42 +41,20 @@ export const CurrencyPlugin = new FormPlugin({
         doctype: "zodula__Global Setting",
         id: "zodula__Global Setting"
     })
-    const formatCurrency = (value: any) => {
-        if (value === null || value === undefined || value === "") return "";
-        const numValue = typeof value === "string" ? parseFloat(value) : value;
-        if (isNaN(numValue)) return "";
-        return numValue.toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        });
-    };
-
-    const parseCurrency = (value: string) => {
-        // Remove currency symbols and commas, then parse
-        const cleaned = value.replace(/[$,]/g, "");
-        const parsed = parseFloat(cleaned);
-        return isNaN(parsed) ? "" : parsed;
-    };
 
     // Don't render input for null operators
     if (["IS NULL", "IS NOT NULL"].includes(props.operator || "")) {
         return null;
     }
 
-    const inputValue = useMemo(() => {
-        if (props.value === null || props.value === undefined || props.value === "") return "";
-        return formatCurrency(props.value);
-    }, [props.value]);
-
     return (
         <Input
             placeholder={getPlaceholder(props.operator)}
             type="text"
-            value={inputValue}
+            value={props.value || ""}
             prefix={props?.fieldOptions?.currency_symbol || websiteSetting?.currency_symbol || "$"}
             onChange={(e) => {
-                const parsed = parseCurrency(e.target.value);
-                props.onChange?.(parsed);
+                props.onChange?.(e.target.value);
             }}
             className="zd:flex-1"
         />

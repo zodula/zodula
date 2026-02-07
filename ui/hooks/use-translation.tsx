@@ -92,7 +92,8 @@ export const useTranslation = (lang?: string) => {
 
     // Use useDocAll for Global Setting (single doctype) with persistent caching
     const { doc: websiteSetting } = useDocAll({
-        doctype: "zodula__Global Setting"
+        doctype: "zodula__Global Setting",
+        id: "zodula__Global Setting"
     });
 
     // Update languages when fetched

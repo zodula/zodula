@@ -20,8 +20,6 @@ export const SelectPlugin = new FormPlugin({
             placeholder={" "}
             value={props.value}
             options={options}
-            searchable
-            allowFreeText
             disabled={props.readonly}
             onChange={(value) => {
                 // Don't allow changes if readonly

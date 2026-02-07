@@ -92,7 +92,7 @@ export default function DoctypeListPage() {
         const displayFieldName = doctypeDoc?.display_field || "id";
         const displayField = fields.find((field) => field.name === displayFieldName);
         const _columns = fields.filter((field) => {
-            return (field.in_list_view === 1 || field.required === 1) && field.name !== displayFieldName && (!zodula.utils.isStandardField(field.name))
+            return (field.in_list_view === 1) && field.name !== displayFieldName && (!zodula.utils.isStandardField(field.name))
         }
         ).map((field) => ({
             key: field.name,
@@ -137,7 +137,7 @@ export default function DoctypeListPage() {
         }
         setIsRefreshing(true);
         reload();
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 50));
         setIsRefreshing(false);
     };
 
@@ -253,6 +253,15 @@ export default function DoctypeListPage() {
         }
     ];
 
+    if (roles.includes("System Admin")) {
+        actions.push({
+            id: "export-fixtures",
+            label: t("Export Fixtures"),
+            icon: <Download className="zd:h-4 zd:w-4" />,
+            onClick: handleExportFixtures
+        });
+    }
+
     // Add cancel action if doctype is submittable
     if (isSubmittable) {
         actions.push({
@@ -260,15 +269,6 @@ export default function DoctypeListPage() {
             label: t("Cancel"),
             icon: <X className="zd:h-4 zd:w-4" />,
             onClick: handleCancel
-        });
-    }
-
-    if (roles.includes("System Admin")) {
-        actions.push({
-            id: "export-fixtures",
-            label: t("Export Fixtures"),
-            icon: <Download className="zd:h-4 zd:w-4" />,
-            onClick: handleExportFixtures
         });
     }
 

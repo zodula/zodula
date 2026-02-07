@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { useUIScriptStore, type UIScriptContext } from "../zui";
+import { useUIScriptStore, type UIScriptContext, type FormContext } from "../zui";
 
 // Main hook for executing scripts
 export function useUIScript(doctype: string, options?: {
@@ -10,6 +10,9 @@ export function useUIScript(doctype: string, options?: {
   getValue?: (fieldName: string) => any;
   getValues?: () => any;
   setFieldProperty?: (fieldName: string, property: string, value: any) => void;
+  setChildExtendProperty?: (childField: string, fieldName: string, property: string, value: any) => void;
+  setChildTableProperty?: (childField: string, idx: number | null, fieldName: string, property: string, value: any) => void;
+  parentContext?: FormContext<any>;
   
   // List options
   listData?: any[];
@@ -49,6 +52,9 @@ export function useUIScript(doctype: string, options?: {
       getValue: options?.getValue,
       getValues: options?.getValues,
       setFieldProperty: options?.setFieldProperty,
+      setChildExtendProperty: options?.setChildExtendProperty,
+      setChildTableProperty: options?.setChildTableProperty,
+      parentContext: options?.parentContext,
       
       // List context
       listData: options?.listData || [],
@@ -93,7 +99,7 @@ export function useUIScript(doctype: string, options?: {
   
   // Execute scripts for an event
   const execute = useCallback(async (
-    eventType: string,
+    eventType: "refresh" | "field_change" | "form_save" | "field_focus" | "field_blur" | "list_load" | "list_refresh" | "row_select" | "row_click" | "row_edit" | "row_delete" | "button_click" | "action_execute" | "data_change" | "on_load" | "on_render" | "on_format",
     target?: string,
     additionalContext?: any
   ) => {

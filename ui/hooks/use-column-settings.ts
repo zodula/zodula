@@ -111,7 +111,6 @@ export const useColumnSettings = (
       setHasCustomColumnsForDoctype(doctype, hasCustom),
     resetVisibleColumns: () => {
       resetVisibleColumnsForDoctype(doctype);
-      setVisibleColumnsForDoctype(doctype, defaultColumns);
       setHasCustomColumnsForDoctype(doctype, false);
     },
   };

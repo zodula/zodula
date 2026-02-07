@@ -19,7 +19,6 @@ interface FormState {
 
 // Create the Zustand store with optional persistence
 const useFormStore = create<FormState>()(
-  persist(
     (set) => ({
       forms: {},
 
@@ -65,12 +64,6 @@ const useFormStore = create<FormState>()(
         set({ forms: {} });
       },
     }),
-    {
-      name: 'zodula-form-storage',
-      // Only persist forms that are explicitly marked for persistence
-      partialize: (state) => ({ forms: {} }), // Don't persist by default
-    }
-  )
 );
 
 // Hook to use form state with ID

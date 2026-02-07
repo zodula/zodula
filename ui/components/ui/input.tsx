@@ -8,6 +8,7 @@ export interface InputProps
   prefix?: any;
   suffix?: React.ReactNode;
   autocomplete?: "on" | "off";
+  wrapperStyle?: React.CSSProperties;
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
@@ -28,6 +29,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       onBlur,
       onKeyDown,
       autocomplete = "off",
+      wrapperStyle,
     },
     ref
   ) => {
@@ -72,10 +74,11 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           "zd:flex zd:h-8 zd:w-full zd:rounded zd:px-3 zd:py-2 zd:items-center zd:gap-1",
           "zd:placeholder:text-muted-foreground/30 zd:focus-visible:outline-none",
           "zd:disabled:cursor-not-allowed",
-          "zd:min-w-0 zd:border",
+          "zd:min-w-0",
           disabled ? "zd:bg-muted/50 zd:cursor-not-allowed" : "zd:bg-muted",
           className ?? ""
         )}
+        style={wrapperStyle}
       >
         {prefix && (
           <div className="zd:left-2 zd:text-muted-foreground">{prefix}</div>
@@ -88,6 +91,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           className={cn(
             "zd:flex-1 zd:min-w-0!",
             readOnly ? "zd:cursor-default zd:text-muted-foreground" : "",
+            className ?? ""
           )}
           placeholder={getPlaceholder()}
           disabled={disabled}

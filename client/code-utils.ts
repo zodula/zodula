@@ -90,6 +90,7 @@ export interface ChildField {
   order: number;
   required?: boolean;
   in_list_view?: boolean;
+  no_print?: boolean | number; // If true or 1, field should not be included in print template
 }
 
 // Generate code using timestamp + random hex
@@ -110,7 +111,7 @@ export async function generateTemplateFromTabs(options: {
   doctype: string;
 }): Promise<PrintTemplateElement[]> {
   const { tabs, fields, pageDimensions, doctypeLabel, fetchChildFields } = options;
-  
+
   if (!tabs || tabs.length === 0 || !fields || fields.length === 0) {
     return [];
   }
@@ -223,39 +224,53 @@ export async function generateTemplateFromTabs(options: {
     const processLayoutItem = async (item: TabLayoutItem | TabLayoutItem[]) => {
       if (Array.isArray(item)) {
         // Process array of fields (row)
+        // First, count visible fields (excluding no_print fields) to calculate correct width
+        const visibleFields: Array<{ fieldItem: TabLayoutItem; fieldConfig: FieldConfig }> = [];
         for (const fieldItem of item) {
           if (fieldItem.type === "field" && fieldItem.value) {
             const fieldName = fieldItem.value;
             const fieldConfig = fields.find(f => f.name === fieldName);
+            // Only include fields that are not no_print
+            if (fieldConfig && !(fieldConfig.no_print === true || fieldConfig.no_print === 1)) {
+              visibleFields.push({ fieldItem, fieldConfig });
+            }
+          }
+        }
+        
+        // Calculate field width for this row based on actual visible fields
+        const visibleFieldCount = visibleFields.length;
+        const rowFieldWidth = visibleFieldCount > 0 
+          ? (availableWidth - (visibleFieldCount - 1) * gapBetweenFields) / visibleFieldCount
+          : fieldWidth;
+        
+        let hasPlacedFieldInRow = false; // Track if we've placed any field in this row
+        for (const { fieldItem, fieldConfig } of visibleFields) {
+          if (fieldItem.type === "field" && fieldItem.value) {
+            const fieldName = fieldItem.value;
             
-            // Skip fields with no_print set to true or 1
-            if (fieldConfig && (fieldConfig.no_print === true || fieldConfig.no_print === 1)) {
-              // Skip this field but still move to next position
-              const nextX = currentX + fieldWidth + gapBetweenFields;
-              if (nextX + fieldWidth <= pageWidthPx - margin) {
-                currentX = nextX;
-              } else {
-                currentX = margin;
-                lastRowAnchorCode = null; // Reset for next row
-              }
-            } else if (fieldConfig) {
+            if (fieldConfig) {
               // Check if it's a Reference Table
               if (fieldConfig.type === "Reference Table" && fieldConfig.reference && fieldConfig.reference !== options.doctype ) {
                 // Fetch child fields for the table, excluding fields that reference the parent doctype
                 const childFields = await fetchChildFields(fieldConfig.reference, options.doctype);
                 
+                // Filter out fields with no_print set to true or 1
+                const printableChildFields = childFields.filter(
+                  col => !(col.no_print === true || col.no_print === 1)
+                );
+                
                 // Default select fields that are required or in_list_view
-                const defaultSelectedFields = childFields
+                const defaultSelectedFields = printableChildFields
                   .filter(col => col.required || col.in_list_view)
                   .map(col => col.field);
                 
                 // Use default selected fields, or all fields if none are required/in_list_view
                 const selectedFieldNames = defaultSelectedFields.length > 0 
                   ? defaultSelectedFields 
-                  : childFields.map(col => col.field);
+                  : printableChildFields.map(col => col.field);
                 
                 // Get columns for selected fields only, maintaining order
-                const selectedColumns = childFields
+                const selectedColumns = printableChildFields
                   .filter(col => selectedFieldNames.includes(col.field))
                   .map((col, idx) => ({ field: col.field, label: col.label, order: idx }));
                 
@@ -263,23 +278,52 @@ export async function generateTemplateFromTabs(options: {
                 const tableElementId = `element_${Date.now()}_${fieldName}`;
                 const tableCode = generateCode("table");
                 
-                // Calculate anchor offset - if starting new row, align to margin
+                // Calculate anchor offset - Reference Table fields should always start at left margin
+                // Find the anchor element to position vertically
+                const anchorElement = newElements.find(el => (el.code && el.code === currentAnchorCode) || (!el.code && el.id === currentAnchorCode));
                 let tableAnchorOffset: { x: number; y: number } = { x: 0, y: 15 };
-                if (currentX === margin) {
-                  // Starting new row - calculate offset to align with margin
-                  const anchorElement = newElements.find(el => (el.code && el.code === currentAnchorCode) || (!el.code && el.id === currentAnchorCode));
-                  if (anchorElement) {
-                    const anchorX = anchorElement.transform?.x || 0;
-                    const anchorHeight = anchorElement.transform?.height || fieldHeight;
-                    // Calculate offset: we want new element at margin, so offsetX = margin - anchorX
-                    // Add extra spacing for new tab (30px)
-                    const tabSpacing = tabIndex > 0 && !tabFirstElementCode ? 30 : fieldSpacing;
-                    tableAnchorOffset = { x: margin - anchorX, y: anchorHeight + tabSpacing };
-                  }
-                  // Track first element of tab
-                  if (!tabFirstElementCode) {
-                    tabFirstElementCode = tableCode;
-                  }
+                
+                if (anchorElement) {
+                  // Calculate the anchor's actual position (accounting for its own anchors)
+                  // We need to recursively calculate the anchor position
+                  const calculateElementPosition = (el: PrintTemplateElement, visited: Set<string> = new Set()): { x: number; y: number } => {
+                    if (visited.has(el.id)) {
+                      return { x: el.transform?.x || 0, y: el.transform?.y || 0 };
+                    }
+                    visited.add(el.id);
+                    
+                    if (!el.anchorTo) {
+                      return { x: el.transform?.x || 0, y: el.transform?.y || 0 };
+                    }
+                    
+                    const anchorEl = newElements.find(a => (a.code && a.code === el.anchorTo) || (!a.code && a.id === el.anchorTo));
+                    if (!anchorEl) {
+                      return { x: el.transform?.x || 0, y: el.transform?.y || 0 };
+                    }
+                    
+                    const anchorPos = calculateElementPosition(anchorEl, visited);
+                    const anchorHeight = anchorEl.transform?.height || fieldHeight;
+                    const offset = el.anchorOffset || { x: 0, y: 0 };
+                    const offsetX = typeof offset === "object" ? offset.x : 0;
+                    const offsetY = typeof offset === "object" ? offset.y : (typeof offset === "number" ? offset : 0);
+                    
+                    return {
+                      x: anchorPos.x + offsetX,
+                      y: anchorPos.y + offsetY
+                    };
+                  };
+                  
+                  const anchorPos = calculateElementPosition(anchorElement);
+                  const anchorHeight = anchorElement.transform?.height || fieldHeight;
+                  // Always align to left margin: offsetX = margin - calculatedAnchorX
+                  // Add extra spacing for new tab (30px) if this is the first element of tab
+                  const tabSpacing = tabIndex > 0 && !tabFirstElementCode ? 30 : fieldSpacing;
+                  tableAnchorOffset = { x: margin - anchorPos.x, y: anchorHeight + tabSpacing };
+                }
+                
+                // Track first element of tab
+                if (!tabFirstElementCode) {
+                  tabFirstElementCode = tableCode;
                 }
                 
                 const tableElement: PrintTemplateElement = {
@@ -315,6 +359,7 @@ export async function generateTemplateFromTabs(options: {
                 currentAnchorCode = tableCode;
                 lastRowAnchorCode = null; // Reset row anchor
                 currentX = margin; // Reset to start of row
+                hasPlacedFieldInRow = true; // Mark that we've placed a field in this row
               } else {
                 // Regular field - anchor based on position
                 const fieldElementId = `element_${Date.now()}_${fieldName}`;
@@ -323,7 +368,10 @@ export async function generateTemplateFromTabs(options: {
                 let anchorPosition: "top-left" | undefined = "top-left";
                 let anchorOffset: { x: number; y: number } | undefined = undefined;
                 
-                if (currentX === margin) {
+                // Check if we're starting a new row (not just first field after skipping no_print fields)
+                const isStartingNewRow = currentX === margin && !hasPlacedFieldInRow;
+                
+                if (isStartingNewRow) {
                   // Starting new row - anchor to last element or last row's first element
                   if (lastRowAnchorCode) {
                     // Anchor to first element of previous row - get its position and add spacing
@@ -364,7 +412,7 @@ export async function generateTemplateFromTabs(options: {
                   // Same row - anchor to previous element in row
                   const previousElement = newElements.length > 0 ? newElements[newElements.length - 1] : null;
                   if (previousElement) {
-                    const prevElementWidth = previousElement.transform?.width || fieldWidth;
+                    const prevElementWidth = previousElement.transform?.width || rowFieldWidth;
                     anchorToCode = previousElement.code || previousElement.id;
                     anchorOffset = { x: prevElementWidth + gapBetweenFields, y: 0 };
                   }
@@ -385,7 +433,7 @@ export async function generateTemplateFromTabs(options: {
                   transform: {
                     x: currentX,
                     y: 0, // Will be calculated from anchor
-                    width: fieldWidth,
+                    width: rowFieldWidth,
                     height: fieldHeight,
                   },
                 };
@@ -394,10 +442,11 @@ export async function generateTemplateFromTabs(options: {
                 
                 // Update current anchor to this field for next elements (using code)
                 currentAnchorCode = fieldCode;
+                hasPlacedFieldInRow = true; // Mark that we've placed a field in this row
                 
                 // Move to next column or next row
-                const nextX = currentX + fieldWidth + gapBetweenFields;
-                if (nextX + fieldWidth <= pageWidthPx - margin) {
+                const nextX = currentX + rowFieldWidth + gapBetweenFields;
+                if (nextX + rowFieldWidth <= pageWidthPx - margin) {
                   currentX = nextX;
                 } else {
                   currentX = margin;
@@ -407,8 +456,8 @@ export async function generateTemplateFromTabs(options: {
             }
           } else if (fieldItem.type === "empty") {
             // Skip empty field, move to next position
-            const nextX = currentX + fieldWidth + gapBetweenFields;
-            if (nextX + fieldWidth <= pageWidthPx - margin) {
+            const nextX = currentX + rowFieldWidth + gapBetweenFields;
+            if (nextX + rowFieldWidth <= pageWidthPx - margin) {
               currentX = nextX;
             } else {
               currentX = margin;
@@ -439,50 +488,79 @@ export async function generateTemplateFromTabs(options: {
         
         // Skip fields with no_print set to true or 1
         if (fieldConfig && (fieldConfig.no_print === true || fieldConfig.no_print === 1)) {
-          // Skip this field but still move to next position
-          const nextX = currentX + fieldWidth + gapBetweenFields;
-          if (nextX + fieldWidth <= pageWidthPx - margin) {
-            currentX = nextX;
-          } else {
-            currentX = margin;
-            lastRowAnchorCode = null; // Reset for next row
-          }
+          // Skip this field - don't advance currentX, just return early
+          return;
         } else if (fieldConfig) {
           if (fieldConfig.type === "Reference Table" && fieldConfig.reference) {
             // Fetch child fields for the table, excluding fields that reference the parent doctype
             const childFields = await fetchChildFields(fieldConfig.reference, options.doctype);
+            
+            // Filter out fields with no_print set to true or 1
+            const printableChildFields = childFields.filter(
+              col => !(col.no_print === true || col.no_print === 1)
+            );
+            
             // Default select fields that are required or in_list_view
-            const defaultSelectedFields = childFields
+            const defaultSelectedFields = printableChildFields
               .filter(col => col.required || col.in_list_view)
               .map(col => col.field);
             // Use default selected fields, or all fields if none are required/in_list_view
             const selectedFieldNames = defaultSelectedFields.length > 0 
               ? defaultSelectedFields 
-              : childFields.map(col => col.field);
+              : printableChildFields.map(col => col.field);
             // Get columns for selected fields only, maintaining order
-            const selectedColumns = childFields
+            const selectedColumns = printableChildFields
               .filter(col => selectedFieldNames.includes(col.field))
               .map((col, idx) => ({ field: col.field, label: col.label, order: idx }));
             const tableElementId = `element_${Date.now()}_${fieldName}`;
             const tableCode = generateCode("table");
             
-            // Calculate anchor offset - if starting new row, align to margin
+            // Calculate anchor offset - Reference Table fields should always start at left margin
+            // Find the anchor element to position vertically
+            const anchorElement = newElements.find(el => (el.code && el.code === currentAnchorCode) || (!el.code && el.id === currentAnchorCode));
             let tableAnchorOffset: { x: number; y: number } = { x: 0, y: 15 };
-            if (currentX === margin) {
-              // Starting new row - calculate offset to align with margin
-              const anchorElement = newElements.find(el => (el.code && el.code === currentAnchorCode) || (!el.code && el.id === currentAnchorCode));
-              if (anchorElement) {
-                const anchorX = anchorElement.transform?.x || 0;
-                const anchorHeight = anchorElement.transform?.height || fieldHeight;
-                // Calculate offset: we want new element at margin, so offsetX = margin - anchorX
-                // Add extra spacing for new tab (30px)
-                const tabSpacing = tabIndex > 0 && !tabFirstElementCode ? 30 : fieldSpacing;
-                tableAnchorOffset = { x: margin - anchorX, y: anchorHeight + tabSpacing };
-              }
-              // Track first element of tab
-              if (!tabFirstElementCode) {
-                tabFirstElementCode = tableCode;
-              }
+            
+            if (anchorElement) {
+              // Calculate the anchor's actual position (accounting for its own anchors)
+              // We need to recursively calculate the anchor position
+              const calculateElementPosition = (el: PrintTemplateElement, visited: Set<string> = new Set()): { x: number; y: number } => {
+                if (visited.has(el.id)) {
+                  return { x: el.transform?.x || 0, y: el.transform?.y || 0 };
+                }
+                visited.add(el.id);
+                
+                if (!el.anchorTo) {
+                  return { x: el.transform?.x || 0, y: el.transform?.y || 0 };
+                }
+                
+                const anchorEl = newElements.find(a => (a.code && a.code === el.anchorTo) || (!a.code && a.id === el.anchorTo));
+                if (!anchorEl) {
+                  return { x: el.transform?.x || 0, y: el.transform?.y || 0 };
+                }
+                
+                const anchorPos = calculateElementPosition(anchorEl, visited);
+                const anchorHeight = anchorEl.transform?.height || fieldHeight;
+                const offset = el.anchorOffset || { x: 0, y: 0 };
+                const offsetX = typeof offset === "object" ? offset.x : 0;
+                const offsetY = typeof offset === "object" ? offset.y : (typeof offset === "number" ? offset : 0);
+                
+                return {
+                  x: anchorPos.x + offsetX,
+                  y: anchorPos.y + offsetY
+                };
+              };
+              
+              const anchorPos = calculateElementPosition(anchorElement);
+              const anchorHeight = anchorElement.transform?.height || fieldHeight;
+              // Always align to left margin: offsetX = margin - calculatedAnchorX
+              // Add extra spacing for new tab (30px) if this is the first element of tab
+              const tabSpacing = tabIndex > 0 && !tabFirstElementCode ? 30 : fieldSpacing;
+              tableAnchorOffset = { x: margin - anchorPos.x, y: anchorHeight + tabSpacing };
+            }
+            
+            // Track first element of tab
+            if (!tabFirstElementCode) {
+              tabFirstElementCode = tableCode;
             }
             
             // Add table element with child fields - anchored to current anchor
@@ -625,4 +703,5 @@ export async function generateTemplateFromTabs(options: {
   
   return newElements;
 }
+
 

@@ -80,6 +80,12 @@ export default $doctype(
       type: "Check",
       label: "Is Quick Entry",
     },
+
+    additional_connections: {
+      type: "Text",
+      label: "Additional Connections",
+      description: "The additional connections of the doctype. The connections are defined as an array of objects with the following properties: doctype, field. The doctype is the doctype of the connection and the field is the field of the connection.",
+    }
   },
   {
     label: "Doctype",

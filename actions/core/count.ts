@@ -1,27 +1,28 @@
 import { z } from "@/zodula/client"
-import { Database } from "../../server/database/database"
 
 export default $action(async (ctx) => {
     const { docFilters } = ctx.body
-    const db = Database("main")
-    const results = [] as { doctype: string, count: number }[]
-    for (const docFilter of Object.keys(docFilters)) {
-        const c = db.select().from(docFilter)
-        const q = db.select().from(docFilter)
-        for (const filter of docFilters[docFilter] || []) {
-            q.where(filter[0], filter[1] as any, filter[2])
-            c.where(filter[0], filter[1] as any, filter[2])
+    const results = [] as { key: string, doctype: string, count: number }[]
+
+    for (const docFilter of docFilters) {
+        const filters = docFilter.filters
+        const doctype = docFilter.doctype
+        let q = $zodula.doctype(doctype as any).select().bypass(true)
+        for (const filter of filters) {
+            q = q.where(filter[0], filter[1] as any, filter[2])
         }
-        const count = await c.count()
-        results.push({ doctype: docFilter, count: count })
+        const count = (await q).count
+        results.push({ key: `${doctype}.${filters.join(".")}`, doctype: doctype, count: count })
     }
-    
     return ctx.json({
         results: results,
         success: true
     })
 }, {
     body: z.object({
-        docFilters: z.record(z.string(), z.array(z.tuple([z.string(), z.string(), z.any()])))
+        docFilters: z.array(z.object({
+            doctype: z.string(),
+            filters: z.array(z.tuple([z.string(), z.string(), z.any()]))
+        }))
     })
 })

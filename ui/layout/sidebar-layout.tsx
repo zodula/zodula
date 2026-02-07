@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect } from "react";
 import { Button } from "../components/ui/button";
 import { Menu, X, MoreHorizontal } from "lucide-react";
 import {
@@ -9,6 +9,8 @@ import {
   DropdownMenuSeparator,
 } from "../components/ui/dropdown-menu";
 import { cn } from "../lib/utils";
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 export interface ActionItem {
   id: string;
@@ -54,6 +56,25 @@ interface SidebarMenuItem {
   idx: number;
 }
 
+interface SidebarStore {
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
+  toggleSidebar: () => void;
+}
+
+const useSidebarStore = create<SidebarStore>()(
+  persist(
+    (set) => ({
+      sidebarOpen: false,
+      setSidebarOpen: (open: boolean) => set({ sidebarOpen: open }),
+      toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+    }),
+    {
+      name: "zodula-sidebar-storage", // unique name for localStorage key
+    }
+  )
+);
+
 export const SidebarLayout = ({
   children,
   title,
@@ -64,7 +85,23 @@ export const SidebarLayout = ({
   actions = [],
   defaultOpen = false,
 }: SidebarLayoutProps) => {
-  const [sidebarOpen, setSidebarOpen] = useState(defaultOpen);
+  const { sidebarOpen, setSidebarOpen, toggleSidebar } = useSidebarStore();
+
+  // Initialize from defaultOpen prop if there's no persisted value (only on mount)
+  useEffect(() => {
+    try {
+      const persisted = localStorage.getItem("zodula-sidebar-storage");
+      if (!persisted && defaultOpen) {
+        setSidebarOpen(defaultOpen);
+      }
+    } catch {
+      // localStorage might not be available (SSR)
+      if (defaultOpen) {
+        setSidebarOpen(defaultOpen);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
 
   const renderActions = () => {
     const primaryActions = Array.isArray(primaryAction)
@@ -136,7 +173,7 @@ export const SidebarLayout = ({
         <div className="zd:flex zd:items-center zd:gap-4">
           <Button
             variant="ghost"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
+            onClick={toggleSidebar}
             className="zd:p-0! zd:h-8 zd:w-8 no-print"
           >
             <Menu className="zd:w-6! zd:h-6!" />

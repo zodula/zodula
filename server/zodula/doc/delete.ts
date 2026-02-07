@@ -7,6 +7,8 @@ import { ZodulaSession } from "../session"
 import path from "path"
 import fs from "fs/promises"
 import type { Bunely } from "bunely"
+import type { DoctypeMetadata } from "../../loader/plugins/doctype"
+import { getDoctypeConnections } from "../utils"
 
 // Global constant for default on_delete behavior
 export const DEFAULT_ON_DELETE_BEHAVIOR = "CASCADE"
@@ -29,9 +31,9 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
         return this
     }
 
-    private async deleteFiles(doctype: any) {
+    private async deleteFiles(doctype: any, org: string) {
         try {
-            const filesDir = path.join(process.cwd(), ".zodula_data", "files", this.doctypeName, this.id)
+            const filesDir = path.join(process.cwd(), ".zodula_data", "files", org, this.doctypeName, this.id)
 
             // Check if the directory exists
             try {
@@ -72,8 +74,11 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
         const db = Database("main")
         const doctype = loader.from("doctype").get(this.doctypeName)
         const user = await zodula.session.user()
-        const old = await zodula.doctype(this.doctypeName).get(this.id).bypass(true).unsafe()
-
+        let old = await zodula.doctype(this.doctypeName).get(this.id).bypass(true).unsafe()
+        const organization = old?.organization || "SYS"
+        if(!old?.organization) {
+            old.organization = organization
+        }
         // Validate document exists
         if (!old) {
             throw new Error(`Document with id ${this.id} not found`, { cause: 404 })
@@ -91,8 +96,6 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
             {
                 bypass: this.options.bypass,
                 doctype,
-                user,
-                roles
             }
         )
 
@@ -111,13 +114,13 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
         await loader.from("doctype").trigger(this.doctypeName, "before_delete", { old: old, doc: prepared, input: undefined })
 
         // Handle reference fields based on their on_delete behavior
-        await this.updateReferenceFields(db, doctype, this.id)
+        await this.updateReferenceFields(doctype, this.id)
 
         // Delete main document
         const result = await db.delete(doctype?.name).where("id", "=", this.id).returning("*").execute()
 
         // Delete associated files
-        await this.deleteFiles(doctype)
+        await this.deleteFiles(doctype, old?.organization)
 
         // Create audit trail for delete action
         await this.createAuditTrail(old, prepared)
@@ -127,76 +130,27 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
         return result
     }
 
-    private async updateReferenceFields(db: Bunely, doctype: any, targetId: string) {
-        const allDoctypes = loader.from("doctype").list()
-        const errors = [] as { doctype: string, field: string, error: string }[]
-        for (const doctype of allDoctypes) {
-            const doctypeFields = doctype.schema.fields as Record<string, Zodula.Field>
-            for (const [fieldName, fieldConfig] of Object.entries(doctypeFields)) {
-                const field = fieldConfig as any
-                if ((field.type === "Reference") && field.reference === this.doctypeName) {
-                    if (fieldName) {
-                        const existings = await zodula.doctype(doctype.name).select().where(fieldName as any, "=", targetId).bypass(true)
-                        for (const existing of existings.docs) {
-                            const onDeleteBehavior = field.on_delete || DEFAULT_ON_DELETE_BEHAVIOR
-
-                            switch (onDeleteBehavior) {
-                                case "CASCADE":
-                                    // Delete the referencing document
-                                    await zodula.doctype(doctype.name).delete(existing.id).bypass(true)
-                                    break
-
-                                case "SET NULL":
-                                    // Set the reference field to null
-                                    await zodula.doctype(doctype.name).update(existing.id, {
-                                        [fieldName]: null
-                                    }).bypass(true).catch((error) => {
-                                        errors.push({ doctype: doctype.name, field: fieldName, error: error.message })
-                                    })
-                                    break
-
-                                case "SET DEFAULT":
-                                    // Set the reference field to its default value
-                                    const defaultValue = field.default || null
-                                    await zodula.doctype(doctype.name).update(existing.id, {
-                                        [fieldName]: defaultValue
-                                    }).bypass(true).catch((error) => {
-                                        errors.push({ doctype: doctype.name, field: fieldName, error: error.message })
-                                    })
-                                    break
-
-                                case "NO ACTION":
-                                    // Check if the field is required - if so, prevent deletion
-                                    if (field.required) {
-                                        throw new ErrorWithCode(
-                                            `Cannot delete ${this.doctypeName} document with id ${targetId}. It is referenced by ${doctype.name} document ${existing.id} and the reference field '${fieldName}' is required.`,
-                                            { status: 400 }
-                                        )
-                                    }
-                                    // If not required, set to null
-                                    await zodula.doctype(doctype.name).update(existing.id, {
-                                        [fieldName]: null
-                                    }).bypass(true).catch((error) => {
-                                        errors.push({ doctype: doctype.name, field: fieldName, error: error.message })
-                                    })
-                                    break
-
-                                default:
-                                    // Default to CASCADE behavior
-                                    await zodula.doctype(doctype.name).delete(existing.id).bypass(true).catch((error) => {
-                                        errors.push({ doctype: doctype.name, field: fieldName, error: error.message })
-                                    })
-                                    break
-                            }
-                        }
-                    }
-                }
-            }
+    private async updateReferenceFields(doctype: DoctypeMetadata, id: string) {
+        const db = Database("main")
+        // delete children documents
+        const childrenMeta = doctype.children
+        for (const childMeta of childrenMeta) {
+            await db.delete(childMeta.childDoctype).where(childMeta.childFieldName, "=", id).returning("*").execute()
         }
-        if (errors.length > 0) {
-            throw new ErrorWithCode(`Failed to delete reference fields: ${errors.map((error) => `${error.doctype}.${error.field}: ${error.error}`).join(", ")}`, {
-                status: 400
-            })
+
+        // check for linked documents
+        const connections = await getDoctypeConnections(doctype.name, id)
+        const linkedDocuments = [] as { doctype: string, id: string }[]
+        for (const connection of connections) {
+            let q = zodula.doctype(connection.doctype as any).select().bypass(true)
+            for (const filter of connection.filters) {
+                q = q.where(filter[0], filter[1] as any, filter[2])
+            }
+            const results = await q
+            linkedDocuments.push(...results.docs.map(doc => ({ doctype: connection.doctype, id: doc.id })))
+        }
+        if (linkedDocuments.length > 0) {
+            throw new ErrorWithCode(`The following documents are linked to this document and cannot be deleted: ${linkedDocuments.map(doc => doc.doctype).join(", ")}`, { status: 400 })
         }
     }
 
@@ -213,7 +167,10 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
     }
 
     then(resolve: (value: any) => void, reject: (reason: any) => void) {
-        return this._delete().then(resolve).catch(reject)
+        return this._delete().then(resolve).catch(e => {
+            console.error(e)
+            reject(e)
+        })
     }
 
     catch(reject: (reason: any) => void) {

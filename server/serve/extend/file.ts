@@ -16,15 +16,13 @@ export function extendFile() {
                 ctx: ctx as any
             })
             const rest = ctx.params.wildcard
-            const [doctype, docId, fieldName, _filename] = rest.split("/")
+            const [org, doctype, docId, fieldName, _filename] = rest.split("/")
             let filename = _filename
             if (!_filename) {
                 const files = await fs.readdir(path.join(process.cwd(), ".zodula_data", "files", rest))
                 filename = files[0]
             }
-            const url = `/${doctype}/${docId}/${fieldName}/${filename}`
-            const user = await zodula.session.user(true).catch(() => null)
-            const roles = await zodula.session.roles()
+            const url = `/${org}/${doctype}/${docId}/${fieldName}/${filename}`
             const doc = await zodula.doctype(doctype as Zodula.DoctypeName).get(docId!)
             const doctypeConfig = loader.from("doctype").get(doctype as Zodula.DoctypeName)
             const { can } = await ZodulaDoctypeHelper.checkPermission(
@@ -34,8 +32,6 @@ export function extendFile() {
                 {
                     bypass: false,
                     doctype: doctypeConfig,
-                    user: user || { id: null },
-                    roles
                 }
             )
             

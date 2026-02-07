@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Link, useRouter } from "@/zodula/ui/components/router";
 import { useDoc } from "@/zodula/ui/hooks/use-doc";
 import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
@@ -19,6 +19,7 @@ import {
   Trash2,
   SaveIcon,
   RotateCcw,
+  ChevronDown,
 } from "lucide-react";
 import { ClientFieldHelper } from "@/zodula/client/field";
 import {
@@ -37,15 +38,15 @@ import { useAuth } from "../hooks/use-auth";
 import { FormActions } from "@/zodula/ui/components/form/form-actions";
 import { AuditTrail } from "@/zodula/ui/components/custom/audit-trail";
 import { useTranslation } from "../hooks/use-translation";
-import { useCmd } from "../hooks/use-cmd";
-import {
-  KeyboardShortcuts,
-  KeyboardShortcutsDialog,
-} from "../components/custom/keyboard-shortcuts";
+import { useUIScriptStore } from "../zui";
+import { useUIScript } from "../hooks/use-ui-script";
+import { useDocStore } from "../hooks/use-doc-store";
 import { PrintTemplateDialog } from "../components/dialogs/print-template-dialog";
 import { useUserName } from "../hooks/use-user-name";
 import ErrorView from "./error-view";
 import { useParams } from "react-router";
+import { toast } from "../components/ui/toast";
+import { useCreateFormPersistenceStore } from "../hooks/use-create-form-persistence";
 
 const UserLink = ({ userId, name }: { userId: string; name: string }) => {
   const { org } = useParams();
@@ -58,22 +59,6 @@ const UserLink = ({ userId, name }: { userId: string; name: string }) => {
     </Link>
   );
 };
-
-// Constants
-const KEYBOARD_SHORTCUTS = {
-  SAVE: "ctrl+s",
-  UPDATE: "ctrl+u",
-  SUBMIT: "ctrl+enter",
-  CANCEL: "ctrl+shift+c",
-  DELETE: "ctrl+delete",
-  DUPLICATE: "ctrl+d",
-  RELOAD: "ctrl+r",
-  PRINT: "ctrl+p",
-  NEW: "ctrl+n",
-  LIST: "ctrl+l",
-  RESET: "ctrl+shift+r",
-  HELP: "f1",
-} as const;
 
 interface DocFormViewProps {
   doctype: Zodula.DoctypeName;
@@ -97,12 +82,14 @@ export function DocFormView({
   mode = "edit",
 }: DocFormViewProps) {
   // ===== ROUTER & STATE =====
-  const { push, replace, pathname, location } = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
+  const { push, replace, pathname, location, back } = useRouter();
   const { org } = useParams();
+  const [isLoading, setIsLoading] = useState(false);
   // ===== AUTH & TRANSLATION =====
   const { roles, user } = useAuth();
   const { t } = useTranslation();
+  // ===== FORM PERSISTENCE =====
+  const { saveFormValues, getFormValues, clearFormValues } = useCreateFormPersistenceStore();
 
   // ===== DOCTYPE & DOC DATA =====
   const { doc: doctypeDoc } = useDocAll({
@@ -110,7 +97,7 @@ export function DocFormView({
     id: doctype
   });
 
-  const { doc, loading, error, reload, relatives } = useDoc(
+  const { doc, loading, error, reload } = useDoc(
     {
       doctype: doctype as Zodula.DoctypeName,
       id: id || "",
@@ -132,29 +119,126 @@ export function DocFormView({
     enabled: mode === "edit" && !!doc,
   });
 
-  // ===== RELATIVES COUNT =====
+  // ===== CONNECTIONS =====
+  type Connection = {
+    doctype: string;
+    filters: [string, string, any][];
+  };
+
   const {
-    data: relativeCount,
-    loading: relativeCountLoading,
-    error: relativeCountError,
-    reload: reloadRelativeCount,
+    data: connectionsData,
+    loading: connectionsLoading,
+    error: connectionsError,
+    reload: reloadConnections,
+  } = useAction(
+    "zodula.core.connections",
+    {
+      data: {
+        doctype: doctype,
+        id: id || "",
+      },
+    },
+    [doctype, id]
+  );
+
+  const connections = useMemo<Connection[]>(() => {
+    return (connectionsData?.connections || []) as Connection[];
+  }, [connectionsData]);
+
+  // ===== CONNECTIONS COUNT =====
+  const {
+    data: connectionsCount,
+    loading: connectionsCountLoading,
+    error: connectionsCountError,
+    reload: reloadConnectionsCount,
   } = useAction(
     "zodula.core.count",
     {
       data: {
-        docFilters: relatives.reduce(
-          (acc, relative) => {
-            acc[relative.child_doctype] = [
-              [relative.child_field_name, "=", doc?.id],
-            ];
-            return acc;
-          },
-          {} as Record<string, [string, string, any][]>
-        ),
+        docFilters: connections.map((connection: Connection) => ({
+          doctype: connection.doctype,
+          filters: connection.filters,
+        })),
       },
     },
-    [doc, relatives]
+    [connections]
   );
+
+  // ===== BADGE CONFIGURATIONS =====
+  const badgeConfigs = useRef<Record<string, { variant?: string | null; size?: string | null; getValue?: (doc: any) => any }>>({});
+  
+  // ===== SECONDARY BUTTONS =====
+  const secondaryButtons = useRef<Array<{
+    label: string;
+    onClick: () => void | Promise<void>;
+    variant?: "outline" | "ghost" | "solid" | "subtle" | "success";
+    icon?: React.ComponentType<any>;
+    disabled?: boolean;
+    items?: Array<{
+      label: string;
+      icon?: React.ComponentType<any>;
+      onClick: () => void | Promise<void>;
+      disabled?: boolean;
+    }>;
+  }>>([]);
+
+  // Create parent FormContext for child forms
+  const parentFormContext = useMemo(() => {
+    if (!doc) return null;
+    return {
+      doctype,
+      doc: doc as any,
+      isCreate: mode === "create",
+      isEdit: mode === "edit",
+      getValue: <K extends string | number | symbol>(fieldName: K) => (doc as any)[fieldName],
+      setValue: <K extends string | number | symbol>(fieldName: K, value: any) => {
+        // This is read-only in render context
+      },
+      addBadge: (fieldName: keyof any | string, config: { variant?: "default" | "secondary" | "destructive" | "outline" | "success" | "warning" | "draft" | "submitted" | "cancelled" | "pending" | "approved" | "rejected" | "muted" | "info" | null; size?: "sm" | "md" | "lg" | "default"; getValue?: (doc: Partial<any>) => any }) => {
+        badgeConfigs.current[String(fieldName)] = config;
+      },
+      addSecondaryButton: (label: string, onClick: () => void | Promise<void>, options?: {
+        variant?: "outline" | "ghost" | "solid" | "subtle" | "success";
+        icon?: React.ComponentType<any>;
+        disabled?: boolean;
+        items?: Array<{
+          label: string;
+          icon?: React.ComponentType<any>;
+          onClick: () => void | Promise<void>;
+          disabled?: boolean;
+        }>;
+      }) => {
+        secondaryButtons.current.push({
+          label,
+          onClick,
+          ...options
+        });
+      },
+      navigate: (path: string, options?: { state?: any }) => {
+        if (options?.state) {
+          push(path, { state: options.state });
+        } else {
+          push(path);
+        }
+      },
+      org: org || undefined
+    };
+  }, [doctype, doc, mode, org, push]);
+
+  // Execute form scripts for on_render event
+  useEffect(() => {
+    if (!doc || !parentFormContext) return;
+    
+    // Reset secondary buttons on each render
+    secondaryButtons.current = [];
+    
+    const store = useUIScriptStore.getState();
+    const executeRenderScripts = async () => {
+      await store.executeScripts(doctype, 'on_render', parentFormContext);
+    };
+    
+    executeRenderScripts();
+  }, [doctype, doc, mode, parentFormContext]);
 
   // ===== FIELDS =====
   // Fetch all fields with persistent caching, then filter client-side
@@ -173,7 +257,7 @@ export function DocFormView({
   const { docs: doctypePermissions } = useDocList(
     {
       doctype: "zodula__Doctype Permission",
-      limit: 1000000,
+      limit: -1,
       filters: [["doctype", "=", doctype]],
     },
     [fields]
@@ -207,6 +291,14 @@ export function DocFormView({
   // ===== FIELD PROPERTY OVERRIDES =====
   // Track field property overrides from UI scripts (set_df_property)
   const [fieldPropertyOverrides, setFieldPropertyOverrides] = useState<Record<string, Record<string, any>>>({});
+  
+  // Track child Extend field property overrides from UI scripts (set_df_child_extend_property)
+  // Structure: { childFieldName: { fieldName: { property: value } } }
+  const [childExtendFieldPropertyOverrides, setChildExtendFieldPropertyOverrides] = useState<Record<string, Record<string, Record<string, any>>>>({});
+  
+  // Track child Reference Table field property overrides from UI scripts (set_df_child_table_property)
+  // Structure: { childFieldName: { idx: { fieldName: { property: value } } } }
+  const [childTableFieldPropertyOverrides, setChildTableFieldPropertyOverrides] = useState<Record<string, Record<number, Record<string, Record<string, any>>>>>({});
 
   // Function to set field property (used by UI scripts)
   const setFieldProperty = useCallback((fieldName: string, property: string, value: any) => {
@@ -216,6 +308,49 @@ export function DocFormView({
         newOverrides[fieldName] = {};
       }
       newOverrides[fieldName][property] = value;
+      return newOverrides;
+    });
+  }, []);
+
+  // Function to set child Extend field property (used by UI scripts)
+  const setChildExtendProperty = useCallback((childField: string, fieldName: string, property: string, value: any) => {
+    setChildExtendFieldPropertyOverrides((prev) => {
+      const newOverrides = { ...prev };
+      if (!newOverrides[childField]) {
+        newOverrides[childField] = {};
+      }
+      if (!newOverrides[childField][fieldName]) {
+        newOverrides[childField][fieldName] = {};
+      }
+      newOverrides[childField][fieldName][property] = value;
+      return newOverrides;
+    });
+  }, []);
+
+  // Function to set child Reference Table field property (used by UI scripts)
+  // If idx is null, apply to all rows
+  const setChildTableProperty = useCallback((childField: string, idx: number | null, fieldName: string, property: string, value: any) => {
+    setChildTableFieldPropertyOverrides((prev) => {
+      const newOverrides = { ...prev };
+      if (!newOverrides[childField]) {
+        newOverrides[childField] = {};
+      }
+      
+      const targetIdx = idx === null ? -1 : idx;
+      const childFieldOverrides = newOverrides[childField];
+      
+      if (!childFieldOverrides) {
+        return newOverrides;
+      }
+      
+      if (!childFieldOverrides[targetIdx]) {
+        childFieldOverrides[targetIdx] = {};
+      }
+      if (!childFieldOverrides[targetIdx]![fieldName]) {
+        childFieldOverrides[targetIdx]![fieldName] = {};
+      }
+      childFieldOverrides[targetIdx]![fieldName]![property] = value;
+      
       return newOverrides;
     });
   }, []);
@@ -255,12 +390,34 @@ export function DocFormView({
         // Determine if field should be readonly based on permissions
         const fieldReadonly = !canUpdate || field.readonly === 1;
 
+        // Check doc_status based readonly conditions
+        const docStatus = doc?.doc_status ?? 0;
+        let statusBasedReadonly = false;
+        
+        // Access field config properties (allow_on_submit and only_once are direct properties on field)
+        // Support both field.config.allow_on_submit (if config exists) and field.allow_on_submit (direct property)
+        const allowOnSubmit = (field as any).config?.allow_on_submit ?? field.allow_on_submit;
+        const onlyOnce = (field as any).config?.only_once ?? field.only_once;
+        
+        // Condition 1: doc_status == 1 && field.config.allow_on_submit !== 1
+        if (docStatus === 1 && allowOnSubmit !== 1) {
+          statusBasedReadonly = true;
+        }
+        // Condition 2: doc_status == 0 && field.config.only_once == 1
+        else if (docStatus === 0 && onlyOnce === 1) {
+          statusBasedReadonly = true;
+        }
+        // Condition 3: doc_status !== 1 && doc_status !== 0
+        else if (docStatus !== 1 && docStatus !== 0) {
+          statusBasedReadonly = true;
+        }
+
         // Start with base field configuration
         let fieldConfig: any = {
           ...field,
           label: t(field.label || field.name || ""),
-          // Set readonly based on update permission
-          readonly: fieldReadonly ? 1 : (field.readonly || 0),
+          // Set readonly based on update permission and status-based conditions
+          readonly: (fieldReadonly || statusBasedReadonly) ? 1 : (field.readonly || 0),
         };
 
         // Apply property overrides from UI scripts
@@ -292,7 +449,7 @@ export function DocFormView({
     });
 
     return processedFields;
-  }, [fields, doctypeDoc, t, fieldPermissions, isOwn, roles, user, fieldPropertyOverrides]);
+  }, [fields, doctypeDoc, t, fieldPermissions, isOwn, roles, user, fieldPropertyOverrides, doc]);
 
   // Compute formId based on mode and document ID
   const formId = useMemo(() => {
@@ -302,11 +459,233 @@ export function DocFormView({
     return `edit-${doctype}-${id || ""}`;
   }, [doctype, id, mode]);
 
-  const { formData, handleChange, setValues, reset, getFormData } = useForm({
+  const {
+    formData,
+    handleChange: setFormFieldValue,
+    setValues,
+    reset,
+    setValue,
+    getFormData,
+  } = useForm({
     formId,
     initialValues: undefined,
     fields: formFields,
   });
+
+
+  // ===== SCRIPT & FETCH HELPERS =====
+  const { fetchDoc, getDoc } = useDocStore();
+
+  const { execute } = useUIScript(doctype, {
+    formData,
+    setValue,
+    setValues,
+    getValue: (fieldName) => getFormData()[fieldName],
+    getValues: getFormData,
+    setFieldProperty,
+    setChildExtendProperty,
+    setChildTableProperty,
+    parentContext: parentFormContext as any,
+    docId: id,
+    isCreate: mode === "create" || !doc?.doc_status,
+    isEdit: mode === "edit",
+    showDialog: async (component, dialogProps) => popup(component, dialogProps),
+    navigate: (path) => push(path),
+    showToast: (message, type = "info") => toast[type](message),
+  });
+
+  const getNestedValue = useCallback((obj: any, path: string): any => {
+    if (!obj || !path) return undefined;
+
+    const keys = path.split(".");
+    let current = obj;
+
+    for (const key of keys) {
+      if (current === null || current === undefined) {
+        return undefined;
+      }
+      current = current[key];
+    }
+
+    return current;
+  }, []);
+
+  // Centralized field change handler: fetch_from + scripts + form store update
+  const handleFieldChange = useCallback(
+    async (fieldName: keyof typeof formFields, value: any) => {
+      if (!formFields || Object.keys(formFields).length === 0) {
+        return;
+      }
+
+      const currentData = getFormData();
+      const oldValue = currentData?.[fieldName as string];
+
+      // Find dependent fields that use fetch_from on this field
+      const dependentFields: Array<{ fieldName: string; fetchPath: string }> =
+        [];
+      Object.entries(formFields).forEach(([key, field]) => {
+        if (
+          field.fetch_from &&
+          field.fetch_from.startsWith((fieldName as string) + ".")
+        ) {
+          const fetchPath = field.fetch_from.substring(
+            (fieldName as string).length + 1
+          );
+          dependentFields.push({
+            fieldName: key,
+            fetchPath,
+          });
+        }
+      });
+
+      const dependentUpdates: Record<string, any> = {};
+
+      // Handle fetch_from logic before running scripts
+      if (dependentFields.length > 0 && value) {
+        const sourceField = formFields[fieldName as string];
+
+        if (sourceField?.type === "Extend") {
+          try {
+            const extendData = value;
+            for (const dependentField of dependentFields) {
+              const fetchedValue = getNestedValue(
+                extendData,
+                dependentField.fetchPath
+              );
+              if (fetchedValue !== undefined && fetchedValue !== null) {
+                dependentUpdates[dependentField.fieldName] = fetchedValue;
+              }
+            }
+          } catch (error) {
+            console.warn(
+              `Failed to fetch data from Extend field ${String(fieldName)}:`,
+              error
+            );
+            dependentFields.forEach((df) => {
+              dependentUpdates[df.fieldName] = null;
+            });
+          }
+        } else if (sourceField?.reference) {
+          try {
+            const rootFields = dependentFields
+              .map((df) => df.fetchPath.split(".")[0])
+              .filter((v): v is string => !!v);
+            const fetchFields = [...new Set(rootFields)];
+
+            await fetchDoc(
+              sourceField.reference as Zodula.DoctypeName,
+              value,
+              fetchFields
+            );
+
+            const cachedDoc = getDoc(
+              sourceField.reference as Zodula.DoctypeName,
+              value
+            );
+
+            if (cachedDoc?.data) {
+              const fetchedDoc = cachedDoc.data;
+              for (const dependentField of dependentFields) {
+                const fetchedValue = getNestedValue(
+                  fetchedDoc,
+                  dependentField.fetchPath
+                );
+                if (fetchedValue !== undefined && fetchedValue !== null) {
+                  dependentUpdates[dependentField.fieldName] = fetchedValue;
+                }
+              }
+            }
+          } catch (error) {
+            console.warn(
+              `Failed to fetch data for field ${String(fieldName)}:`,
+              error
+            );
+            dependentFields.forEach((df) => {
+              dependentUpdates[df.fieldName] = null;
+            });
+          }
+        }
+
+        if (Object.keys(dependentUpdates).length > 0) {
+          setValues(dependentUpdates);
+        }
+      } else if (dependentFields.length > 0 && !value) {
+        dependentFields.forEach((df) => {
+          dependentUpdates[df.fieldName] = null;
+        });
+        setValues(dependentUpdates);
+      }
+
+      // Build updated form data snapshot for scripts
+      const updatedFormData = {
+        ...getFormData(),
+        ...dependentUpdates,
+        [fieldName as string]: value,
+      };
+
+      // Execute UI scripts for field change
+      await execute("field_change", fieldName as string, {
+        fieldName: fieldName as string,
+        value,
+        oldValue,
+        formData: updatedFormData,
+        getValue: (name: string) => updatedFormData[name],
+        getValues: () => updatedFormData,
+      });
+
+      // Persist main field change after scripts
+      setFormFieldValue(fieldName as string, value);
+      
+      // Save form values to persistence store in create mode
+      if (mode === "create" && org) {
+        const latestFormData = getFormData();
+        saveFormValues(doctype, org, latestFormData);
+      }
+    },
+    [
+      formFields,
+      getFormData,
+      getNestedValue,
+      fetchDoc,
+      getDoc,
+      setValues,
+      execute,
+      setFormFieldValue,
+      mode,
+      org,
+      doctype,
+      saveFormValues,
+    ]
+  );
+
+  // Run refresh once per document/context
+  const refreshExecutedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const key = mode === "create" ? "create" : id || "new";
+    if (!doctype) return;
+    if (refreshExecutedRef.current === key) return;
+    refreshExecutedRef.current = key;
+    execute("refresh");
+  }, [mode, id, doctype, execute]);
+
+  // Hydrate initial values: trigger dependent fetches and scripts once per doc
+  const fieldHydratedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const key = mode === "create" ? `create-${formId}` : `doc-${id || "new"}`;
+    if (fieldHydratedRef.current === key) return;
+    if (!formData) return;
+    if (!formFields || Object.keys(formFields).length === 0) return;
+    fieldHydratedRef.current = key;
+
+    const hydrate = async () => {
+      for (const [fieldName, value] of Object.entries(formData)) {
+        if (value === undefined || value === null) continue;
+        await handleFieldChange(fieldName as keyof typeof formFields, value);
+      }
+    };
+
+    hydrate();
+  }, [mode, id, formId, formData, formFields, handleFieldChange]);
 
   // ===== FORM EFFECTS =====
   // Track previous doc ID to prevent unnecessary updates
@@ -329,10 +708,27 @@ export function DocFormView({
     }
   }, [doc?.id, setValues, prefill, mode]);
 
-  React.useEffect(() => {
+  // Note: Default values and prefill for create mode are now handled in handleResetForm
+  // This ensures proper sequencing: reset -> defaults -> prefill -> refresh script
+
+  // Helper function to reset form and apply default values
+  const handleResetForm = useCallback(async () => {
+    // Step 1: Reset the form first (clears all values)
+    reset();
+    
+    // Step 2: Wait for reset to complete
+    await new Promise(resolve => setTimeout(resolve, 0));
+    
+    // Step 3: Apply default values, saved values, and prefill after reset
     if (mode === "create" && fields && doctypeDoc) {
       const defaultValues: Record<string, any> = {};
 
+      // If prefill exists, clear saved values first (reset before prefill)
+      if (prefill && org) {
+        clearFormValues(doctype, org);
+      }
+
+      // First, apply field defaults
       fields.forEach((field) => {
         if (
           field.doctype === doctype &&
@@ -350,25 +746,140 @@ export function DocFormView({
         }
       });
 
+      // Then, restore saved form values ONLY if there's no prefill
+      // (If prefill exists, saved values were already cleared above)
+      if (!prefill && org) {
+        const savedValues = getFormValues(doctype, org);
+        if (savedValues) {
+          Object.assign(defaultValues, savedValues);
+        }
+      }
+
+      // Finally, apply prefill (prefill overrides defaults and saved values)
       if (prefill) {
         Object.assign(defaultValues, prefill);
       }
 
+      // Step 4: Set all values at once (defaults + prefill)
       setValues(defaultValues);
-    }
-  }, [fields, doctypeDoc, setValues, prefill, mode, doctype]);
 
-  // Handle form reset when resetForm prop is true
-  React.useEffect(() => {
-    if (resetForm && mode === "create") {
-      reset();
-      replace(pathname, { state: { ...location.state, resetForm: false } });
+      // Step 4.5: Wait for form state to update and verify values are set
+      // Use a longer delay to ensure React has fully processed the state update
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      // Verify that prefill values are actually in the form store
+      const verifyFormData = getFormData();
+      const missingPrefillFields: string[] = [];
+      if (prefill) {
+        Object.keys(prefill).forEach((key) => {
+          // Skip reference table fields as they're handled differently
+          // Check if the value is missing (undefined) or if it doesn't match the prefill value
+          const currentValue = verifyFormData[key];
+          const prefillValue = prefill[key];
+          if (key !== 'references' && 
+              prefillValue !== undefined && 
+              prefillValue !== null && 
+              currentValue !== prefillValue) {
+            missingPrefillFields.push(key);
+          }
+        });
+        
+        // If any prefill values are missing, set them again
+        if (missingPrefillFields.length > 0) {
+          const missingValues: Record<string, any> = {};
+          missingPrefillFields.forEach((key) => {
+            missingValues[key] = prefill[key];
+          });
+          setValues(missingValues);
+          // Wait again after setting missing values
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+      }
+
+      // Step 4.6: Clear prefill from location state after applying it
+      // This prevents prefill from being re-applied on re-renders
+      if (prefill && location.state?.prefill && !prefillAppliedRef.current) {
+        prefillAppliedRef.current = true;
+        // Use setTimeout to avoid state updates during render
+        setTimeout(() => {
+          replace(pathname, {
+            state: {
+              ...location.state,
+              prefill: undefined
+            }
+          });
+        }, 0);
+      }
+
+      // Step 5: Execute refresh script with the latest form data
+      // Get the latest form data after all values have been set
+      const latestFormData = getFormData();
+      
+      // Store prefill values that might be cleared by refresh script
+      const prefillValuesToRestore: Record<string, any> = {};
+      if (prefill) {
+        // Store important prefill values that refresh scripts might clear
+        Object.keys(prefill).forEach((key) => {
+          if (key !== 'references' && latestFormData[key] !== undefined && latestFormData[key] !== null) {
+            prefillValuesToRestore[key] = latestFormData[key];
+          }
+        });
+      }
+      
+      // Execute refresh script with the latest form data
+      // Override formData, getValue, and getValues to always use the latest form store state
+      // This ensures frm.get_value() returns current values and frm.set_value() updates correctly
+      await execute("refresh", undefined, {
+        formData: latestFormData,
+        getValue: (fieldName: string) => {
+          // Always get the latest value from the form store
+          return getFormData()[fieldName];
+        },
+        getValues: () => {
+          // Always return the latest form data from the store
+          return getFormData();
+        },
+      });
+      
+      // Step 6: Restore prefill values that might have been cleared by refresh script
+      // Some refresh scripts clear fields (like party) even when they should be preserved
+      if (Object.keys(prefillValuesToRestore).length > 0) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        const afterRefreshData = getFormData();
+        const valuesToRestore: Record<string, any> = {};
+        
+        Object.keys(prefillValuesToRestore).forEach((key) => {
+          // Only restore if the value was cleared (undefined/null/empty) but we had a prefill value
+          const currentValue = afterRefreshData[key];
+          const prefillValue = prefillValuesToRestore[key];
+          if ((currentValue === undefined || currentValue === null || currentValue === "") && 
+              prefillValue !== undefined && prefillValue !== null && prefillValue !== "") {
+            valuesToRestore[key] = prefillValue;
+          }
+        });
+        
+        if (Object.keys(valuesToRestore).length > 0) {
+          setValues(valuesToRestore);
+        }
+      }
+    } else {
+      // For edit mode, wait for reset to complete then execute refresh
+      await Promise.resolve().then(async () => {
+        const latestFormData = getFormData();
+        await execute("refresh", undefined, {
+          formData: latestFormData,
+          getValue: (fieldName: string) => latestFormData[fieldName],
+          getValues: () => latestFormData,
+        });
+      });
     }
-  }, [resetForm, reset, mode]);
+  }, [mode, fields, doctypeDoc, doctype, prefill, setValues, execute, reset, getFormData, replace, pathname, location, org, getFormValues, clearFormValues]);
 
   // ===== EVENT HANDLERS =====
-  const handleReload = () => {
-    reload();
+  const handleReload = async () => {
+    reload().then((doc) => {
+      setValues(doc as Record<string, any>);
+    });
   };
 
   const handleDuplicate = () => {
@@ -443,7 +954,8 @@ export function DocFormView({
         variant: "default",
       });
       if (con) {
-        await zodula.doc.submit_doc(doctype, id || "").then(() => {
+        await zodula.doc.submit_doc(doctype, id || "").then((submittedDoc: Zodula.SelectDoctype<Zodula.DoctypeName>) => {
+          setValues(submittedDoc as Record<string, any>);
           reload();
         });
       }
@@ -460,7 +972,8 @@ export function DocFormView({
         variant: "destructive",
       });
       if (con) {
-        await zodula.doc.cancel_doc(doctype, id || "").then(() => {
+        await zodula.doc.cancel_doc(doctype, id || "").then((canceledDoc: Zodula.SelectDoctype<Zodula.DoctypeName>) => {
+          setValues(canceledDoc as Record<string, any>);
           reload();
         });
       }
@@ -574,6 +1087,7 @@ export function DocFormView({
 
     if (updatedDoc.id !== id && !isSingle) {
       // ID changed - navigate to new URL
+      setValues(updatedDoc as Record<string, any>);
       replace(`/desk/${org}/doctypes/${doctype}/form/${updatedDoc.id}`);
     } else {
       // ID unchanged - just reload
@@ -616,6 +1130,12 @@ export function DocFormView({
         latestFormData
       );
       if (createdDoc) {
+        // Clear saved form values after successful creation
+        if (org) {
+          clearFormValues(doctype, org);
+        }
+        
+        setValues(createdDoc as Record<string, any>);
         if (cbUrl) {
           let obj = fromDoc || {};
           if (fromField) {
@@ -631,9 +1151,9 @@ export function DocFormView({
               prefill: obj,
             },
           });
-          reset();
+          handleResetForm();
         } else {
-          reset();
+          handleResetForm();
           replace(`/desk/${org}/doctypes/${doctype}/form/${createdDoc.id}`);
         }
       }
@@ -659,7 +1179,7 @@ export function DocFormView({
       setIsLoading(true);
       try {
         await zodula.doc.delete_doc(doctype, id);
-        push(`/desk/${org}/doctypes/${doctype}/list`);
+        back();
       } catch (error) {
         console.error("Error deleting doc:", error);
       } finally {
@@ -671,10 +1191,60 @@ export function DocFormView({
   // ===== COMPUTED VALUES =====
   const doctypeLabel = doctypeDoc?.label || doctype;
   const isSystemGenerated = doctypeDoc?.is_system_generated === 1;
-  const isMac =
-    typeof navigator !== "undefined" &&
-    navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-  const modifierKey = isMac ? "Ctrl" : "Ctrl";
+
+  useEffect(() => {
+    if(location.state?.resetForm) {
+      handleResetForm();
+      replace(pathname, { state: { ...location.state, resetForm: false } });
+    }
+  }, [location.state]);
+
+  // Always reset form when in create mode
+  const createModeResetRef = useRef<string | null>(null);
+  const prefillAppliedRef = useRef<boolean>(false);
+  
+  useEffect(() => {
+    if (mode === "create" && fields && doctypeDoc) {
+      // Create a unique key based on doctype and prefill to track if we've reset for this session
+      // Only include prefill in the key if it hasn't been applied yet
+      const prefillKey = prefillAppliedRef.current ? {} : (prefill || {});
+      const resetKey = `${doctype}-${JSON.stringify(prefillKey)}`;
+      
+      // Only reset if we haven't already reset for this create session
+      if (createModeResetRef.current !== resetKey) {
+        createModeResetRef.current = resetKey;
+        // Mark prefill as not applied yet (will be set to true in handleResetForm)
+        if (prefill) {
+          prefillAppliedRef.current = false;
+        }
+        handleResetForm();
+      }
+    } else if (mode !== "create") {
+      // Clear the refs when not in create mode
+      createModeResetRef.current = null;
+      prefillAppliedRef.current = false;
+    }
+  }, [mode, doctype, prefill, fields, doctypeDoc, handleResetForm]);
+
+  // Save form values to persistence store in create mode (for changes via setValues/setValue)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (mode === "create" && org && formData) {
+      // Debounce saves to avoid excessive localStorage writes
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      saveTimeoutRef.current = setTimeout(() => {
+        saveFormValues(doctype, org, formData);
+      }, 300); // Save 300ms after last change
+    }
+    
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [mode, org, doctype, formData, saveFormValues]);
 
   // ===== SIDEBAR CONTENT =====
   const sidebarContent = (
@@ -682,13 +1252,9 @@ export function DocFormView({
       {mode === "create" ? (
         /* New Doc Info */
         <div className="zd:space-y-3">
-          <h3 className="zd:text-sm zd:font-medium zd:text-muted-foreground">
-            New Document
-          </h3>
           <div className="zd:space-y-2">
             <div className="zd:text-xs zd:text-muted-foreground">
-              <div>Creating new {doctype} document</div>
-              <div>Fill in the required fields and save to create</div>
+            Creating new {doctype} document. Fill in the required fields and save to create
             </div>
           </div>
         </div>
@@ -700,19 +1266,19 @@ export function DocFormView({
               {t("Relatives")}
             </h3>
             <div className="zd:flex zd:flex-col zd:gap-2">
-              {relatives.map((relative) => {
+              {connections.map((connection, index) => {
                 const filterQuery = encodeURIComponent(
-                  `[["${relative.child_field_name}", "=", "${id}"]]`
+                  JSON.stringify(connection.filters)
                 );
                 return (
                   <Link
                     className="zd:text-xs zd:opacity-50 zd:hover:opacity-100"
-                    to={`/desk/${org}/doctypes/${relative.child_doctype}/list?filters=${filterQuery}`}
-                    key={relative.id}
+                    to={`/desk/${org}/doctypes/${connection.doctype}/list?filters=${filterQuery}`}
+                    key={`${connection.doctype}-${index}`}
                   >
-                    {relative.child_doctype} (
-                    {relativeCount?.results?.find(
-                      (result: any) => result.doctype === relative.child_doctype
+                    {connection.doctype} (
+                    {connectionsCount?.results?.find(
+                      (result: any) => result.doctype === connection.doctype
                     )?.count || 0}
                     )
                   </Link>
@@ -733,6 +1299,15 @@ export function DocFormView({
                 !doc?.organization ? "zd:italic" : ""
               )}>
                 {doc?.organization || "Unknown"}
+              </div>
+              <label className="zd:text-xs zd:text-muted-foreground">
+                {t("Owner")}
+              </label>
+              <div className={cn(
+                "zd:text-xs",
+                !doc?.owner ? "zd:italic" : ""
+              )}>
+                {doc?.owner || "Unknown"}
               </div>
             </div>
           </div>
@@ -760,82 +1335,6 @@ export function DocFormView({
     }
   }, []);
 
-  // ===== KEYBOARD SHORTCUTS =====
-  const shortcuts = [
-    {
-      keys: `${modifierKey} + S`,
-      description: mode === "create" ? "Create" : "Save",
-    },
-    { keys: `${modifierKey} + U`, description: "Update" },
-    { keys: `${modifierKey} + Enter`, description: "Submit" },
-    { keys: `${modifierKey} + Shift + C`, description: "Cancel" },
-    { keys: `${modifierKey} + Delete`, description: "Delete" },
-    { keys: `${modifierKey} + D`, description: "Duplicate" },
-    { keys: `${modifierKey} + R`, description: "Reload" },
-    { keys: `${modifierKey} + P`, description: "Print" },
-    { keys: `${modifierKey} + N`, description: "New" },
-    { keys: `${modifierKey} + L`, description: "List" },
-    { keys: "Escape", description: "Back to List" },
-    // { keys: `${modifierKey} + Shift + R`, description: "Reset" },
-  ];
-
-  useCmd(
-    KEYBOARD_SHORTCUTS.SAVE,
-    mode === "create" ? handleCreate : handleSave,
-    { disabled: isSystemGenerated }
-  );
-  useCmd(KEYBOARD_SHORTCUTS.UPDATE, handleUpdate, {
-    disabled: isSystemGenerated,
-  });
-  useCmd(KEYBOARD_SHORTCUTS.SUBMIT, handleSubmit, {
-    disabled: isSystemGenerated,
-  });
-  useCmd(KEYBOARD_SHORTCUTS.CANCEL, handleCancel, {
-    disabled: isSystemGenerated,
-  });
-  useCmd(KEYBOARD_SHORTCUTS.DELETE, handleDelete, {
-    disabled: isSystemGenerated,
-  });
-  useCmd(KEYBOARD_SHORTCUTS.DUPLICATE, handleDuplicate, {
-    disabled: isSystemGenerated,
-  });
-  useCmd(KEYBOARD_SHORTCUTS.RELOAD, handleReload, {
-    disabled: isSystemGenerated,
-  });
-  useCmd(KEYBOARD_SHORTCUTS.PRINT, handlePrint, {
-    disabled: isSystemGenerated,
-  });
-  useCmd(
-    KEYBOARD_SHORTCUTS.NEW,
-    () =>
-      push(`/desk/${org}/doctypes/${doctype}/form`, {
-        state: { resetForm: true },
-      }),
-    { disabled: isSystemGenerated }
-  );
-  useCmd(
-    KEYBOARD_SHORTCUTS.LIST,
-    () => push(`/desk/${org}/doctypes/${doctype}/list`),
-    { disabled: isSystemGenerated }
-  );
-  //   useCmd(KEYBOARD_SHORTCUTS.RESET, reset, { disabled: isSystemGenerated });
-  useCmd(
-    KEYBOARD_SHORTCUTS.HELP,
-    async () => {
-      popup(
-        KeyboardShortcutsDialog,
-        {
-          title: "Keyboard Shortcuts",
-          description: "Available keyboard shortcuts for this page",
-        },
-        {
-          shortcuts,
-        }
-      );
-    },
-    { disabled: isSystemGenerated }
-  );
-
   // ===== RENDER COMPONENTS =====
   const primaryButtonRender = useCallback(() => {
     if (mode === "create") {
@@ -847,6 +1346,15 @@ export function DocFormView({
         >
           <Save className="zd:w-4 zd:h-4 zd:mr-1" />
           {isLoading ? "Creating..." : "Create"}
+        </Button>
+      );
+    }
+
+    if(isSingle) {
+      return (
+        <Button onClick={handleSave} className="zd:h-8" disabled={isDirty}>
+          <SaveIcon />
+          {t("Save")}{" "}
         </Button>
       );
     }
@@ -886,7 +1394,7 @@ export function DocFormView({
     );
   }
 
-  if (mode === "edit" && error) {
+  if (mode === "edit" && error && !isSingle) {
     return (
       <NavbarLayout>
         <ErrorView message={error} status={500} />
@@ -894,7 +1402,7 @@ export function DocFormView({
     );
   }
 
-  if (mode === "edit" && !doc) {
+  if (mode === "edit" && !doc && !isSingle) {
     return (
       <NavbarLayout>
         <ErrorView message="Doc not found" status={404} />
@@ -914,9 +1422,29 @@ export function DocFormView({
                 ? doctypeLabel
                 : doc?.id || "New Doc"}
             <span className="zd:flex zd:gap-2 zd:items-center no-print">
-              {doctypeDoc?.is_submittable === 1 && (
-                <DocStatusBadge status={doc?.doc_status || 0} />
-              )}
+              {doctypeDoc?.is_submittable === 1 && mode === "edit" && (() => {
+                const badgeConfig = badgeConfigs.current["doc_status"];
+                if (badgeConfig && doc) {
+                  const valueOrObj = badgeConfig.getValue ? badgeConfig.getValue(doc) : doc.doc_status;
+                  
+                  // If getValue returns null, fall back to default DocStatusBadge
+                  if (valueOrObj === null) {
+                    return <DocStatusBadge status={doc?.doc_status || 0} />;
+                  }
+                  
+                  // Handle both string values and objects with status/variant
+                  const Badge = require("../components/ui/badge").Badge;
+                  const displayValue = typeof valueOrObj === 'object' && valueOrObj !== null ? valueOrObj.status : valueOrObj;
+                  const variant = typeof valueOrObj === 'object' && valueOrObj !== null ? valueOrObj.variant : badgeConfig.variant;
+                  return (
+                    <Badge variant={variant as any} size={badgeConfig.size as any}>
+                      {displayValue || ""}
+                    </Badge>
+                  );
+                }
+                // Default: show doc_status badge
+                return <DocStatusBadge status={doc?.doc_status || 0} />;
+              })()}
             </span>
           </div>
         }
@@ -992,7 +1520,57 @@ export function DocFormView({
               )}
               {/* Custom form actions from useEnhanceDoctype */}
               <FormActions doctype={doctype} doc={doc} />
-              <KeyboardShortcuts shortcuts={shortcuts} />
+              {/* Secondary buttons from UI scripts */}
+              {secondaryButtons.current.map((button, index) => {
+                // If button has items, render as dropdown
+                if (button.items && button.items.length > 0) {
+                  const Icon = button.icon;
+                  return (
+                    <DropdownMenu key={index}>
+                      <DropdownMenuTrigger asChild>
+                        <Button 
+                          variant={button.variant || "outline"} 
+                          className="zd:h-8"
+                          disabled={button.disabled}
+                        >
+                          {Icon && <Icon className="zd:w-4 zd:h-4 zd:mr-1" />}
+                          {button.label}
+                          <ChevronDown className="zd:w-4 zd:h-4 zd:ml-1" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {button.items.map((item, itemIndex) => {
+                          const ItemIcon = item.icon;
+                          return (
+                            <DropdownMenuItem
+                              key={itemIndex}
+                              onClick={item.onClick}
+                              disabled={item.disabled}
+                            >
+                              {ItemIcon && <ItemIcon className="zd:w-4 zd:h-4 zd:mr-1" />}
+                              {item.label}
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  );
+                }
+                // Regular button
+                const Icon = button.icon;
+                return (
+                  <Button
+                    key={index}
+                    variant={button.variant || "outline"}
+                    onClick={button.onClick}
+                    disabled={button.disabled}
+                    className="zd:h-8"
+                  >
+                    {Icon && <Icon className="zd:w-4 zd:h-4 zd:mr-1" />}
+                    {button.label}
+                  </Button>
+                );
+              })}
               {primaryButtonRender()}
             </div>
           )
@@ -1007,11 +1585,12 @@ export function DocFormView({
             readonly={doctypeDoc?.is_system_generated === 1}
             fields={formFields}
             values={formData}
-            onChange={handleChange}
+            onChange={handleFieldChange}
             doctype={doctype}
             tabs={doctypeDoc?.tabs ? JSON.parse(doctypeDoc.tabs) : []}
-            enableScripts={true}
-            setFieldProperty={setFieldProperty}
+            childExtendFieldPropertyOverrides={childExtendFieldPropertyOverrides}
+            childTableFieldPropertyOverrides={childTableFieldPropertyOverrides}
+            parentContext={(parentFormContext as any) || undefined}
           />
           <div className="">
             {!!doc?.id && <AuditTrail doctype={doctype} docId={id!} />}
@@ -1033,7 +1612,7 @@ export function DocFormView({
               <span className="zd:text-sm zd:text-muted-foreground">•</span>
               <span className="zd:text-sm zd:text-muted-foreground">
                 {doc?.updated_by ? (
-                  <span>
+                  <span className="zd:text-sm zd:text-muted-foreground">
                     {getUserName(doc.updated_by) || doc.updated_by}
                     </span>
                 ) : (

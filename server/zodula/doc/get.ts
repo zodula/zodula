@@ -5,6 +5,7 @@ import {
   SUFFIX_EXTEND,
   SUFFIX_REF_TABLE,
   type DoctypeRelative,
+  type DoctypeChild,
 } from "../../loader/plugins/doctype";
 import { ZodulaSession } from "../session";
 import { ZodulaDoctypeHelper, type GETOptions } from "./helper";
@@ -46,7 +47,7 @@ export class ZodulaDoctypeGetter<
     try {
       const db = Database("main");
       const doctype = loader.from("doctype").get(this.doctypeName);
-      const relatives = doctype.relatives;
+      const children = doctype.children;
       const session = new ZodulaSession();
       const organization = await session.organization(true);
       const isGlobal = doctype.config.is_global === 1;
@@ -56,17 +57,14 @@ export class ZodulaDoctypeGetter<
           `SELECT * FROM "${doctype?.name}" WHERE "id" = '${this.id}' AND (${isGlobal ? "1=1" : `("organization" = "${organization}" OR "organization" = "SYS")`})`    
         )) as any;
 
-        const roles = await zodula.session.roles();
         const { can } =
           await ZodulaDoctypeHelper.checkPermission(
             this.doctypeName,
-            "can_select",
+            "can_get",
             old,
             {
               bypass: this.options.bypass,
               doctype,
-              user,
-              roles,
             }
           );
 
@@ -84,39 +82,34 @@ export class ZodulaDoctypeGetter<
           );
         }
       }
-      // Find relative field aliases using parentFieldName from relatives
-      const relativeFieldAliases = new Set<string>()
-      for (const relative of relatives) {
-        if (relative.parentFieldName) {
-          relativeFieldAliases.add(relative.parentFieldName)
-        }
+      // Find child field aliases from children (Reference Table and Extend fields)
+      const childFieldAliases = new Set<string>()
+      for (const child of children) {
+        childFieldAliases.add(child.parentFieldName);
       }
 
       const fields =
-        this.options.fields.length > 0
-          ? this.options.fields
-              ?.map((field) => String(field))
-              .filter(
-                (field) => !relativeFieldAliases.has(field)
-              )
+        this.options?.fields?.length > 0
+          ? this.options?.fields
+              ?.map?.((field) => String(field))
+              ?.filter(
+                (field) => !childFieldAliases.has(field)
+              ) ?? []
           : ["*"];
       let result = (await db.get(
         `SELECT ${fields.join(",")} FROM "${doctype?.name}" WHERE "id" = '${this.id}'`
       )) as any;
 
-      if (relatives.length > 0 && result) {
-        for (const relative of relatives) {
-          // Only process if relative has a parentFieldName (meaning parent has Extend or Reference Table field)
-          if (relative.parentFieldName) {
-            const relativeRecords = await ZodulaDoctypeHelper.getRelativeRecords(
-              this.id,
-              relative,
-              this.options
-            );
+      if (children.length > 0 && result) {
+        for (const child of children) {
+          const relativeRecords = await ZodulaDoctypeHelper.getChildRecords(
+            this.id,
+            child,
+            this.options
+          );
 
-            if (relativeRecords !== undefined) {
-              result[relative.parentFieldName] = relativeRecords;
-            }
+          if (relativeRecords !== undefined) {
+            result[child.parentFieldName] = relativeRecords;
           }
         }
       }

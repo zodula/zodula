@@ -18,7 +18,8 @@
     "can_own_delete": 0,
     "can_own_submit": 0,
     "can_own_cancel": 0,
-    "organization": null
+    "app": "zodula",
+    "organization": "SYS"
   },
   {
     "id": "0199b69c-4b9e-7000-bd67-33e2ec165f2e",
@@ -39,7 +40,8 @@
     "can_own_delete": 0,
     "can_own_submit": 0,
     "can_own_cancel": 0,
-    "organization": null
+    "app": "zodula",
+    "organization": "SYS"
   },
   {
     "id": "0199cfd0-8f62-7000-a2de-f311057f2dac",
@@ -60,7 +62,8 @@
     "can_own_delete": 0,
     "can_own_submit": 0,
     "can_own_cancel": 0,
-    "organization": null
+    "app": "zodula",
+    "organization": "SYS"
   },
   {
     "id": "0199cfd0-be9b-7000-a65f-e242341207dc",
@@ -81,7 +84,8 @@
     "can_own_delete": 0,
     "can_own_submit": 0,
     "can_own_cancel": 0,
-    "organization": null
+    "app": "zodula",
+    "organization": "SYS"
   },
   {
     "id": "0199cfd1-0a19-7000-ac2b-95472a13f1b6",
@@ -102,7 +106,8 @@
     "can_own_delete": 0,
     "can_own_submit": 0,
     "can_own_cancel": 0,
-    "organization": null
+    "app": "zodula",
+    "organization": "SYS"
   },
   {
     "id": "0199cfd1-4d96-7000-917e-dcd5d783b542",
@@ -123,7 +128,8 @@
     "can_own_delete": 0,
     "can_own_submit": 0,
     "can_own_cancel": 0,
-    "organization": null
+    "app": "zodula",
+    "organization": "SYS"
   },
   {
     "id": "0199d055-9f1c-7000-805d-e131d7566754",
@@ -144,7 +150,8 @@
     "can_own_delete": 0,
     "can_own_submit": 0,
     "can_own_cancel": 0,
-    "organization": null
+    "app": "zodula",
+    "organization": "SYS"
   },
   {
     "id": "0199d055-e5cf-7000-b505-4e25edddbe35",
@@ -165,7 +172,8 @@
     "can_own_delete": 0,
     "can_own_submit": 0,
     "can_own_cancel": 0,
-    "organization": null
+    "app": "zodula",
+    "organization": "SYS"
   },
   {
     "id": "0199d059-fafd-7000-9937-0a84b430c155",
@@ -186,7 +194,8 @@
     "can_own_delete": 0,
     "can_own_submit": 0,
     "can_own_cancel": 0,
-    "organization": null
+    "app": "zodula",
+    "organization": "SYS"
   },
   {
     "id": "0199d05b-895a-7000-af4b-d38a874c0ea5",
@@ -207,7 +216,8 @@
     "can_own_delete": 1,
     "can_own_submit": 1,
     "can_own_cancel": 1,
-    "organization": null
+    "app": "zodula",
+    "organization": "SYS"
   },
   {
     "id": "0199d072-02cb-7000-b599-0696e549d301",
@@ -228,7 +238,8 @@
     "can_own_delete": 0,
     "can_own_submit": 0,
     "can_own_cancel": 0,
-    "organization": null
+    "app": "zodula",
+    "organization": "SYS"
   },
   {
     "id": "0a24dd490d0691f5",
@@ -249,7 +260,8 @@
     "can_own_delete": 0,
     "can_own_submit": 0,
     "can_own_cancel": 0,
-    "organization": null
+    "app": "zodula",
+    "organization": "SYS"
   },
   {
     "id": "f25abb64e4bddf98",
@@ -270,7 +282,8 @@
     "can_own_delete": 0,
     "can_own_submit": 0,
     "can_own_cancel": 0,
-    "organization": null
+    "app": "zodula",
+    "organization": "SYS"
   },
   {
     "id": "99a7348113048b26",
@@ -291,6 +304,7 @@
     "can_own_delete": 1,
     "can_own_submit": 1,
     "can_own_cancel": 1,
-    "organization": "Test"
+    "app": "zodula",
+    "organization": "SYS"
   }
 ]

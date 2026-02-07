@@ -19,7 +19,7 @@ export class ZodulaDoctypeSelector<
 > {
   private options = {
     filters: [] as IFilter<TN, keyof Zodula.InsertDoctype<TN>, IOperator>[],
-    limit: 1000000,
+    limit: -1,
     page: 1,
     sort: "" as keyof Zodula.SelectDoctype<TN>,
     order: "asc" as "asc" | "desc",
@@ -87,13 +87,98 @@ export class ZodulaDoctypeSelector<
     return this;
   }
 
+  /**
+   * Parse field path to detect reference table fields (e.g., "items.unit")
+   * Returns { parentField, childField, isReferenceTable } or null if not a reference table field
+   */
+  private parseReferenceTableField(
+    fieldPath: string,
+    doctype: DoctypeMetadata
+  ): { parentField: string; childField: string; child: any } | null {
+    if (!fieldPath || !fieldPath.includes(".")) {
+      return null;
+    }
+
+    const parts = fieldPath.split(".", 2);
+    if (parts.length < 2) {
+      return null;
+    }
+
+    const [parentField, childField] = parts;
+    if (!parentField || !childField) {
+      return null;
+    }
+
+    const fieldConfig = doctype.schema.fields[parentField];
+
+    if (!fieldConfig || (fieldConfig as any).type !== "Reference Table") {
+      return null;
+    }
+
+    const childDoctype = (fieldConfig as any).reference as Zodula.DoctypeName;
+    if (!childDoctype) {
+      return null;
+    }
+
+    // Find the child relationship
+    const child = doctype.children.find(
+      (c) =>
+        c.parentDoctype === doctype.name &&
+        c.childDoctype === childDoctype &&
+        c.type === "Reference Table"
+    );
+
+    if (!child) {
+      return null;
+    }
+
+    return { parentField, childField, child };
+  }
+
+  /**
+   * Build JOIN clauses for reference table filters
+   * Returns { joins: string[], joinAliases: Map<string, string> }
+   */
+  private buildJoinsForFilters(
+    doctype: DoctypeMetadata,
+    filters: IFilter<any, any, IOperator>[]
+  ): { joins: string[]; joinAliases: Map<string, string> } {
+    const joins: string[] = [];
+    const joinAliases = new Map<string, string>();
+    let joinIndex = 0;
+
+    for (const filter of filters) {
+      const [field] = filter;
+      const fieldPath = String(field);
+
+      const parsed = this.parseReferenceTableField(fieldPath, doctype);
+      if (!parsed) continue;
+
+      const { parentField, child } = parsed;
+      const aliasKey = `${parentField}_${child.childDoctype}`;
+
+      // Only add join if we haven't already added it
+      if (!joinAliases.has(aliasKey)) {
+        const alias = `jt${joinIndex++}`;
+        joinAliases.set(aliasKey, alias);
+
+        // Build JOIN: LEFT JOIN child_table AS alias ON alias.child_field = main_table.id
+        const joinClause = `LEFT JOIN "${child.childDoctype}" AS "${alias}" ON "${alias}"."${child.childFieldName}" = "${doctype.name}"."id"`;
+        joins.push(joinClause);
+      }
+    }
+
+    return { joins, joinAliases };
+  }
+
   private buildWhereClause(
     doctype: DoctypeMetadata,
     roles: string[],
     permissions: Zodula.SelectDoctype<"zodula__Doctype Permission">[],
     user: Zodula.SelectDoctype<"zodula__User">,
     organization: string | null,
-    userOrganizationRoles: string[]
+    userOrganizationRoles: string[],
+    joinAliases?: Map<string, string>
   ): string {
     const { filters = [], q } = this.options;
     const whereConditions: string[] = [];
@@ -101,7 +186,29 @@ export class ZodulaDoctypeSelector<
     // Process regular filters
     for (const filter of filters) {
       const [field, operator, value] = filter;
+      const fieldPath = String(field);
       let condition = "";
+
+      // Check if this is a reference table field
+      const parsed = this.parseReferenceTableField(fieldPath, doctype);
+      let fieldReference = fieldPath;
+
+      if (parsed && joinAliases) {
+        // Use joined table alias for reference table fields
+        const { parentField, childField, child } = parsed;
+        const aliasKey = `${parentField}_${child.childDoctype}`;
+        const alias = joinAliases.get(aliasKey);
+
+        if (alias) {
+          fieldReference = `"${alias}"."${childField}"`;
+        } else {
+          // Fallback to original field path if alias not found
+          fieldReference = `"${fieldPath}"`;
+        }
+      } else {
+        // Regular field from main table
+        fieldReference = `"${doctype.name}"."${fieldPath}"`;
+      }
 
       switch (operator) {
         case "=":
@@ -112,25 +219,25 @@ export class ZodulaDoctypeSelector<
         case "<=":
         case "LIKE":
         case "NOT LIKE":
-          condition = `"${field as string}" ${operator} '${value}'`;
+          condition = `${fieldReference} ${operator} '${value}'`;
           break;
         case "IN":
           const arrValue1 = ("(" +
             (value as string[])?.map((v) => `'${v}'`).join(",") +
             ")") as any;
-          condition = `"${field as string}" IN ${arrValue1}`;
+          condition = `${fieldReference} IN ${arrValue1}`;
           break;
         case "NOT IN":
           const arrValue2 = ("(" +
             (value as string[])?.map((v) => `'${v}'`).join(",") +
             ")") as any;
-          condition = `"${field as string}" NOT IN ${arrValue2}`;
+          condition = `${fieldReference} NOT IN ${arrValue2}`;
           break;
         case "IS NULL":
-          condition = `"${field as string}" IS ${value === 1 || value === "1" ? "" : "NOT "}NULL`;
+          condition = `${fieldReference} IS ${value === 1 || value === "1" ? "" : "NOT "}NULL`;
           break;
         case "IS NOT NULL":
-          condition = `"${field as string}" IS ${value === 1 || value === "1" ? "NOT " : ""}NULL`;
+          condition = `${fieldReference} IS ${value === 1 || value === "1" ? "NOT " : ""}NULL`;
           break;
       }
 
@@ -140,10 +247,10 @@ export class ZodulaDoctypeSelector<
     }
 
     if (doctype.config.is_global !== 1 && organization !== "SYS" && !this.options.bypass) {
-      whereConditions.push(`("organization" = "${organization}" OR "organization" = "SYS")`);
+      whereConditions.push(`("${doctype.name}"."organization" = "${organization}" OR "${doctype.name}"."organization" = "SYS")`);
     }
     if(doctype.name === "zodula__Organization" && !roles.includes("System Admin") && !this.options.bypass) {
-      whereConditions.push(`("owner" = "${user?.id}" OR "id" IN ("${userOrganizationRoles.join('","')}"))`);
+      whereConditions.push(`("${doctype.name}"."owner" = "${user?.id}" OR "${doctype.name}"."id" IN ("${userOrganizationRoles.join('","')}"))`);
     }
 
     // Process search query
@@ -153,7 +260,7 @@ export class ZodulaDoctypeSelector<
         : ["id"];
 
       const searchConditions = searchFields.map(
-        (field: string) => `"${field}" LIKE '%${q}%'`
+        (field: string) => `"${doctype.name}"."${field}" LIKE '%${q}%'`
       );
 
       if (searchConditions.length > 0) {
@@ -180,9 +287,9 @@ export class ZodulaDoctypeSelector<
       !roles.includes("System Admin")
     ) {
       if (can_own_select) {
-        whereConditions.push(`"owner" = "${user?.id}"`);
+        whereConditions.push(`"${doctype.name}"."owner" = "${user?.id}"`);
       } else {
-        whereConditions.push(`"id" IS NULL`);
+        whereConditions.push(`"${doctype.name}"."id" IS NULL`);
       }
     }
 
@@ -223,30 +330,41 @@ export class ZodulaDoctypeSelector<
           }
         );
       }
-      const { limit = 1000000, page = 1 } = this.options || {};
+
+      const { limit = -1, page = 1 } = this.options || {};
       const fields =
         this.options.fields.length > 0
           ? this.options.fields?.map((field) => String(field))
           : ["*"];
 
-      // Build the main query
-      const selectClause = `SELECT ${fields.join(",")} FROM "${doctype?.name}"`;
+      // Build JOINs for reference table filters
+      const { joins, joinAliases } = this.buildJoinsForFilters(
+        doctype,
+        this.options.filters
+      );
+
+      // Build the main query with JOINs
+      const selectClause = `SELECT DISTINCT "${doctype?.name}".* FROM "${doctype?.name}"`;
+      const joinClause = joins.length > 0 ? joins.join(" ") : "";
       const whereClause = this.buildWhereClause(
         doctype,
         roles,
         permissions,
         user,
         organization || null,
-        userOrganizationRoles
+        userOrganizationRoles,
+        joinAliases
       );
       const orderClause = this.options.sort
-        ? `ORDER BY "${this.options.sort as string}" ${this.options.order}`
+        ? `ORDER BY "${doctype?.name}"."${this.options.sort as string}" ${this.options.order}`
         : "";
-      const limitClause = `LIMIT ${limit} OFFSET ${(page - 1) * limit}`;
+      // If limit is -1, fetch all records (no LIMIT/OFFSET clause)
+      const limitClause = limit === -1 ? "" : `LIMIT ${limit} OFFSET ${(page - 1) * limit}`;
 
       // Combine all clauses
       const queryParts = [
         selectClause,
+        joinClause,
         whereClause,
         orderClause,
         limitClause,
@@ -257,9 +375,13 @@ export class ZodulaDoctypeSelector<
         stmt
       )) as unknown as Zodula.SelectDoctype<TN>[];
 
-      // Build count query for pagination
+      // Build count query for pagination (with DISTINCT if there are JOINs)
+      const countSelect = joins.length > 0
+        ? `SELECT COUNT(DISTINCT "${doctype?.name}"."id") as count FROM "${doctype?.name}"`
+        : `SELECT COUNT(*) as count FROM "${doctype?.name}"`;
       const countQueryParts = [
-        `SELECT COUNT(*) as count FROM "${doctype?.name}"`,
+        countSelect,
+        joinClause,
         whereClause,
       ].filter(Boolean);
       const countStmt = countQueryParts.join(" ");

@@ -33,7 +33,6 @@ export class ZodulaDoctypeSubmit<TN extends Zodula.DoctypeName = Zodula.DoctypeN
         const user = await this.session.user(true)
         const doctype = loader.from("doctype").get(this.doctypeName)
         const old = await zodula.doctype(this.doctypeName).get(this.id).bypass(true).unsafe()
-
         // Validate document exists and can be submitted
         this.validateDocument(old)
 
@@ -51,8 +50,6 @@ export class ZodulaDoctypeSubmit<TN extends Zodula.DoctypeName = Zodula.DoctypeN
             {
                 bypass: this.options.bypass,
                 doctype,
-                user,
-                roles
             }
         )
 
@@ -131,9 +128,6 @@ export class ZodulaDoctypeSubmit<TN extends Zodula.DoctypeName = Zodula.DoctypeN
     }
 
     private async updateMainDocument(db: Bunely, doctype: any, prepared: Zodula.SelectDoctype<TN>) {
-        const returnFields = this.options.fields.length > 0
-            ? this.options.fields.map((field: any) => `"${field}"`)
-            : "*"
 
         const setClause = Object.entries(prepared)
             .filter(([key, value]) => key !== 'id')
@@ -143,7 +137,7 @@ export class ZodulaDoctypeSubmit<TN extends Zodula.DoctypeName = Zodula.DoctypeN
         const query = `UPDATE "${doctype?.name}" SET ${setClause} WHERE id = "${this.id}"`
         await db.run(query)
 
-        const returned = (await db.get(`SELECT ${returnFields} FROM "${doctype?.name}" WHERE id = "${this.id}"`)) as any
+        const returned = await zodula.doctype(this.doctypeName).get(this.id).bypass(true).fields(this.options.fields as any[])
         return returned
     }
 

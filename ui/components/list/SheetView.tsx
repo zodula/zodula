@@ -1105,6 +1105,8 @@ export function SheetView({
           onFilterPopupOpenChange={handleFilterPopupOpenChange}
           onColumnSettings={handleColumnSettings}
           hasCustomColumns={hasCustomColumns}
+          allFields={fields}
+          doctype={doctype}
         />
 
         {/* Aggregation Button - Frappe Style */}

@@ -61,12 +61,24 @@ export function PrintTemplateDialog({
     setLang(printTemplates[0]?.default_lang || currentLanguage || "en");
   }, [printTemplates]);
 
+  // Update letter head when template changes
   useEffect(() => {
-    if (letterHeads?.length > 0) {
+    if (selectedTemplate && printTemplates) {
+      const template = printTemplates.find((t) => t.id === selectedTemplate);
+      if (template?.default_letter_head) {
+        // Use template's default letter head
+        setSelectedLetterHead(template.default_letter_head);
+      } else if (letterHeads?.length > 0) {
+        // Fallback to default letter head
+        const defaultLetterHead = letterHeads.find((lh) => lh.is_default);
+        setSelectedLetterHead(defaultLetterHead?.id || null);
+      }
+    } else if (letterHeads?.length > 0) {
+      // If no template selected, use default letter head
       const defaultLetterHead = letterHeads.find((lh) => lh.is_default);
       setSelectedLetterHead(defaultLetterHead?.id || null);
     }
-  }, [letterHeads]);
+  }, [selectedTemplate, printTemplates, letterHeads]);
 
   const handleClose = () => {
     onClose(null);
@@ -98,20 +110,6 @@ export function PrintTemplateDialog({
             org={initialData?.org}
           />
           <FormControl
-            label="Letter Head"
-            fieldKey="letter_head"
-            field={{
-              type: "Reference",
-              reference: "zodula__Letter Head",
-              filters: JSON.stringify([["disabled", "!=", 1]]),
-            }}
-            onChange={(fieldName, value) => {
-              setSelectedLetterHead(value);
-            }}
-            value={selectedLetterHead}
-            org={initialData?.org}
-          />
-          <FormControl
             label="Print Template"
             fieldKey="print_template"
             field={{
@@ -124,6 +122,20 @@ export function PrintTemplateDialog({
             }}
             org={initialData?.org}
             value={selectedTemplate}
+          />
+          <FormControl
+            label="Letter Head"
+            fieldKey="letter_head"
+            field={{
+              type: "Reference",
+              reference: "zodula__Letter Head",
+              filters: JSON.stringify([["disabled", "!=", 1]]),
+            }}
+            onChange={(fieldName, value) => {
+              setSelectedLetterHead(value);
+            }}
+            value={selectedLetterHead}
+            org={initialData?.org}
           />
         </div>
 

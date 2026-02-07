@@ -21,8 +21,7 @@ export default $doctype<"zodula__Workspace">({
         type: "Reference",
         label: "App",
         reference: "zodula__App",
-        required: 1,
-        on_delete: "CASCADE"
+        required: 1
     },
     is_system: {
         type: "Check",
@@ -33,6 +32,7 @@ export default $doctype<"zodula__Workspace">({
         type: "Reference Table",
         label: "Workspace Items",
         reference: "zodula__Workspace Item",
+        reference_field: "workspace",
         required: 0
     }
 }, {

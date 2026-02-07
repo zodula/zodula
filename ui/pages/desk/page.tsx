@@ -17,7 +17,8 @@ export default function DeskPage() {
   const { push, pathname } = useRouter();
   const { user } = useAuth();
   const { doc: globalSetting } = useDocAll({
-    doctype: "zodula__Global Setting"
+    doctype: "zodula__Global Setting",
+    id: "zodula__Global Setting"
   });
   const { t } = useTranslation();
 
@@ -80,7 +81,8 @@ export default function DeskPage() {
         "zodula__Global Setting",
         globalSetting?.id || "",
         "logo",
-        (globalSetting?.logo as string) || ""
+        (globalSetting?.logo as string) || "",
+        "SYS"
       ) + "?w=40&h=40"
     : "/public/zodula/zodula-logo.png";
 

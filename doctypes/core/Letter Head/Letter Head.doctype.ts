@@ -3,12 +3,6 @@ export default $doctype<"zodula__Letter Head">({
         type: "Text",
         required: 1
     },
-    css_content: {
-        type: "Code",
-        options: "css",
-        label: "Letter Head CSS",
-        description: "CSS styles for the letter head. This CSS will be included in the print template."
-    },
     is_default: {
         type: "Check",
         label: "Is Default"
@@ -17,10 +11,54 @@ export default $doctype<"zodula__Letter Head">({
         type: "Check",
         label: "Disabled"
     },
+    format: {
+        type: "Select",
+        options: "A4\nA3\nA5\nLetter\nLegal\nTabloid\nCustom",
+        default: "A4",
+        label: "Page Format"
+    },
+    custom_width: {
+        type: "Float",
+        label: "Custom Width (mm)",
+        depends_on: "doc.format === 'Custom'",
+        default: "210"
+    },
+    custom_height: {
+        type: "Float",
+        label: "Custom Height (mm)",
+        depends_on: "doc.format === 'Custom'",
+        default: "297"
+    },
+    margin_top: {
+        type: "Float",
+        default: "10",
+        label: "Top Margin (mm)"
+    },
+    margin_right: {
+        type: "Float",
+        default: "10",
+        label: "Right Margin (mm)"
+    },
+    margin_bottom: {
+        type: "Float",
+        default: "10",
+        label: "Bottom Margin (mm)"
+    },
+    margin_left: {
+        type: "Float",
+        default: "10",
+        label: "Left Margin (mm)"
+    },
+    guided_background: {
+        type: "File",
+        label: "Guided Background",
+        description: "Background image to guide template layout on physical paper (displayed with opacity)"
+    },
     items: {
         type: "Reference Table",
         label: "Items",
         reference: "zodula__Letter Head Item",
+        reference_field: "letter_head",
         required: 0
     }
 }, {
