@@ -19,7 +19,15 @@
     "can_own_submit": 0,
     "can_own_cancel": 0,
     "app": "zodula",
-    "organization": "SYS"
+    "organization": "SYS",
+    "owner": null,
+    "created_at": "2026-02-06 15:10:51",
+    "updated_at": "2026-02-06 15:10:51",
+    "created_by": null,
+    "updated_by": "jarupak.sri@gmail.com",
+    "doc_status": 0,
+    "idx": 0,
+    "vector": "[]"
   },
   {
     "id": "0199b69c-4b9e-7000-bd67-33e2ec165f2e",
@@ -41,7 +49,15 @@
     "can_own_submit": 0,
     "can_own_cancel": 0,
     "app": "zodula",
-    "organization": "SYS"
+    "organization": "SYS",
+    "owner": null,
+    "created_at": "2026-02-06 15:10:48",
+    "updated_at": "2026-02-06 15:10:48",
+    "created_by": null,
+    "updated_by": "jarupak.sri@gmail.com",
+    "doc_status": 0,
+    "idx": 0,
+    "vector": "[]"
   },
   {
     "id": "0199cfd0-8f62-7000-a2de-f311057f2dac",
@@ -63,7 +79,15 @@
     "can_own_submit": 0,
     "can_own_cancel": 0,
     "app": "zodula",
-    "organization": "SYS"
+    "organization": "SYS",
+    "owner": null,
+    "created_at": "2026-02-06 15:10:44",
+    "updated_at": "2026-02-06 15:10:44",
+    "created_by": null,
+    "updated_by": "jarupak.sri@gmail.com",
+    "doc_status": 0,
+    "idx": 0,
+    "vector": "[]"
   },
   {
     "id": "0199cfd0-be9b-7000-a65f-e242341207dc",
@@ -85,7 +109,15 @@
     "can_own_submit": 0,
     "can_own_cancel": 0,
     "app": "zodula",
-    "organization": "SYS"
+    "organization": "SYS",
+    "owner": null,
+    "created_at": "2026-02-06 15:10:41",
+    "updated_at": "2026-02-06 15:10:41",
+    "created_by": null,
+    "updated_by": "jarupak.sri@gmail.com",
+    "doc_status": 0,
+    "idx": 0,
+    "vector": "[]"
   },
   {
     "id": "0199cfd1-0a19-7000-ac2b-95472a13f1b6",
@@ -107,7 +139,15 @@
     "can_own_submit": 0,
     "can_own_cancel": 0,
     "app": "zodula",
-    "organization": "SYS"
+    "organization": "SYS",
+    "owner": null,
+    "created_at": "2026-02-06 15:10:36",
+    "updated_at": "2026-02-06 15:10:36",
+    "created_by": null,
+    "updated_by": "jarupak.sri@gmail.com",
+    "doc_status": 0,
+    "idx": 0,
+    "vector": "[]"
   },
   {
     "id": "0199cfd1-4d96-7000-917e-dcd5d783b542",
@@ -129,7 +169,15 @@
     "can_own_submit": 0,
     "can_own_cancel": 0,
     "app": "zodula",
-    "organization": "SYS"
+    "organization": "SYS",
+    "owner": null,
+    "created_at": "2026-02-06 15:10:33",
+    "updated_at": "2026-02-06 15:10:33",
+    "created_by": null,
+    "updated_by": "jarupak.sri@gmail.com",
+    "doc_status": 0,
+    "idx": 0,
+    "vector": "[]"
   },
   {
     "id": "0199d055-9f1c-7000-805d-e131d7566754",
@@ -151,7 +199,15 @@
     "can_own_submit": 0,
     "can_own_cancel": 0,
     "app": "zodula",
-    "organization": "SYS"
+    "organization": "SYS",
+    "owner": null,
+    "created_at": "2026-02-06 15:10:29",
+    "updated_at": "2026-02-06 15:10:29",
+    "created_by": null,
+    "updated_by": "jarupak.sri@gmail.com",
+    "doc_status": 0,
+    "idx": 0,
+    "vector": "[]"
   },
   {
     "id": "0199d055-e5cf-7000-b505-4e25edddbe35",
@@ -173,7 +229,15 @@
     "can_own_submit": 0,
     "can_own_cancel": 0,
     "app": "zodula",
-    "organization": "SYS"
+    "organization": "SYS",
+    "owner": null,
+    "created_at": "2026-02-06 15:10:25",
+    "updated_at": "2026-02-06 15:10:25",
+    "created_by": null,
+    "updated_by": "jarupak.sri@gmail.com",
+    "doc_status": 0,
+    "idx": 0,
+    "vector": "[]"
   },
   {
     "id": "0199d059-fafd-7000-9937-0a84b430c155",
@@ -195,7 +259,15 @@
     "can_own_submit": 0,
     "can_own_cancel": 0,
     "app": "zodula",
-    "organization": "SYS"
+    "organization": "SYS",
+    "owner": null,
+    "created_at": "2026-02-06 15:10:22",
+    "updated_at": "2026-02-06 15:10:22",
+    "created_by": null,
+    "updated_by": "jarupak.sri@gmail.com",
+    "doc_status": 0,
+    "idx": 0,
+    "vector": "[]"
   },
   {
     "id": "0199d05b-895a-7000-af4b-d38a874c0ea5",
@@ -217,7 +289,15 @@
     "can_own_submit": 1,
     "can_own_cancel": 1,
     "app": "zodula",
-    "organization": "SYS"
+    "organization": "SYS",
+    "owner": null,
+    "created_at": "2026-02-06 15:10:19",
+    "updated_at": "2026-02-06 15:10:19",
+    "created_by": null,
+    "updated_by": "jarupak.sri@gmail.com",
+    "doc_status": 0,
+    "idx": 0,
+    "vector": "[]"
   },
   {
     "id": "0199d072-02cb-7000-b599-0696e549d301",
@@ -239,7 +319,15 @@
     "can_own_submit": 0,
     "can_own_cancel": 0,
     "app": "zodula",
-    "organization": "SYS"
+    "organization": "SYS",
+    "owner": null,
+    "created_at": "2026-02-06 15:10:14",
+    "updated_at": "2026-02-06 15:10:14",
+    "created_by": null,
+    "updated_by": "jarupak.sri@gmail.com",
+    "doc_status": 0,
+    "idx": 0,
+    "vector": "[]"
   },
   {
     "id": "0a24dd490d0691f5",
@@ -261,7 +349,15 @@
     "can_own_submit": 0,
     "can_own_cancel": 0,
     "app": "zodula",
-    "organization": "SYS"
+    "organization": "SYS",
+    "owner": null,
+    "created_at": "2026-02-06 15:10:10",
+    "updated_at": "2026-02-06 15:10:10",
+    "created_by": null,
+    "updated_by": "jarupak.sri@gmail.com",
+    "doc_status": 0,
+    "idx": 0,
+    "vector": "[]"
   },
   {
     "id": "f25abb64e4bddf98",
@@ -283,7 +379,15 @@
     "can_own_submit": 0,
     "can_own_cancel": 0,
     "app": "zodula",
-    "organization": "SYS"
+    "organization": "SYS",
+    "owner": null,
+    "created_at": "2026-02-06 15:10:07",
+    "updated_at": "2026-02-06 15:10:07",
+    "created_by": null,
+    "updated_by": "jarupak.sri@gmail.com",
+    "doc_status": 0,
+    "idx": 0,
+    "vector": "[]"
   },
   {
     "id": "99a7348113048b26",
@@ -305,6 +409,44 @@
     "can_own_submit": 1,
     "can_own_cancel": 1,
     "app": "zodula",
-    "organization": "SYS"
+    "organization": "SYS",
+    "owner": null,
+    "created_at": "2026-02-06 15:10:01",
+    "updated_at": "2026-02-06 15:10:01",
+    "created_by": null,
+    "updated_by": "jarupak.sri@gmail.com",
+    "doc_status": 0,
+    "idx": 0,
+    "vector": "[]"
+  },
+  {
+    "id": "5184d8eb21be7fd7",
+    "doctype": "zodula__Print Template",
+    "role": "Organization Owner",
+    "perm_level": "0",
+    "can_get": 1,
+    "can_update": 1,
+    "can_select": 1,
+    "can_create": 1,
+    "can_delete": 1,
+    "can_submit": 1,
+    "can_cancel": 1,
+    "can_own_get": 0,
+    "can_own_select": 0,
+    "can_own_create": 0,
+    "can_own_update": 0,
+    "can_own_delete": 0,
+    "can_own_submit": 0,
+    "can_own_cancel": 0,
+    "app": "zodula",
+    "organization": "SYS",
+    "owner": "jarupak.sri@gmail.com",
+    "created_at": "2026-02-07 14:19:27",
+    "updated_at": "2026-02-07 14:19:27",
+    "created_by": "jarupak.sri@gmail.com",
+    "updated_by": "jarupak.sri@gmail.com",
+    "doc_status": 0,
+    "idx": 0,
+    "vector": "[]"
   }
 ]

@@ -13,6 +13,15 @@ import { useTranslation } from "../../hooks/use-translation";
 
 const STORAGE_KEY = "zodula-selected-organization";
 
+const tierLevelLabels = {
+  "0": "Free",
+  "1": "Basic",
+  "2": "Pro",
+  "3": "Enterprise",
+  "4": "Enterprise Plus",
+  "5": "Enterprise Pro",
+}
+
 export default function DeskPage() {
   const { push, pathname } = useRouter();
   const { user } = useAuth();
@@ -141,7 +150,7 @@ export default function DeskPage() {
                       {org.name || org.id}
                     </div>
                     <div className="zd:text-sm zd:text-muted-foreground">
-                      {t("Free")}
+                      {t(tierLevelLabels[org.tier_level as keyof typeof tierLevelLabels] || "Free")}
                     </div>
                   </div>
                   <ChevronRight className="zd:w-5 zd:h-5 zd:text-muted-foreground zd:flex-shrink-0" />

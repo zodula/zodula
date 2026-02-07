@@ -3,30 +3,90 @@
     "id": "Desk User",
     "name": "Desk User",
     "description": "User who can access Desk UI",
-    "is_system": "1"
+    "is_system": 1,
+    "organization": "SYS",
+    "owner": null,
+    "created_at": null,
+    "updated_at": null,
+    "created_by": null,
+    "updated_by": null,
+    "doc_status": 0,
+    "idx": null,
+    "vector": null
   },
   {
     "id": "Anonymous",
     "name": "Anonymous",
     "description": "The person who is not logged in",
-    "is_system": "1"
+    "is_system": 1,
+    "organization": "SYS",
+    "owner": null,
+    "created_at": null,
+    "updated_at": null,
+    "created_by": null,
+    "updated_by": null,
+    "doc_status": 0,
+    "idx": null,
+    "vector": null
   },
   {
     "id": "Authenticated",
     "name": "Authenticated",
     "description": "The person who is logged in",
-    "is_system": "1"
+    "is_system": 1,
+    "organization": "SYS",
+    "owner": null,
+    "created_at": null,
+    "updated_at": null,
+    "created_by": null,
+    "updated_by": null,
+    "doc_status": 0,
+    "idx": null,
+    "vector": null
   },
   {
     "id": "OpenAPI User",
     "name": "OpenAPI User",
     "description": "The person who can access the OpenAPI docs",
-    "is_system": "1"
+    "is_system": 1,
+    "organization": "SYS",
+    "owner": null,
+    "created_at": null,
+    "updated_at": null,
+    "created_by": null,
+    "updated_by": null,
+    "doc_status": 0,
+    "idx": null,
+    "vector": null
   },
   {
     "id": "System Admin",
     "name": "System Admin",
     "description": "The person who has all the permissions",
-    "is_system": "1"
+    "is_system": 1,
+    "organization": "SYS",
+    "owner": null,
+    "created_at": null,
+    "updated_at": null,
+    "created_by": null,
+    "updated_by": null,
+    "doc_status": 0,
+    "idx": null,
+    "vector": null
+  },
+  {
+    "id": "Organization Owner",
+    "name": "Organization Owner",
+    "description": null,
+    "is_system": 0,
+    "organization": "SYS",
+    "owner": "jarupak.sri@gmail.com",
+    "created_at": "2026-02-07 14:18:34",
+    "updated_at": "2026-02-07 14:18:34",
+    "created_by": "jarupak.sri@gmail.com",
+    "updated_by": "jarupak.sri@gmail.com",
+    "doc_status": 0,
+    "idx": 0,
+    "vector": "[]"
   }
 ]

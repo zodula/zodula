@@ -135,6 +135,7 @@ export class ZodulaSession {
     const user = await this.user(true);
     const org = organization ?? (await this.organization(true));
     const organizationRoles = await this.organizationRoles(org ?? undefined, true);
+    const organizationDoc = await $zodula.doctype("zodula__Organization").get(org ?? "").bypass()
 
     const roles = await db
       .select("*")
@@ -147,6 +148,9 @@ export class ZodulaSession {
       _roles.indexOf("Anonymous") === -1 && _roles.push("Anonymous");
     } else {
       _roles.indexOf("Anonymous") === -1 && _roles.push("Anonymous");
+    }
+    if(organizationDoc?.owner === user.id) {
+      _roles.push("Organization Owner");
     }
     return [..._roles, ...organizationRoles];
   }

@@ -247,17 +247,22 @@ export const Navbar = ({ children }: NavbarProps) => {
                     </span>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem href={`/desk/${org}/doctypes/zodula__Organization/form/${org}`}>
+                    {t("Organization Setting")}
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={zodula.theme.toggleTheme}>
                     {t("Toggle Theme")}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={toggleFullWidth}>
                     {t("Toggle Full Width")}
                   </DropdownMenuItem>
-                  <DropdownMenuItem href="/desk">
-                    {t("Change Organization")}
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={handleAboutZodula}>
                     {t("About")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem href="/desk">
+                    {t("Change Organization")}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={handleLogout}
