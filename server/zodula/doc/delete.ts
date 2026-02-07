@@ -88,7 +88,6 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
             ...old,
             id: this.id
         }
-        const roles = await zodula.session.roles()
         const { can } = await ZodulaDoctypeHelper.checkPermission(
             this.doctypeName,
             "can_delete",
@@ -100,7 +99,7 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
         )
 
         if (!can) {
-            throw new ErrorWithCode("You do not have permission to delete this document", {
+            throw new ErrorWithCode(`You do not have permission to delete ${this.doctypeName} document with id ${this.id}`, {
                 status: 403
             })
         }

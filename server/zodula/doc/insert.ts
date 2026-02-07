@@ -56,6 +56,9 @@ export class ZodulaDoctypeInsert<
         this.input.organization = "SYS";
       }
 
+      // Check tier requirements and max_doc limits
+      await this.validateTierRequirements(doctype, organization || "SYS");
+
       // Prepare the document data
       let prepared = await this.prepareDocumentData(user, doctype);
 
@@ -147,6 +150,145 @@ export class ZodulaDoctypeInsert<
     );
 
     return formatted;
+  }
+
+  private async validateTierRequirements(doctype: any, organization: string) {
+    // Skip tier validation if bypass is enabled
+    if (this.options.bypass) {
+      return;
+    }
+
+    // Get organization's tier level
+    let orgDoc;
+    try {
+      orgDoc = await zodula
+        .doctype("zodula__Organization")
+        .get(organization)
+        .bypass(true);
+    } catch {
+      orgDoc = null;
+    }
+    if (!orgDoc) {
+      throw new ErrorWithCode(
+        `Organization ${organization} not found`,
+        { status: 404 }
+      );
+    }
+    const orgTierInt = Number(orgDoc?.tier_level || "0") || 0;
+
+    // Check if insert_tier_required is set in doctype config
+    const insertTierRequiredInt = Number(doctype.config.insert_tier_required) || 0;
+    if(insertTierRequiredInt > 0 && orgTierInt < insertTierRequiredInt) {
+      throw new ErrorWithCode(
+        `This doctype requires tier level ${insertTierRequiredInt} or higher. Your organization has tier level ${orgTierInt}.`,
+        { status: 403 }
+      );
+    }
+
+    // Get max_doc by merging configs from all apps and cascading from previous tiers
+    const maxDoc = await this.getMaxDocForDoctype(orgTierInt, this.doctypeName);
+
+    // If max_doc is -1, it means unlimited
+    if (maxDoc === -1) {
+      return;
+    }
+
+    // Count existing documents for this doctype in this organization
+    let existingDocs: { docs: any[]; count: number };
+    try {
+      existingDocs = await zodula
+        .doctype(this.doctypeName)
+        .select()
+        .where("organization", "=", organization as any)
+        .bypass(true);
+    } catch {
+      existingDocs = { docs: [], count: 0 };
+    }
+
+    const currentCount = existingDocs.count || 0;
+
+    // Check if adding one more document would exceed the limit
+    if (currentCount >= maxDoc) {
+      throw new ErrorWithCode(
+        `Maximum document limit (${maxDoc}) reached for doctype ${this.doctypeName} at tier level ${orgTierInt}.`,
+        { status: 403 }
+      );
+    }
+  }
+
+  private async getMaxDocForDoctype(tierLevel: number, doctypeName: Zodula.DoctypeName): Promise<number> {
+    // Get all apps
+    let apps: { docs: any[]; count: number };
+    try {
+      apps = await zodula
+        .doctype("zodula__App")
+        .select()
+        .bypass(true);
+    } catch {
+      apps = { docs: [], count: 0 };
+    }
+
+    // Try to find max_doc starting from the current tier level and cascading down
+    let maxDoc = -1; // Default to unlimited
+    
+    for (let tier = tierLevel; tier >= 0; tier--) {
+      const tierConfigs: number[] = [];
+      let hasUnlimited = false;
+      
+      // Get tier configs from all apps for this tier level
+      for (const app of apps.docs || []) {
+        let tierConfig: { docs: any[]; count: number };
+        try {
+          tierConfig = await zodula
+            .doctype("zodula__Tier Config")
+            .select()
+            .where("tier_level", "=", tier.toString() as "0" | "1" | "2" | "3" | "4" | "5")
+            .where("app", "=", app.id)
+            .bypass(true);
+        } catch {
+          tierConfig = { docs: [], count: 0 };
+        }
+
+        if (tierConfig.count > 0 && tierConfig.docs && tierConfig.docs.length > 0) {
+          const tierConfigDoc = tierConfig.docs[0];
+
+          // Get doctype items for this tier config
+          let doctypeItems: { docs: any[]; count: number };
+          try {
+            doctypeItems = await zodula
+              .doctype("zodula__Tier Config Doctype Item")
+              .select()
+              .where("tier_config", "=", tierConfigDoc.id)
+              .where("doctype", "=", doctypeName)
+              .bypass(true);
+          } catch {
+            doctypeItems = { docs: [], count: 0 };
+          }
+
+          if (doctypeItems.count > 0 && doctypeItems.docs && doctypeItems.docs.length > 0) {
+            const doctypeItem = doctypeItems.docs[0];
+            const itemMaxDoc = Number(doctypeItem.max_doc || "-1") || -1;
+            if (itemMaxDoc === -1) {
+              hasUnlimited = true;
+            } else {
+              tierConfigs.push(itemMaxDoc);
+            }
+          }
+        }
+      }
+
+      // If we found any configs at this tier level, use the highest max_doc
+      // If any app has unlimited (-1), the tier is unlimited
+      if (hasUnlimited) {
+        maxDoc = -1;
+        break; // Use the first tier level (highest) that has configs
+      } else if (tierConfigs.length > 0) {
+        maxDoc = Math.max(...tierConfigs);
+        break; // Use the first tier level (highest) that has configs
+      }
+    }
+
+    return maxDoc;
   }
 
   private async applyFileInsert(

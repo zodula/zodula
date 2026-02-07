@@ -202,7 +202,7 @@ export const ReferenceTableFieldPlugin = new BaseFieldPlugin({
     typescriptType: (fieldConfig) => `SelectDoctype<"${fieldConfig.reference}">[]`,
     zodSchema: (fieldConfig) => {
         const doctype = loader.from("doctype").get(fieldConfig.reference as Zodula.DoctypeName)
-        return z.array(FieldHelper.doctypeToZod(doctype.schema))
+        return z.array(FieldHelper.doctypeToZod(doctype.schema)).or(z.string())
     },
     textZodSchema: (fieldConfig) => {
         return `z.array(baseDoctypeZods["${fieldConfig.reference}"])`

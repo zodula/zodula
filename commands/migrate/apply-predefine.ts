@@ -126,7 +126,6 @@ async function upsertFieldsBatch(
       is_public: fieldSchema.is_public ? 1 : 0,
       idx: fieldIdx++,
       vector: "[]",
-      currency_symbol: fieldSchema.currency_symbol || null,
       hidden: fieldSchema.hidden ? 1 : 0,
       only_db: fieldSchema.only_db ? 1 : 0,
       width: fieldSchema.width || null,
@@ -555,6 +554,7 @@ async function upsertDoctype(
       is_global: doctype.config.is_global ? 1 : 0,
       is_quick_entry: doctype.config.is_quick_entry ? 1 : 0,
       additional_connections: doctype.config.additional_connections || null,
+      insert_tier_required: doctype.config.insert_tier_required ? 1 : 0,
       organization: "SYS",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype">>;

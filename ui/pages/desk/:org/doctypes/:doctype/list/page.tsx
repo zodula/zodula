@@ -188,23 +188,26 @@ export default function DoctypeListPage() {
     };
 
     const handleExportFixtures = async () => {
-        const { app: selectedApp, fields: selectedFields } = await popup(FixtureDialog, {
+        const result = await popup(FixtureDialog, {
             title: `Export Fixtures for ${doctype}`,
             description: `Selected ${selected.size} item(s)`
         }, {
             doctype,
             selected: Array.from(selected)
         }) || {}
-        if (selectedApp && selectedFields) {
+        const { app: selectedApp, app_field: selectedAppField, fields: selectedFields } = result
+        if (selectedFields && (selectedApp || selectedAppField)) {
             await zodula.action("zodula.fixtures.exports", {
                 data: {
-                    app: selectedApp,
+                    ...(selectedApp ? { app: selectedApp } : {}),
+                    ...(selectedAppField ? { app_field: selectedAppField } : {}),
                     doctype,
                     ids: Array.from(selected),
                     fields: selectedFields
                 }
             })
-            toast.success(`Fixtures exported to ${selectedApp}`)
+            const exportTarget = selectedAppField ? `app field "${selectedAppField}"` : selectedApp
+            toast.success(`Fixtures exported to ${exportTarget}`)
         }
     };
 

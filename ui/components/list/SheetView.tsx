@@ -1106,7 +1106,7 @@ export function SheetView({
           onColumnSettings={handleColumnSettings}
           hasCustomColumns={hasCustomColumns}
           allFields={fields}
-          doctype={doctype}
+          doctype={doctype as any}
         />
 
         {/* Aggregation Button - Frappe Style */}

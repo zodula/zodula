@@ -24,8 +24,7 @@ export default $doctype({
         label: "Description"
     },
     currency_symbol: {
-        type: "Reference",
-        reference: "zodula__Currency",
+        type: "Text",
         label: "Currency Symbol"
     }
 }, {

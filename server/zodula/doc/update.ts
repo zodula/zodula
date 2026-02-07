@@ -370,16 +370,16 @@ export class ZodulaDoctypeUpdate<
     const newId = await naming(this.doctypeName, prepared as any);
 
     const children = doctype.children
-    for(const child of children) {
+    for (const child of children) {
       await db.run(`UPDATE "${child.childDoctype}" SET "${child.childFieldName}" = ? WHERE "${child.childFieldName}" = ?`, [newId, oldId]);
     }
 
     // update connections
     const connections = await getDoctypeConnections(doctype.name, oldId)
-    for(const connection of connections) {
+    for (const connection of connections) {
       const fieldPath = connection.field
       const fieldParts = fieldPath.split(".")
-      if(fieldParts.length > 2) {
+      if (fieldParts.length > 2) {
         throw new ErrorWithCode(`Invalid field path: ${fieldPath}`, { status: 400 })
       }
       const parentField = fieldParts[0]
@@ -389,8 +389,8 @@ export class ZodulaDoctypeUpdate<
         q = q.where(filter[0], filter[1] as any, filter[2])
       }
       const results = await q
-      for(const result of results.docs) {
-        if(!childField) {
+      for (const result of results.docs) {
+        if (!childField) {
           // This is a normal field, so we can update it
           await db.run(`UPDATE "${connection.doctype}" SET ${connection.field} = ? WHERE ${connection.field} = ?`, [newId, oldId]);
         } else {
@@ -540,9 +540,14 @@ export class ZodulaDoctypeUpdate<
     for (const [key, field] of Object.entries(doctype.schema.fields)) {
       const fieldConfig = field as any;
       if (fieldConfig.type === "Reference Table" && fieldConfig.reference) {
-        refTableList[key] = prepared[
-          key as keyof Zodula.SelectDoctype<TN>
-        ] as any[];
+        const value = prepared[key as keyof Zodula.SelectDoctype<TN>]
+        if (value === "" || value === undefined || value === null) {
+          refTableList[key] = [];
+        } else {
+          refTableList[key] = prepared[
+            key as keyof Zodula.SelectDoctype<TN>
+          ] as any[];
+        }
         delete prepared[key as keyof Zodula.SelectDoctype<TN>];
       }
     }

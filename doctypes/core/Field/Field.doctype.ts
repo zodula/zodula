@@ -23,11 +23,6 @@ export default $doctype({
         default: "0"
     }),
 
-    currency_symbol: {
-        type: "Text",
-        label: "Currency Symbol"
-    },
-
     // Hide
     hidden: {
         type: "Check",

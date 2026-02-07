@@ -982,6 +982,25 @@ export function DocFormView({
     }
   };
 
+  // Helper function to normalize Reference Table fields (empty arrays/undefined -> null)
+  const normalizeReferenceTableFields = useCallback((data: Record<string, any>) => {
+    const normalized = { ...data };
+    
+    // Find all Reference Table fields
+    Object.keys(formFields).forEach((fieldName) => {
+      const field = formFields[fieldName];
+      if (field?.type === "Reference Table") {
+        const value = normalized[fieldName];
+        // Convert undefined or empty array to null
+        if (value === undefined || (Array.isArray(value) && value.length === 0)) {
+          normalized[fieldName] = "";
+        }
+      }
+    });
+    
+    return normalized;
+  }, [formFields]);
+
   // Helper function to get changed fields and standard fields
   const getUpdatePayload = useCallback(() => {
     // Always get the latest form data directly from the store
@@ -989,8 +1008,8 @@ export function DocFormView({
     const latestFormData = getFormData();
 
     if (!doc) {
-      // For create mode, return all form data
-      return latestFormData;
+      // For create mode, return all form data with normalized Reference Table fields
+      return normalizeReferenceTableFields(latestFormData);
     }
 
     const standardFieldNames = Object.keys(ClientFieldHelper.standardFields());
@@ -1024,8 +1043,9 @@ export function DocFormView({
       }
     });
 
-    return changedFields;
-  }, [getFormData, doc])
+    // Normalize Reference Table fields before returning
+    return normalizeReferenceTableFields(changedFields);
+  }, [getFormData, doc, normalizeReferenceTableFields])
 
   const handleUpdate = useCallback(async () => {
     try {
@@ -1125,9 +1145,12 @@ export function DocFormView({
       // This ensures we capture all user input, not just the memoized formData
       const latestFormData = getFormData();
       
+      // Normalize Reference Table fields (empty arrays/undefined -> null)
+      const normalizedFormData = normalizeReferenceTableFields(latestFormData);
+      
       const createdDoc = await zodula.doc.create_doc(
         doctype as Zodula.DoctypeName,
-        latestFormData
+        normalizedFormData
       );
       if (createdDoc) {
         // Clear saved form values after successful creation

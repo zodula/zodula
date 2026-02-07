@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useDocList } from "../../hooks/use-doc-list"
 import { Button } from "../ui/button"
 import { Checkbox } from "../ui/checkbox"
 import { FormControl } from "../ui/form-control"
 import { zodula } from "@/zodula/client"
+import { Select } from "../ui/select"
 
 interface FixtureDialogProps {
     isOpen: boolean
-    onClose: (result: { app: string, fields: string[] }) => void
+    onClose: (result: { app?: string, app_field?: string, fields: string[] }) => void
     initialData?: { doctype: string, selected: string[] }
 }
 
@@ -26,7 +27,26 @@ export const FixtureDialog = ({ isOpen, onClose, initialData }: FixtureDialogPro
 
     const [selectedFields, setSelectedFields] = useState<string[]>(initialData?.selected || [])
     const [selectedApp, setSelectedApp] = useState<string>("")
+    const [selectedAppField, setSelectedAppField] = useState<string>("")
     const [appError, setAppError] = useState<string>("")
+    const [useAppField, setUseAppField] = useState<boolean>(false)
+    const [hasUserInteracted, setHasUserInteracted] = useState<boolean>(false)
+    
+    // Find fields that reference zodula__App
+    const appFields = useMemo(() => {
+        return fields.filter(field => 
+            field.type === "Reference" && 
+            field.reference === "zodula__App"
+        )
+    }, [fields])
+    
+    // Default to first app field if available (only on initial mount, before user interaction)
+    useEffect(() => {
+        if (!hasUserInteracted && appFields.length > 0 && !selectedAppField && appFields[0]?.name) {
+            setSelectedAppField(appFields[0].name)
+            setUseAppField(true)
+        }
+    }, [appFields, selectedAppField, hasUserInteracted])
     
     // Separate standard fields from user-defined fields
     const standardFields = fields.filter(field => zodula.utils.isStandardField(field.name || ""))
@@ -43,21 +63,75 @@ export const FixtureDialog = ({ isOpen, onClose, initialData }: FixtureDialogPro
 
     return (
         <div className="zd:min-w-[500px] zd:flex zd:flex-col zd:gap-2">
-            <FormControl
-                docId=""
-                label="Select App"
-                field={{
-                    type: "Reference",
-                    reference: "zodula__App"
-                }}
-                value={selectedApp}
-                fieldKey="value"
-                onChange={(fieldKey, value) => {
-                    setSelectedApp(value)
-                    if (value) {
-                        setAppError("")
-                    }
-                }} />
+            {/* App Selection Method */}
+            <div className="zd:flex zd:items-center zd:space-x-2 zd:mb-2">
+                <Checkbox 
+                    checked={useAppField} 
+                    onCheckedChange={(checked) => {
+                        setHasUserInteracted(true)
+                        setUseAppField(checked as boolean)
+                        if (checked) {
+                            setSelectedApp("")
+                            setAppError("")
+                            // If checking and we have app fields but no selection, set the first one as default
+                            if (appFields.length > 0 && !selectedAppField && appFields[0]?.name) {
+                                setSelectedAppField(appFields[0].name)
+                            }
+                        } else {
+                            setSelectedAppField("")
+                            setAppError("")
+                        }
+                    }} 
+                />
+                <span>Use App Field (each document can have different app)</span>
+            </div>
+            
+            {useAppField ? (
+                // App Field Selection
+                <div className="zd:space-y-2">
+                    <label className="zd:text-sm zd:font-medium">Select App Field</label>
+                    {appFields.length > 0 ? (
+                        <Select
+                            options={appFields.map(field => {
+                                return {
+                                    label: field.label || field.name || "",
+                                    value: field.name || ""
+                                }
+                            })}
+                            displayMode="label"
+                            value={selectedAppField}
+                            onChange={(value) => {
+                                setSelectedAppField(value)
+                                if (value) {
+                                    setAppError("")
+                                }
+                            }}
+                        />
+                    ) : (
+                        <div className="zd:text-sm zd:text-muted-foreground">
+                            No fields found that reference zodula__App. Please use a fixed app instead.
+                        </div>
+                    )}
+                </div>
+            ) : (
+                // Fixed App Selection
+                <FormControl
+                    docId=""
+                    label="Select App"
+                    field={{
+                        type: "Reference",
+                        reference: "zodula__App"
+                    }}
+                    value={selectedApp}
+                    fieldKey="value"
+                    onChange={(fieldKey, value) => {
+                        setSelectedApp(value)
+                        if (value) {
+                            setAppError("")
+                        }
+                    }} 
+                />
+            )}
             {appError && (
                 <div className="zd:text-red-500 zd:text-sm zd:mt-1">
                     {appError}
@@ -123,18 +197,40 @@ export const FixtureDialog = ({ isOpen, onClose, initialData }: FixtureDialogPro
                 </div>
             </div>
             <div className="zd:flex zd:items-center zd:space-x-2 zd:justify-end">
-                <Button onClick={() => onClose({ app: selectedApp, fields: selectedFields })} variant="subtle">Close</Button>
+                <Button 
+                    onClick={() => onClose({ 
+                        app: useAppField ? undefined : selectedApp, 
+                        app_field: useAppField ? selectedAppField : undefined,
+                        fields: selectedFields 
+                    })} 
+                    variant="subtle"
+                >
+                    Close
+                </Button>
                 <Button 
                     onClick={() => {
-                        if (!selectedApp) {
-                            setAppError("Please select an app")
-                            return
+                        if (useAppField) {
+                            if (!selectedAppField) {
+                                setAppError("Please select an app field")
+                                return
+                            }
+                            onClose({ 
+                                app_field: selectedAppField, 
+                                fields: selectedFields 
+                            })
+                        } else {
+                            if (!selectedApp) {
+                                setAppError("Please select an app")
+                                return
+                            }
+                            onClose({ 
+                                app: selectedApp, 
+                                fields: selectedFields 
+                            })
                         }
-                        // Export only the selected fields (id is always included)
-                        onClose({ app: selectedApp, fields: selectedFields })
                     }} 
                     variant="solid"
-                    disabled={!selectedApp}
+                    disabled={useAppField ? !selectedAppField : !selectedApp}
                 >
                     Export
                 </Button>

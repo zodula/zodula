@@ -17,7 +17,7 @@ export const CurrencyPlugin = new FormPlugin({
             type="text"
             value={props.value || ""}
             readOnly={props.readonly}
-            prefix={props?.fieldOptions?.currency_symbol || websiteSetting?.currency_symbol || "$"}
+            prefix={websiteSetting?.currency_symbol || "$"}
             onChange={(e) => {
                 // Don't allow changes if readonly
                 if (!props.readonly) {
@@ -52,7 +52,7 @@ export const CurrencyPlugin = new FormPlugin({
             placeholder={getPlaceholder(props.operator)}
             type="text"
             value={props.value || ""}
-            prefix={props?.fieldOptions?.currency_symbol || websiteSetting?.currency_symbol || "$"}
+            prefix={websiteSetting?.currency_symbol || "$"}
             onChange={(e) => {
                 props.onChange?.(e.target.value);
             }}

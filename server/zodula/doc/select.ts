@@ -332,7 +332,7 @@ export class ZodulaDoctypeSelector<
       }
 
       const { limit = -1, page = 1 } = this.options || {};
-      const fields =
+      const requestedFields =
         this.options.fields.length > 0
           ? this.options.fields?.map((field) => String(field))
           : ["*"];
@@ -343,8 +343,21 @@ export class ZodulaDoctypeSelector<
         this.options.filters
       );
 
+      // Build SELECT clause with specified fields
+      let selectFields: string;
+      if (requestedFields.includes("*") || requestedFields.length === 0) {
+        // Select all fields
+        selectFields = `"${doctype?.name}".*`;
+      } else {
+        // Ensure "id" is always included (needed for relationships and joins)
+        const fieldsToSelect = [...new Set(["id", ...requestedFields])];
+        selectFields = fieldsToSelect
+          .map((field) => `"${doctype?.name}"."${field}"`)
+          .join(", ");
+      }
+
       // Build the main query with JOINs
-      const selectClause = `SELECT DISTINCT "${doctype?.name}".* FROM "${doctype?.name}"`;
+      const selectClause = `SELECT DISTINCT ${selectFields} FROM "${doctype?.name}"`;
       const joinClause = joins.length > 0 ? joins.join(" ") : "";
       const whereClause = this.buildWhereClause(
         doctype,
