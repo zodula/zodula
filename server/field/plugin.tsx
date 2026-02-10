@@ -126,6 +126,15 @@ export const FileFieldPlugin = new BaseFieldPlugin({
     textZodSchema: () => `z.union([z.string(), z.file()])`
 })
 
+// Image Preview field type
+export const ImagePreviewFieldPlugin = new BaseFieldPlugin({
+    fieldType: "Image Preview",
+    sqlType: "TEXT",
+    typescriptType: (fieldConfig) => "string | File",
+    zodSchema: (fieldConfig) => z.union([z.string(), z.file()]),
+    textZodSchema: () => `z.union([z.string(), z.file()])`
+})
+
 // Reference field types
 export const ReferenceFieldPlugin = new BaseFieldPlugin({
     fieldType: "Reference",
@@ -246,6 +255,7 @@ export const REGISTERED_PLUGINS = {
     Code: CodeFieldPlugin,
     Select: SelectFieldPlugin,
     File: FileFieldPlugin,
+    "Image Preview": ImagePreviewFieldPlugin,
     Reference: ReferenceFieldPlugin,
     "Virtual Reference": VirtualReferenceFieldPlugin,
     Date: DateFieldPlugin,

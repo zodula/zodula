@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { BadgeVariant } from "./components/ui/badge";
 import type React from "react";
+import { useLanguageStore, useTranslationStore } from "./hooks/use-translation";
 
 // ============================================================================
 // Type Definitions
@@ -77,6 +78,7 @@ export interface UIScriptContext<DN extends Zodula.DoctypeName = Zodula.DoctypeN
   oldValue?: any;
   targetValue?: any;
   event?: Event;
+  idx?: number; // Row index for reference table fields
   
   // UI context
   showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
@@ -206,12 +208,19 @@ export interface Form<DN extends Zodula.DoctypeName = Zodula.DoctypeName> {
   refresh: () => void;
   add_fetch: (source_field: string, target_field: string, fetch_path: string) => void;
   msgprint: (message: string, type?: 'error' | 'warning' | 'info') => void;
+  // Reference table helpers
+  get_reference_table_value: (field: string, childField: string, idx: number) => any;
+  set_reference_table_value: (field: string, childField: string, idx: number, value: any) => void;
+  // Extend helpers
+  get_extend_value: (field: string, childField: string) => any;
+  set_extend_value: (field: string, childField: string, value: any) => void;
   // Field change specific
   docfield?: {
     fieldname: string;
     value: any;
     old_value: any;
   };
+  idx?: number; // Row index for reference table fields
 }
 
 // ============================================================================
@@ -264,6 +273,121 @@ export type ListContextEventHandlers<DN extends Zodula.DoctypeName = Zodula.Doct
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+// Translation helper function
+function translate(key: string): string {
+  const languageStore = useLanguageStore.getState();
+  const translationStore = useTranslationStore.getState();
+  
+  const activeLanguage = languageStore.currentLanguage;
+  const translations = translationStore.translations;
+  const translationCache = translationStore.translationCache;
+  const patternCache = translationStore.patternCache;
+  
+  // Create cache key with language to avoid conflicts
+  const cacheKey = `${activeLanguage}:${key}`;
+  
+  // Check cache first
+  if (translationCache.has(cacheKey)) {
+    return translationCache.get(cacheKey)!;
+  }
+  
+  // Helper function to get translation filtered by language
+  const getTranslationByLanguage = (translationKey: string) => {
+    return translations.find((translation) =>
+      translation.key === translationKey &&
+      translation.language === activeLanguage
+    );
+  };
+  
+  // Helper function to replace template variables in translation strings
+  const replaceTemplateVariables = (template: string, variables: Record<string, string | number> = {}): string => {
+    return template.replace(/\{\{(\w+)\}\}/g, (match, variableName) => {
+      const value = variables[variableName];
+      return value !== undefined ? String(value) : match;
+    });
+  };
+  
+  // Helper function to auto-detect variables from a string
+  const autoDetectVariables = (inputString: string, translationKey: string): Record<string, string | number> => {
+    const variables: Record<string, string | number> = {};
+    
+    // Extract template variables from the translation key
+    const templateMatches = translationKey.match(/\{\{(\w+)\}\}/g);
+    if (!templateMatches) return variables;
+    
+    // Extract the template pattern without variables
+    const templatePattern = translationKey.replace(/\{\{(\w+)\}\}/g, '{{}}');
+    
+    // Create a regex pattern to match the input string
+    const regexPattern = templatePattern.replace(/\{\{\}\}/g, '(.+?)');
+    const regex = new RegExp(`^${regexPattern}$`);
+    
+    const match = inputString.match(regex);
+    if (match) {
+      // Extract variable names and their values
+      templateMatches.forEach((templateVar, index) => {
+        const varName = templateVar.replace(/\{\{|\}\}/g, '');
+        const varValue = match[index + 1]; // +1 because match[0] is the full match
+        if (varValue) {
+          variables[varName] = varValue;
+        }
+      });
+    }
+    
+    return variables;
+  };
+  
+  // Helper function to find the best matching translation key
+  const findBestTranslationKey = (inputString: string): string | null => {
+    // First, try exact match with language filter
+    const exactMatch = getTranslationByLanguage(inputString);
+    if (exactMatch) return inputString;
+    
+    // Then, try to find a template pattern that matches with language filter
+    for (const translation of translations) {
+      if (translation.key.includes('{{') && translation.language === activeLanguage) {
+        const templatePattern = translation.key.replace(/\{\{(\w+)\}\}/g, '{{}}');
+        const regexPattern = templatePattern.replace(/\{\{\}\}/g, '(.+?)');
+        const regex = new RegExp(`^${regexPattern}$`);
+        
+        if (regex.test(inputString)) {
+          return translation.key;
+        }
+      }
+    }
+    
+    return null;
+  };
+  
+  // Find the best matching translation key
+  const bestKey = findBestTranslationKey(key);
+  const translation = bestKey ? getTranslationByLanguage(bestKey) : getTranslationByLanguage(key);
+  const translationText = translation?.translation || key;
+  
+  // If we found a template-based translation, auto-detect variables
+  if (bestKey && bestKey !== key && bestKey.includes('{{')) {
+    // Check pattern cache for this input
+    if (patternCache.has(cacheKey)) {
+      const cached = patternCache.get(cacheKey)!;
+      const result = replaceTemplateVariables(translationText, cached.variables);
+      translationCache.set(cacheKey, result);
+      return result;
+    }
+    
+    const autoDetectedVars = autoDetectVariables(key, bestKey);
+    const result = replaceTemplateVariables(translationText, autoDetectedVars);
+    
+    // Cache the pattern match and result
+    patternCache.set(cacheKey, { key: bestKey, variables: autoDetectedVars });
+    translationCache.set(cacheKey, result);
+    return result;
+  }
+  
+  // Cache the result
+  translationCache.set(cacheKey, translationText);
+  return translationText;
+}
 
 // Map Frappe-style event names to our event types
 function mapEventType(eventType: string): UIScriptEventType {
@@ -342,12 +466,51 @@ function createFormObject<DN extends Zodula.DoctypeName>(
       const toastType = type === 'warning' ? 'info' : type;
       context.showToast?.(message, toastType);
     },
+    // Reference table helpers
+    get_reference_table_value: (field: string, childField: string, idx: number) => {
+      const tableData = context.getValue?.(field);
+      if (Array.isArray(tableData) && tableData[idx]) {
+        return tableData[idx][childField];
+      }
+      return undefined;
+    },
+    set_reference_table_value: (field: string, childField: string, idx: number, value: any) => {
+      const tableData = context.getValue?.(field) || [];
+      if (!Array.isArray(tableData)) return;
+      
+      const newTableData = [...tableData];
+      if (!newTableData[idx]) {
+        newTableData[idx] = {};
+      }
+      newTableData[idx] = {
+        ...newTableData[idx],
+        [childField]: value
+      };
+      context.setValue?.(field, newTableData);
+    },
+    // Extend helpers
+    get_extend_value: (field: string, childField: string) => {
+      const extendData = context.getValue?.(field);
+      if (extendData && typeof extendData === 'object') {
+        return extendData[childField];
+      }
+      return undefined;
+    },
+    set_extend_value: (field: string, childField: string, value: any) => {
+      const extendData = context.getValue?.(field) || {};
+      const newExtendData = {
+        ...extendData,
+        [childField]: value
+      };
+      context.setValue?.(field, newExtendData);
+    },
     // Field change specific
     docfield: context.fieldName ? {
       fieldname: context.fieldName,
       value: context.value,
       old_value: context.oldValue
-    } : undefined
+    } : undefined,
+    idx: context.idx
   };
 }
 
@@ -414,6 +577,15 @@ class ZUI {
   private getStore() {
     return useUIScriptStore.getState();
   }
+
+  /**
+   * Translation function for internationalization
+   * @param key - The translation key or text to translate
+   * @returns The translated text, or the key if no translation is found
+   */
+  t = (key: string): string => {
+    return translate(key);
+  };
 
   list = {
     on: <DN extends Zodula.DoctypeName>(

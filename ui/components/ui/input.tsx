@@ -71,11 +71,12 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     return (
       <div
         className={cn(
-          "zd:flex zd:h-8 zd:w-full zd:rounded zd:px-3 zd:py-2 zd:items-center zd:gap-1",
+          "zd:flex zd:h-8 zd:w-full zd:rounded zd:items-center zd:gap-1",
           "zd:placeholder:text-muted-foreground/30 zd:focus-visible:outline-none",
           "zd:disabled:cursor-not-allowed",
-          "zd:min-w-0",
-          disabled ? "zd:bg-muted/50 zd:cursor-not-allowed" : "zd:bg-muted",
+          "zd:min-w-0 zd:bg-muted",
+          disabled ? "zd:bg-muted/50 zd:cursor-not-allowed" : "",
+          readOnly ? "zd:bg-muted/50" : "",
           className ?? ""
         )}
         style={wrapperStyle}
@@ -89,7 +90,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           id={id}
           type={type === "password" && showPassword ? "text" : type}
           className={cn(
-            "zd:flex-1 zd:min-w-0!",
+            "zd:flex-1 zd:min-w-0! zd:p-2",
             readOnly ? "zd:cursor-default zd:text-muted-foreground" : "",
             className ?? ""
           )}

@@ -1,23 +1,20 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { FormPlugin } from "../plugin";
 import { Input } from "../../ui/input";
-import { useDoc } from "@/zodula/ui/hooks/use-doc";
+import { useOrganization } from "@/zodula/ui/hooks/use-organization";
 
 export const CurrencyPlugin = new FormPlugin({
     types: ["Currency"],
     supportOperators: ["=", "!=", ">", ">=", "<", "<=", "IS NULL", "IS NOT NULL"],
     render: (props) => {
-    const { doc: websiteSetting } = useDoc({
-        doctype: "zodula__Global Setting",
-        id: "zodula__Global Setting"
-    })
+    const { organization } = useOrganization();
     return (
         <Input
             placeholder="0.00"
             type="text"
             value={props.value || ""}
             readOnly={props.readonly}
-            prefix={websiteSetting?.currency_symbol || "$"}
+            prefix={organization?.currency || "$"}
             onChange={(e) => {
                 // Don't allow changes if readonly
                 if (!props.readonly) {
@@ -37,10 +34,7 @@ export const CurrencyPlugin = new FormPlugin({
 
     },
     renderFilter: (props) => {
-    const { doc: websiteSetting } = useDoc({
-        doctype: "zodula__Global Setting",
-        id: "zodula__Global Setting"
-    })
+    const { organization } = useOrganization();
 
     // Don't render input for null operators
     if (["IS NULL", "IS NOT NULL"].includes(props.operator || "")) {
@@ -52,7 +46,7 @@ export const CurrencyPlugin = new FormPlugin({
             placeholder={getPlaceholder(props.operator)}
             type="text"
             value={props.value || ""}
-            prefix={websiteSetting?.currency_symbol || "$"}
+            prefix={organization?.currency || "$"}
             onChange={(e) => {
                 props.onChange?.(e.target.value);
             }}

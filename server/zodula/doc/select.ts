@@ -11,7 +11,7 @@ import type {
   ServerSideSelectOptions,
 } from "../type";
 import { ZodulaDoctypeHelper } from "./helper";
-import type { DoctypeMetadata } from "../../loader/plugins/doctype";
+import type { DoctypeChild, DoctypeMetadata } from "../../loader/plugins/doctype";
 import { zodula } from "../..";
 
 export class ZodulaDoctypeSelector<
@@ -94,7 +94,7 @@ export class ZodulaDoctypeSelector<
   private parseReferenceTableField(
     fieldPath: string,
     doctype: DoctypeMetadata
-  ): { parentField: string; childField: string; child: any } | null {
+  ): { parentField: string; childField: string; child: DoctypeChild } | null {
     if (!fieldPath || !fieldPath.includes(".")) {
       return null;
     }
@@ -126,7 +126,7 @@ export class ZodulaDoctypeSelector<
         c.parentDoctype === doctype.name &&
         c.childDoctype === childDoctype &&
         c.type === "Reference Table"
-    );
+    )
 
     if (!child) {
       return null;
@@ -163,7 +163,7 @@ export class ZodulaDoctypeSelector<
         joinAliases.set(aliasKey, alias);
 
         // Build JOIN: LEFT JOIN child_table AS alias ON alias.child_field = main_table.id
-        const joinClause = `LEFT JOIN "${child.childDoctype}" AS "${alias}" ON "${alias}"."${child.childFieldName}" = "${doctype.name}"."id"`;
+        const joinClause = `LEFT JOIN "${child.childDoctype}" AS "${alias}" ON "${alias}"."parentid" = "${doctype.name}"."id" AND "${alias}"."parentype" = "${doctype.name}" AND "${alias}"."parentfield" = "${parentField}"`;
         joins.push(joinClause);
       }
     }
@@ -246,8 +246,8 @@ export class ZodulaDoctypeSelector<
       }
     }
 
-    if (doctype.config.is_global !== 1 && organization !== "SYS" && !this.options.bypass) {
-      whereConditions.push(`("${doctype.name}"."organization" = "${organization}" OR "${doctype.name}"."organization" = "SYS")`);
+    if (doctype.config.is_global !== 1 && organization !== "System Panel" && !this.options.bypass) {
+      whereConditions.push(`("${doctype.name}"."organization" = "${organization}" OR "${doctype.name}"."organization" = "System Panel")`);
     }
     if(doctype.name === "zodula__Organization" && !roles.includes("System Admin") && !this.options.bypass) {
       whereConditions.push(`("${doctype.name}"."owner" = "${user?.id}" OR "${doctype.name}"."id" IN ("${userOrganizationRoles.join('","')}"))`);

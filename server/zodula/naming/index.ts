@@ -2,12 +2,16 @@ import { Database } from "../../database/database";
 import { loader } from "../../loader";
 import { genRanHex } from "../utils";
 import { getFieldValueFromDoc } from "../../../client/utils";
+import { ErrorWithCode } from "@/zodula/error";
 
 export async function naming<TN extends Zodula.DoctypeName>(
   doctypeName: TN,
-  data: Zodula.InsertDoctype<TN>
+  data: Zodula.InsertDoctype<TN>,
+  organizationAbbr: string,
+  organizationName: string
 ) {
   const doctypeMetadata = loader.from("doctype").get(doctypeName);
+
   /**
    * dynamic naming series format are
    * // Utils
@@ -20,6 +24,7 @@ export async function naming<TN extends Zodula.DoctypeName>(
    * {SS} (second)
    * {SSS} (millisecond)
    * {T} (timestamp)
+   * {{organization_abbr}} (organization abbreviation)
    * {HEX} (random 16 characters hex string)
    * {8HEX} (random 8 characters hex string)
    * {16HEX} (random 16 characters hex string)
@@ -32,10 +37,12 @@ export async function naming<TN extends Zodula.DoctypeName>(
   if (doctypeMetadata?.schema.is_single) {
     id = doctypeMetadata?.name;
   }
+
   if (!!namingSeries) {
+    namingSeries = namingSeries.replaceAll("{{organization_abbr}}", organizationAbbr);
+    namingSeries = namingSeries.replaceAll("{{organization}}", organizationName);
     // Use the improved getFieldValueFromDoc function to handle both field and utility patterns
     let tempId = getFieldValueFromDoc(namingSeries, data as any);
-
     id = tempId;
     // replace {###} with %%
     const runingNumberSqureRegex = /\{#+\}/g;
@@ -75,6 +82,13 @@ export async function naming<TN extends Zodula.DoctypeName>(
 
       const squareCount = nextNumber.toString().padStart(numberLength, "0");
       id = id.replace(runingNumberSqure, squareCount);
+
+    }
+    id = id.replaceAll("/", "⧸");
+    if (id.startsWith("-")) {
+      throw new ErrorWithCode("ID cannot start with '-'", {
+        status: 400,
+      });
     }
   }
 

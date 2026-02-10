@@ -1,10 +1,4 @@
 export default $doctype<"zodula__Print Template Item">({
-    print_template: {
-        type: "Reference",
-        label: "Print Template",
-        reference: "zodula__Print Template",
-        required: 1
-    },
     type: {
         type: "Select",
         label: "Type",
@@ -121,11 +115,11 @@ export default $doctype<"zodula__Print Template Item">({
         description: "Stable identifier for anchoring (not auto-generated id)",
         required: 0
     },
-    idx: {
-        type: "Integer",
-        label: "Index",
-        default: "0",
-        in_list_view: 1
+    group: {
+        type: "Text",
+        label: "Group",
+        description: "Group ID that this element belongs to (for grouping elements together)",
+        required: 0
     },
     table_config: {
         type: "JSON",
@@ -141,5 +135,6 @@ export default $doctype<"zodula__Print Template Item">({
     label: "Print Template Item",
     search_fields: "type\nvalue",
     display_field: "type",
-    naming_series: "{{code}}"
+    naming_series: "{{code}}",
+    is_child_doctype: 1
 })

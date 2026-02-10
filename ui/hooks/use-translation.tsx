@@ -33,7 +33,7 @@ export interface TranslationStore {
 type TranslationVariables = Record<string, string | number>;
 
 // Language store - persisted in localStorage
-const useLanguageStore = create<LanguageStore>()(
+export const useLanguageStore = create<LanguageStore>()(
     persist(
         (set) => ({
             currentLanguage: "en", // Default language
@@ -48,7 +48,7 @@ const useLanguageStore = create<LanguageStore>()(
 )
 
 // Translation store - not persisted, refetches on page reload
-const useTranslationStore = create<TranslationStore>((set, get) => ({
+export const useTranslationStore = create<TranslationStore>((set, get) => ({
     translations: [],
     translationCache: new Map(),
     patternCache: new Map(),

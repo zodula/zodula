@@ -321,7 +321,7 @@ export function AuditTrail({
                           ? trail.by_name
                           : trail.created_by
                             ? `${trail.created_by.substring(0, 8)}...`
-                            : "SYS"}
+                            : "System Panel"}
                       </Link>
                       <span className="zd:text-muted-foreground">
                         {" "}

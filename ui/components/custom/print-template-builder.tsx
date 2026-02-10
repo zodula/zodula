@@ -62,6 +62,7 @@ export interface PrintTemplateElement {
     rowHeight?: number; // Row height in pixels
     showHeader?: boolean; // Show/hide table header
     showBorder?: boolean; // Show/hide table borders
+    hideNoValue?: boolean; // Hide table if there are no rows
   };
   style?: {
     fontSize?: number;
@@ -82,6 +83,8 @@ export interface PrintTemplateElement {
     width: number;
     height: number;
   };
+  // Group support - element can belong to a group
+  group?: string; // Group ID that this element belongs to
 }
 
 interface PrintTemplateBuilderProps {
@@ -106,7 +109,6 @@ const TOOLS = [
   { type: "line", icon: Minus, label: "Line" },
   { type: "reference", icon: Hash, label: "Reference" },
   { type: "custom_html", icon: LayoutGrid, label: "Custom HTML" },
-  { type: "anchor", icon: Grid3x3, label: "Anchor" },
 ] as const;
 
 // Re-export PAGE_FORMATS for backward compatibility (now imported from code-utils)
@@ -243,6 +245,21 @@ function TableCustomizationPanel({
               }}
               label={t("Show Border")}
               description={t("Display table borders")}
+            />
+            
+            {/* Hide No Value Toggle */}
+            <Checkbox
+              checked={element.tableConfig?.hideNoValue === true}
+              onCheckedChange={(checked) => {
+                handleUpdateElement(id, {
+                  tableConfig: {
+                    ...(element.tableConfig || { columns: [], showHeader: true, showBorder: true, rowHeight: 20 }),
+                    hideNoValue: checked === true
+                  }
+                });
+              }}
+              label={t("Hide When Empty")}
+              description={t("Hide table when there are no rows")}
             />
             
             {/* Row Height */}
@@ -422,7 +439,7 @@ export function PrintTemplateBuilder({
   const canvasRef = useRef<HTMLDivElement>(null);
   const paperRef = useRef<HTMLDivElement>(null);
   const [draggedElementId, setDraggedElementId] = useState<string | null>(null);
-  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number; elementX: number; elementY: number; visualX: number; visualY: number; initialOffsetX?: number; initialOffsetY?: number } | null>(null);
+  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number; elementX: number; elementY: number; visualX: number; visualY: number; initialOffsetX?: number; initialOffsetY?: number; childPositions?: Map<string, { x: number; y: number }> } | null>(null);
   const [dragCurrentPos, setDragCurrentPos] = useState<{ x: number; y: number } | null>(null);
   const [resizingElementId, setResizingElementId] = useState<string | null>(null);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
@@ -437,8 +454,10 @@ export function PrintTemplateBuilder({
   const [hoveredAnchorElementId, setHoveredAnchorElementId] = useState<string | null>(null);
   const [selectingAnchorFor, setSelectingAnchorFor] = useState<string | null>(null); // Element ID for which we're selecting an anchor
   const [tableSettingsTab, setTableSettingsTab] = useState<string>("general"); // Top-level tab for table settings
-  const [showSidebar, setShowSidebar] = useState(true); // Sidebar visibility state
+  const [showSidebar, setShowSidebar] = useState(true); // Right sidebar visibility state
+  const [showLayersPanel, setShowLayersPanel] = useState(true); // Left layers panel visibility state
   const [isDragging, setIsDragging] = useState(false); // Flag to prevent anchor recalculation during drag
+  const [lastSelectedElementId, setLastSelectedElementId] = useState<string | null>(null); // Track last selected element for Shift+click range selection
 
   // Check if setting anchorTo would create a loop
   const wouldCreateLoop = useCallback((elementId: string, anchorToId: string, allElements: PrintTemplateElement[]): boolean => {
@@ -968,6 +987,258 @@ export function PrintTemplateBuilder({
     setSelectedElements(new Set());
   }, [layout, onChange, readonly, addToHistory]);
 
+  // Group/ungroup functions
+  const handleGroupElements = useCallback(() => {
+    if (readonly || selectedElements.size < 2) return;
+    
+    const selectedIds = Array.from(selectedElements);
+    const selectedElementsList = layout.filter(el => selectedIds.includes(el.id));
+    if (selectedElementsList.length < 2) return;
+    
+    // Calculate group bounds
+    const getAbsolutePosition = (el: PrintTemplateElement) => {
+      let x = el.transform?.x || 0;
+      let y = el.transform?.y || 0;
+      if (el.group) {
+        const parentGroup = layout.find(g => g.id === el.group);
+        if (parentGroup?.transform) {
+          x += parentGroup.transform.x || 0;
+          y += parentGroup.transform.y || 0;
+        }
+      }
+      return { x, y };
+    };
+    
+    const absolutePositions = selectedElementsList.map(el => getAbsolutePosition(el));
+    const minX = Math.min(...absolutePositions.map(p => p.x));
+    const minY = Math.min(...absolutePositions.map(p => p.y));
+    const maxX = Math.max(...selectedElementsList.map((el, idx) => {
+      const pos = absolutePositions[idx];
+      return pos ? pos.x + (el.transform?.width || 0) : 0;
+    }));
+    const maxY = Math.max(...selectedElementsList.map((el, idx) => {
+      const pos = absolutePositions[idx];
+      return pos ? pos.y + (el.transform?.height || 0) : 0;
+    }));
+    
+    const groupWidth = maxX - minX;
+    const groupHeight = maxY - minY;
+    
+    // Create group element
+    const groupId = `group_${Date.now()}`;
+    const groupCode = generateCode("group");
+    const groupElement: PrintTemplateElement = {
+      id: groupId,
+      code: groupCode,
+      type: "anchor",
+      value: "",
+      align: "left",
+      verticalAlign: "top",
+      transform: {
+        x: minX,
+        y: minY,
+        width: groupWidth,
+        height: groupHeight,
+      },
+    };
+    
+    // Update selected elements to belong to the group - keep absolute positions
+    const newLayout = layout.map(el => {
+      if (selectedIds.includes(el.id)) {
+        const absPos = getAbsolutePosition(el);
+        // Keep absolute positions (don't convert to relative)
+        // Always remove anchor properties from children when grouping
+        const { group, anchorTo, anchorPosition, anchorOffset, ...rest } = el;
+        
+        return {
+          ...rest,
+          group: groupId,
+          transform: {
+            ...(el.transform || { x: 0, y: 0, width: 200, height: 30 }),
+            x: absPos.x, // Keep absolute position
+            y: absPos.y, // Keep absolute position
+          },
+          // Anchor properties are removed - children positions are managed by the group
+        };
+      }
+      return el;
+    });
+    
+    // Add group element to layout
+    newLayout.push(groupElement);
+    
+    // Update group size based on children (using the shared function)
+    // Note: We'll define updateGroupSizes as a useCallback above, but for now use inline logic
+    const updateGroupSize = (layout: PrintTemplateElement[]): PrintTemplateElement[] => {
+      return layout.map(el => {
+        const isGroup = el.type === "anchor" && layout.some(child => child.group === el.id);
+        if (!isGroup) return el;
+        
+        const groupChildren = layout.filter(child => child.group === el.id);
+        if (groupChildren.length === 0) return el;
+        
+        // Calculate bounds of all children (positions are relative to group)
+        const childPositions = groupChildren.map(child => {
+          const childX = child.transform?.x || 0;
+          const childY = child.transform?.y || 0;
+          const childWidth = child.transform?.width || 0;
+          const childHeight = child.transform?.height || 0;
+          return {
+            minX: childX,
+            minY: childY,
+            maxX: childX + childWidth,
+            maxY: childY + childHeight,
+          };
+        });
+        
+        const minX = Math.min(...childPositions.map(p => p.minX));
+        const minY = Math.min(...childPositions.map(p => p.minY));
+        const maxX = Math.max(...childPositions.map(p => p.maxX));
+        const maxY = Math.max(...childPositions.map(p => p.maxY));
+        
+        const groupWidth = maxX - minX;
+        const groupHeight = maxY - minY;
+        
+        // Update group size (position stays the same, children are already relative)
+        return {
+          ...el,
+          transform: {
+            ...(el.transform || { x: 0, y: 0, width: 200, height: 30 }),
+            width: groupWidth,
+            height: groupHeight,
+          },
+        };
+      });
+    };
+    
+    // Update group size based on children
+    const finalLayout = updateGroupSize(newLayout);
+    
+    onChange(finalLayout);
+    addToHistory(finalLayout);
+    setSelectedElements(new Set([groupId]));
+  }, [readonly, selectedElements, layout, onChange, addToHistory, generateCode]);
+
+  const handleUngroupElements = useCallback((groupId: string) => {
+    if (readonly || !groupId) return;
+    
+    // Get absolute position of group
+    const groupElement = layout.find(el => el.id === groupId);
+    if (!groupElement || !groupElement.transform) return;
+    
+    const groupX = groupElement.transform.x || 0;
+    const groupY = groupElement.transform.y || 0;
+    const groupCode = groupElement.code || groupId;
+    
+    // Get group's visual position (may be anchored)
+    const groupVisualPos = groupElement.anchorTo 
+      ? calculateAnchorPosition(groupElement, layout)
+      : { x: groupX, y: groupY };
+    
+    // Remove group from selected elements and convert positions
+    // Also remove anchors from elements that anchor to the group
+    const newLayout = layout.map(el => {
+      // If element anchors to the group (by code or id), remove the anchor
+      if (el.anchorTo) {
+        const anchorsToGroup = el.anchorTo === groupCode || el.anchorTo === groupId;
+        if (anchorsToGroup) {
+          // Remove anchor properties
+          const { anchorTo, anchorPosition, anchorOffset, ...rest } = el;
+          return {
+            ...rest,
+            // Set position to current visual position (calculated from anchor)
+            transform: {
+              ...(el.transform || { x: 0, y: 0, width: 200, height: 30 }),
+              x: el.anchorTo ? calculateAnchorPosition(el, layout).x : (el.transform?.x || 0),
+              y: el.anchorTo ? calculateAnchorPosition(el, layout).y : (el.transform?.y || 0),
+            },
+          };
+        }
+      }
+      
+      // Convert group children positions
+      // Children positions are stored as absolute, but when rendered inside group container,
+      // they are displayed relative to the group (childAbsolute - groupAbsolute).
+      // To maintain the same visual position when ungrouping, we need to calculate
+      // the child's current visual position and use that as the new absolute position.
+      if (el.group === groupId) {
+        const { group, ...rest } = el;
+        // Child's stored absolute position
+        const childAbsX = el.transform?.x || 0;
+        const childAbsY = el.transform?.y || 0;
+        
+        // Calculate the relative position (how it appears inside the group)
+        // This is: childAbsolute - groupAbsolute
+        const relativeX = childAbsX - groupX;
+        const relativeY = childAbsY - groupY;
+        
+        // Calculate new absolute position using group's visual position + relative offset
+        // This ensures the child stays in the same visual position when ungrouped
+        const newAbsX = groupVisualPos.x + relativeX;
+        const newAbsY = groupVisualPos.y + relativeY;
+        
+        return {
+          ...rest,
+          transform: {
+            ...(el.transform || { x: 0, y: 0, width: 200, height: 30 }),
+            x: newAbsX,
+            y: newAbsY,
+          },
+        };
+      }
+      return el;
+    }).filter(el => el.id !== groupId); // Remove group element itself
+    
+    onChange(newLayout);
+    addToHistory(newLayout);
+    setSelectedElements(new Set());
+  }, [readonly, layout, onChange, addToHistory, calculateAnchorPosition]);
+
+  // Function to update group sizes based on children
+  const updateGroupSizes = useCallback((layout: PrintTemplateElement[]): PrintTemplateElement[] => {
+    return layout.map(el => {
+      const isGroup = el.type === "anchor" && layout.some(child => child.group === el.id);
+      if (!isGroup) return el;
+      
+      const groupChildren = layout.filter(child => child.group === el.id);
+      if (groupChildren.length === 0) return el;
+      
+      // Calculate bounds of all children (positions are absolute)
+      const childPositions = groupChildren.map(child => {
+        const childX = child.transform?.x || 0;
+        const childY = child.transform?.y || 0;
+        const childWidth = child.transform?.width || 0;
+        const childHeight = child.transform?.height || 0;
+        return {
+          minX: childX,
+          minY: childY,
+          maxX: childX + childWidth,
+          maxY: childY + childHeight,
+        };
+      });
+      
+      const minX = Math.min(...childPositions.map(p => p.minX));
+      const minY = Math.min(...childPositions.map(p => p.minY));
+      const maxX = Math.max(...childPositions.map(p => p.maxX));
+      const maxY = Math.max(...childPositions.map(p => p.maxY));
+      
+      const groupWidth = maxX - minX;
+      const groupHeight = maxY - minY;
+      
+      // Update group position and size to match children bounds
+      return {
+        ...el,
+        transform: {
+          ...(el.transform || { x: 0, y: 0, width: 200, height: 30 }),
+          x: minX, // Group position matches children's min bounds
+          y: minY,
+          width: groupWidth,
+          height: groupHeight,
+        },
+      };
+    });
+  }, []);
+
   const handleUpdateElement = useCallback((id: string, updates: Partial<PrintTemplateElement>, skipHistory = false, skipAnchorRecalc = false) => {
     if (readonly) return;
     
@@ -1018,11 +1289,18 @@ export function PrintTemplateBuilder({
       newLayout = updateAnchoredElements(newLayout);
     }
     
+    // Update group sizes if a child element was modified
+    const updatedElement = newLayout.find(el => el.id === id);
+    if (updatedElement?.group) {
+      // This is a group child - update the parent group size
+      newLayout = updateGroupSizes(newLayout);
+    }
+    
     if (!skipHistory) {
       addToHistory(newLayout);
     }
     onChange(newLayout);
-  }, [layout, onChange, readonly, addToHistory, updateAnchoredElements, isDragging]);
+  }, [layout, onChange, readonly, addToHistory, updateAnchoredElements, updateGroupSizes, isDragging]);
 
   const handleUndo = useCallback(() => {
     if (historyIndex > 0 && history[historyIndex - 1]) {
@@ -1048,22 +1326,66 @@ export function PrintTemplateBuilder({
     }
   }, []);
 
-  const handleSelectElement = useCallback((id: string, ctrlKey: boolean) => {
+  const handleSelectElement = useCallback((id: string, ctrlKey: boolean, shiftKey: boolean) => {
     if (readonly) return;
-    if (ctrlKey) {
+    
+    // Allow selecting group children directly - they can be customized
+    const targetId = id;
+    
+    if (shiftKey && lastSelectedElementId && lastSelectedElementId !== targetId) {
+      // Range selection: select all elements between lastSelectedElementId and targetId
+      const elements = layout;
+      const lastIndex = elements.findIndex(el => el.id === lastSelectedElementId);
+      const currentIndex = elements.findIndex(el => el.id === targetId);
+      
+      if (lastIndex !== -1 && currentIndex !== -1) {
+        const startIndex = Math.min(lastIndex, currentIndex);
+        const endIndex = Math.max(lastIndex, currentIndex);
+        const rangeIds = new Set<string>();
+        
+        // Add existing selection
+        selectedElements.forEach(selId => rangeIds.add(selId));
+        
+        // Add range
+        for (let i = startIndex; i <= endIndex; i++) {
+          const el = elements[i];
+          if (el) {
+            rangeIds.add(el.id);
+          }
+        }
+        
+        setSelectedElements(rangeIds);
+      } else {
+        // Fallback to toggle if indices not found
       setSelectedElements((prev) => {
         const next = new Set(prev);
-        if (next.has(id)) {
-          next.delete(id);
+          if (next.has(targetId)) {
+            next.delete(targetId);
         } else {
-          next.add(id);
+            next.add(targetId);
         }
         return next;
       });
+      }
+      setLastSelectedElementId(targetId);
+    } else if (ctrlKey || (shiftKey && !lastSelectedElementId)) {
+      // Toggle selection (Ctrl/Cmd or Shift without a previous selection)
+      setSelectedElements((prev) => {
+        const next = new Set(prev);
+        if (next.has(targetId)) {
+          next.delete(targetId);
     } else {
-      setSelectedElements(new Set([id]));
+          next.add(targetId);
+        }
+        return next;
+      });
+      setLastSelectedElementId(targetId);
+    } else {
+      // Single selection
+      setSelectedElements(new Set([targetId]));
+      setLastSelectedElementId(targetId);
     }
-  }, [readonly]);
+  }, [readonly, layout, lastSelectedElementId, selectedElements]);
 
   // Get canvas-relative position from mouse event or coordinates
   const getCanvasPosition = useCallback((e: React.MouseEvent | MouseEvent | { clientX: number; clientY: number }) => {
@@ -1100,41 +1422,70 @@ export function PrintTemplateBuilder({
   // Handle element drag start
   const handleElementDragStart = useCallback((e: React.MouseEvent, element: PrintTemplateElement) => {
     if (readonly) return;
+    
     e.stopPropagation();
     
+    // If dragging a group child, drag the entire group instead
+    let targetElement = element;
+    if (element.group) {
+      // This is a group child - find the parent group and drag that instead
+      const parentGroup = layout.find(el => el.id === element.group);
+      if (parentGroup) {
+        targetElement = parentGroup;
+        // Select the group if not already selected
+        if (!selectedElements.has(parentGroup.id)) {
+          setSelectedElements(new Set([parentGroup.id]));
+        }
+      }
+    }
+    
     const pos = getCanvasPosition(e);
-    setDraggedElementId(element.id);
+    setDraggedElementId(targetElement.id);
     setIsDragging(true);
     // Clear hover when dragging starts
     setHoveredAnchorElementId(null);
     
     // Calculate current visual position (for anchored elements, this is the calculated position)
-    const currentVisualPos = element.anchorTo 
-      ? calculateAnchorPosition(element, layout)
-      : { x: element.transform?.x || 0, y: element.transform?.y || 0 };
+    const currentVisualPos = targetElement.anchorTo 
+      ? calculateAnchorPosition(targetElement, layout)
+      : { x: targetElement.transform?.x || 0, y: targetElement.transform?.y || 0 };
     
     // Store initial offset if anchored
-    const initialOffset = element.anchorTo 
-      ? (typeof element.anchorOffset === "object" 
-          ? element.anchorOffset 
-          : { x: 0, y: typeof element.anchorOffset === "number" ? element.anchorOffset : 0 })
+    const initialOffset = targetElement.anchorTo 
+      ? (typeof targetElement.anchorOffset === "object" 
+          ? targetElement.anchorOffset 
+          : { x: 0, y: typeof targetElement.anchorOffset === "number" ? targetElement.anchorOffset : 0 })
       : null;
+    
+    // Check if this is a group and store original child positions
+    const isGroup = targetElement.type === "anchor" && layout.some(el => el.group === targetElement.id);
+    const childPositions = new Map<string, { x: number; y: number }>();
+    if (isGroup) {
+      const groupChildren = layout.filter(el => el.group === targetElement.id);
+      groupChildren.forEach(child => {
+        childPositions.set(child.id, {
+          x: child.transform?.x || 0,
+          y: child.transform?.y || 0,
+        });
+      });
+    }
     
     setDragStartPos({
       x: pos.x,
       y: pos.y,
-      elementX: element.transform?.x || 0,
-      elementY: element.transform?.y || 0,
+      elementX: targetElement.transform?.x || 0,
+      elementY: targetElement.transform?.y || 0,
       visualX: currentVisualPos.x,
       visualY: currentVisualPos.y,
       initialOffsetX: initialOffset?.x || 0,
       initialOffsetY: initialOffset?.y || 0,
+      childPositions: childPositions.size > 0 ? childPositions : undefined,
     });
     setDragCurrentPos({ x: pos.x, y: pos.y });
     
     // Select element if not already selected
-    if (!selectedElements.has(element.id)) {
-      setSelectedElements(new Set([element.id]));
+    if (!selectedElements.has(targetElement.id)) {
+      setSelectedElements(new Set([targetElement.id]));
     }
   }, [readonly, getCanvasPosition, selectedElements, layout, calculateAnchorPosition]);
 
@@ -1152,9 +1503,89 @@ export function PrintTemplateBuilder({
     const deltaX = pos.x - dragStartPos.x;
     const deltaY = pos.y - dragStartPos.y;
     
+    // Check if dragged element is a group
+    const isGroup = element.type === "anchor" && layout.some(el => el.group === element.id);
+    const groupChildren = isGroup ? layout.filter(el => el.group === draggedElementId) : [];
+    
+    // Recursively find all elements that anchor to the dragged element (directly or indirectly)
+    const findAllAnchoredElements = (anchorId: string, anchorCode: string | undefined, visited: Set<string> = new Set()): PrintTemplateElement[] => {
+      const result: PrintTemplateElement[] = [];
+      const directAnchors = layout.filter(el => {
+        if (!el.anchorTo || visited.has(el.id)) return false;
+        // Check if anchors to the given anchor by code or id
+        if (anchorCode && el.anchorTo === anchorCode) return true;
+        if (el.anchorTo === anchorId) return true;
+        return false;
+      });
+      
+      directAnchors.forEach(el => {
+        if (!visited.has(el.id)) {
+          visited.add(el.id);
+          result.push(el);
+          // Recursively find elements that anchor to this element
+          const nestedAnchors = findAllAnchoredElements(el.id, el.code, visited);
+          result.push(...nestedAnchors);
+        }
+      });
+      
+      return result;
+    };
+    
+    const allAnchoredElements = findAllAnchoredElements(element.id, element.code);
+    
+    // Store original positions of all anchored elements and their children
+    const anchoredElementPositions = new Map<string, { x: number; y: number }>();
+    const anchoredChildrenPositions = new Map<string, Map<string, { x: number; y: number }>>();
+    
+    allAnchoredElements.forEach(anchoredEl => {
+      const anchoredPos = calculateAnchorPosition(anchoredEl, layout);
+      anchoredElementPositions.set(anchoredEl.id, anchoredPos);
+      
+      // If anchored element is a group, store its children positions
+      const isAnchoredGroup = anchoredEl.type === "anchor" && layout.some(el => el.group === anchoredEl.id);
+      if (isAnchoredGroup) {
+        const anchoredGroupChildren = layout.filter(el => el.group === anchoredEl.id);
+        const childrenPos = new Map<string, { x: number; y: number }>();
+        anchoredGroupChildren.forEach(child => {
+          childrenPos.set(child.id, {
+            x: child.transform?.x || 0,
+            y: child.transform?.y || 0,
+          });
+        });
+        anchoredChildrenPositions.set(anchoredEl.id, childrenPos);
+      }
+    });
+    
     // Update layout directly without triggering anchor recalculation during drag
     let newLayout = layout.map((el) => {
+      // If dragging a group, also update all its children
+      if (isGroup && el.group === draggedElementId) {
+        // Children move with the group - use original positions from drag start + delta
+        const originalPos = dragStartPos.childPositions?.get(el.id);
+        if (originalPos) {
+          return {
+            ...el,
+            transform: {
+              ...(el.transform || { x: 0, y: 0, width: 200, height: 30 }),
+              x: snapValue(originalPos.x + deltaX),
+              y: snapValue(originalPos.y + deltaY),
+            },
+          };
+        }
+        // Fallback if original position not found
+        return {
+          ...el,
+          transform: {
+            ...(el.transform || { x: 0, y: 0, width: 200, height: 30 }),
+            x: snapValue((el.transform?.x || 0) + deltaX),
+            y: snapValue((el.transform?.y || 0) + deltaY),
+          },
+        };
+      }
+      
       if (el.id === draggedElementId) {
+        // Handle both group children and regular elements
+        const isGroupChild = el.group !== undefined;
         if (el.anchorTo) {
           // Anchored element - need to calculate offset change based on anchor alignment
           // The new visual position should be: startVisualPos + delta
@@ -1203,6 +1634,7 @@ export function PrintTemplateBuilder({
           };
         } else {
           // Not anchored - update position directly
+            // Children positions are absolute, so just add delta
     const newX = snapValue(dragStartPos.elementX + deltaX);
     const newY = snapValue(dragStartPos.elementY + deltaY);
     
@@ -1219,10 +1651,114 @@ export function PrintTemplateBuilder({
       return el;
     });
     
-    // Update anchored elements positions without triggering full recalculation
-    // Only update the dragged element's visual position
+    // Update anchored elements positions - need to recalculate all elements that anchor to the dragged element
+    // First, update the dragged element itself if it's anchored
     if (element.anchorTo) {
       newLayout = updateAnchoredElements(newLayout);
+    }
+    
+    // Update all elements that anchor to the dragged element (directly or indirectly)
+    if (allAnchoredElements.length > 0) {
+      // Process in dependency order: elements that anchor directly first, then those that anchor to them
+      // We need to process in topological order to ensure parent positions are updated before children
+      const processed = new Set<string>();
+      const toProcess = [...allAnchoredElements];
+      
+      // Process elements in multiple passes to handle nested anchors
+      let changed = true;
+      let iterations = 0;
+      const maxIterations = 100; // Safety limit
+      
+      while (changed && toProcess.length > 0 && iterations < maxIterations) {
+        iterations++;
+        changed = false;
+        const remaining: PrintTemplateElement[] = [];
+        
+        for (const anchoredEl of toProcess) {
+          if (processed.has(anchoredEl.id)) continue;
+          
+          // Check if this element's anchor has been processed (or is the dragged element)
+          const anchorId = anchoredEl.anchorTo;
+          if (!anchorId) {
+            processed.add(anchoredEl.id);
+            continue;
+          }
+          
+          // Find the anchor element
+          const anchorElement = newLayout.find(a => {
+            if (a.code && anchorId === a.code) return true;
+            if (anchorId === a.id) return true;
+            return false;
+          });
+          
+          // If anchor is the dragged element or has been processed, we can process this element
+          if (anchorElement && (anchorElement.id === element.id || processed.has(anchorElement.id))) {
+            // Recalculate this element's position
+            const newPos = calculateAnchorPosition(anchoredEl, newLayout);
+            const originalPos = anchoredElementPositions.get(anchoredEl.id);
+            
+            if (originalPos !== undefined) {
+              // Update this element's position in newLayout
+              const elementIndex = newLayout.findIndex(el => el.id === anchoredEl.id);
+              if (elementIndex >= 0 && newLayout[elementIndex]) {
+                const existingElement = newLayout[elementIndex];
+                newLayout[elementIndex] = {
+                  ...existingElement,
+                  transform: {
+                    ...(existingElement.transform || { x: 0, y: 0, width: 200, height: 30 }),
+                    x: newPos.x,
+                    y: newPos.y,
+                  },
+                };
+              }
+              
+              processed.add(anchoredEl.id);
+              changed = true;
+            } else {
+              remaining.push(anchoredEl);
+            }
+          } else {
+            remaining.push(anchoredEl);
+          }
+        }
+        
+        toProcess.length = 0;
+        toProcess.push(...remaining);
+      }
+      
+      // Now update children of all anchored groups (process in any order since parents are already updated)
+      newLayout = newLayout.map(el => {
+        // If this is a child of a group that was anchored, update its position
+        if (el.group) {
+          const parentGroup = allAnchoredElements.find(ae => ae.id === el.group);
+          if (parentGroup && processed.has(parentGroup.id)) {
+            const childrenPos = anchoredChildrenPositions.get(parentGroup.id);
+            if (childrenPos) {
+              const originalChildPos = childrenPos.get(el.id);
+              if (originalChildPos !== undefined) {
+                // Calculate parent's new position
+                const newParentPos = calculateAnchorPosition(parentGroup, newLayout);
+                const originalParentPos = anchoredElementPositions.get(parentGroup.id);
+                if (originalParentPos !== undefined) {
+                  const parentDeltaX = newParentPos.x - originalParentPos.x;
+                  const parentDeltaY = newParentPos.y - originalParentPos.y;
+                  
+                  return {
+                    ...el,
+                    transform: {
+                      ...(el.transform || { x: 0, y: 0, width: 200, height: 30 }),
+                      x: snapValue(originalChildPos.x + parentDeltaX),
+                      y: snapValue(originalChildPos.y + parentDeltaY),
+                    },
+                  };
+                }
+              }
+            }
+          }
+        }
+        
+        return el;
+      });
     }
     
     // Update layout directly (skip history and anchor recalculation flag)
@@ -1233,9 +1769,10 @@ export function PrintTemplateBuilder({
   const handleElementDragEnd = useCallback(() => {
     setIsDragging(false);
     
-    // Finalize layout with proper anchor recalculation
+    // Finalize layout with proper anchor recalculation and group size updates
     if (draggedElementId) {
-      const currentLayout = updateAnchoredElements(layout);
+      let currentLayout = updateAnchoredElements(layout);
+      currentLayout = updateGroupSizes(currentLayout);
       addToHistory(currentLayout);
       onChange(currentLayout);
     }
@@ -1243,7 +1780,7 @@ export function PrintTemplateBuilder({
     setDraggedElementId(null);
     setDragStartPos(null);
     setDragCurrentPos(null);
-  }, [draggedElementId, layout, addToHistory, onChange, updateAnchoredElements]);
+  }, [draggedElementId, layout, addToHistory, onChange, updateAnchoredElements, updateGroupSizes]);
 
   // Handle resize start
   const handleResizeStart = useCallback((e: React.MouseEvent, element: PrintTemplateElement, handle: string) => {
@@ -1325,20 +1862,23 @@ export function PrintTemplateBuilder({
 
   // Handle resize end
   const handleResizeEnd = useCallback(() => {
-    // Add to history when resize ends
+    // Add to history when resize ends and update group sizes
     if (resizingElementId) {
-      const currentLayout = layout.map((el) => {
+      let currentLayout = layout.map((el) => {
         if (el.id === resizingElementId) {
           return { ...el };
         }
         return el;
       });
+      // Update group sizes if a child was resized
+      currentLayout = updateGroupSizes(currentLayout);
       addToHistory(currentLayout);
+      onChange(currentLayout);
     }
     setResizingElementId(null);
     setResizeHandle(null);
     setResizeStartPos(null);
-  }, [resizingElementId, layout, addToHistory]);
+  }, [resizingElementId, layout, addToHistory, onChange, updateGroupSizes]);
 
   // Set up global mouse event listeners for dragging
   useEffect(() => {
@@ -1392,12 +1932,18 @@ export function PrintTemplateBuilder({
           const newBox = { ...prev, endX: pos.x, endY: pos.y };
           
           // Select elements within selection box
+          // Exclude group children - only select parent groups or standalone elements
           const minX = Math.min(prev.startX, pos.x);
           const maxX = Math.max(prev.startX, pos.x);
           const minY = Math.min(prev.startY, pos.y);
           const maxY = Math.max(prev.startY, pos.y);
           
           const selected = layout.filter((el) => {
+            // Skip group children - they should not be selectable via selection box
+            if (el.group) {
+              return false;
+            }
+            
             const elX = el.transform?.x || 0;
             const elY = el.transform?.y || 0;
             const elWidth = el.transform?.width || 200;
@@ -1426,6 +1972,11 @@ export function PrintTemplateBuilder({
           const maxY = Math.max(selectionBox.startY, pos.y);
           
           const selected = layout.filter((el) => {
+            // Skip group children - they should not be selectable via selection box
+            if (el.group) {
+              return false;
+            }
+            
             const elX = el.transform?.x || 0;
             const elY = el.transform?.y || 0;
             const elWidth = el.transform?.width || 200;
@@ -1542,22 +2093,81 @@ export function PrintTemplateBuilder({
     return breaks;
   }, [pageDimensions, dynamicPageHeight]);
 
-  const renderElement = useCallback((element: PrintTemplateElement, index: number) => {
+  // Template Element Component
+  const TemplateElement = ({ 
+    element, 
+    index,
+    isGroupChild = false,
+    groupParent = null
+  }: { 
+    element: PrintTemplateElement; 
+    index: number;
+    isGroupChild?: boolean;
+    groupParent?: PrintTemplateElement | null;
+  }) => {
     const isSelected = selectedElements.has(element.id);
     const isDragging = draggedElementId === element.id;
     
-    // Use element's transform position (which is already updated by anchor calculation)
-    // Only recalculate during drag
-    const baseX = element.transform?.x || 0;
-    const baseY = element.transform?.y || 0;
+    // Check if element belongs to a group
+    const groupElement = element.group ? layout.find(el => el.id === element.group) : null;
+    const isGroup = element.type === "anchor" && layout.some(el => el.group === element.id);
+    const groupChildren = isGroup ? layout.filter(el => el.group === element.id) : [];
+    
+    // Calculate position - use anchor position if element is anchored, otherwise use transform position
+    // For groups that are anchored, we need to calculate their position based on the anchor
+    let baseX = element.transform?.x || 0;
+    let baseY = element.transform?.y || 0;
+    
+    // If element is anchored, calculate its position from the anchor
+    if (element.anchorTo && !isGroupChild) {
+      const anchoredPos = calculateAnchorPosition(element, layout);
+      baseX = anchoredPos.x;
+      baseY = anchoredPos.y;
+    }
+    
+    // If element is a group child being rendered inside a group, calculate relative position for rendering
+    if (isGroupChild && groupParent && groupParent.transform) {
+      // For group children, we need the parent group's visual position (which may be anchored)
+      const parentGroupPos = groupParent.anchorTo 
+        ? calculateAnchorPosition(groupParent, layout)
+        : { x: groupParent.transform.x || 0, y: groupParent.transform.y || 0 };
+      const groupX = parentGroupPos.x;
+      const groupY = parentGroupPos.y;
+      // Convert absolute position to relative for rendering inside group container
+      baseX = baseX - groupX;
+      baseY = baseY - groupY;
+    }
     
     // Use drag position if dragging, otherwise use element's stored position
-    const currentX = isDragging && dragCurrentPos && dragStartPos
-      ? snapValue(dragStartPos.elementX + (dragCurrentPos.x - dragStartPos.x))
-      : snapValue(baseX);
-    const currentY = isDragging && dragCurrentPos && dragStartPos
-      ? snapValue(dragStartPos.elementY + (dragCurrentPos.y - dragStartPos.y))
-      : snapValue(baseY);
+    let currentX = baseX;
+    let currentY = baseY;
+    
+    if (isDragging && dragCurrentPos && dragStartPos) {
+      // For group children, we need to handle the relative positioning during drag
+      if (isGroupChild && groupParent && groupParent.transform) {
+        // Get parent group's visual position (which may be anchored)
+        const parentGroupPos = groupParent.anchorTo 
+          ? calculateAnchorPosition(groupParent, layout)
+          : { x: groupParent.transform.x || 0, y: groupParent.transform.y || 0 };
+        const groupX = parentGroupPos.x;
+        const groupY = parentGroupPos.y;
+        // dragStartPos.elementX/Y is absolute, convert to relative, apply delta, result is relative
+        const relativeStartX = dragStartPos.elementX - groupX;
+        const relativeStartY = dragStartPos.elementY - groupY;
+        const deltaX = dragCurrentPos.x - dragStartPos.x;
+        const deltaY = dragCurrentPos.y - dragStartPos.y;
+        currentX = snapValue(relativeStartX + deltaX);
+        currentY = snapValue(relativeStartY + deltaY);
+      } else {
+        // Regular element or group - use absolute positioning
+        // If element is anchored, use the visual position from dragStartPos (which should be the anchored position)
+        currentX = snapValue(dragStartPos.elementX + (dragCurrentPos.x - dragStartPos.x));
+        currentY = snapValue(dragStartPos.elementY + (dragCurrentPos.y - dragStartPos.y));
+      }
+    } else {
+      currentX = snapValue(baseX);
+      currentY = snapValue(baseY);
+    }
 
     const elementStyle: React.CSSProperties = {
       position: "absolute",
@@ -1567,7 +2177,14 @@ export function PrintTemplateBuilder({
       height: `${element.transform?.height || 30}px`,
       cursor: readonly ? "default" : isDragging ? "grabbing" : "grab",
       userSelect: "none",
-      zIndex: isDragging ? 1000 : isSelected ? 100 : 1,
+      zIndex: (() => {
+        // Use the isGroupChild prop if available, otherwise check from element.group
+        const isGroupChildElement = isGroupChild || (!!element.group && !isGroup);
+        if (isDragging) return 1000;
+        if (isGroupChildElement) return isSelected ? 200 : 150; // Group children above groups
+        if (isGroup) return isSelected ? 50 : 10; // Groups above regular elements but below children
+        return isSelected ? 100 : 1;
+      })(),
       opacity: isDragging ? 0.8 : 1,
       transition: isDragging ? "none" : "opacity 0.2s",
       ...element.style,
@@ -1730,6 +2347,11 @@ export function PrintTemplateBuilder({
                             colWidth = elementWidth / sortedColumns.length
                           }
                           
+                          // Check if this child field is Image Preview type
+                          // childFields from useDocList returns docs as Zodula.SelectDoctype<"zodula__Field">[]
+                          const childFieldConfig = (childFields as any[]).find((f: any) => f && typeof f === 'object' && 'name' in f && f.name === col.field)
+                          const isImagePreviewChild = childFieldConfig && childFieldConfig.type === "Image Preview"
+                          
                           return (
                             <td
                               key={col.field}
@@ -1744,7 +2366,13 @@ export function PrintTemplateBuilder({
                                 ...tableTextStyle,
                               }}
                             >
+                              {isImagePreviewChild ? (
+                                <div className="zd:flex zd:items-center zd:justify-center zd:h-full">
+                                  <Image className="zd:w-4 zd:h-4 zd:text-muted-foreground" />
+                                </div>
+                              ) : (
                               <span className="zd:text-muted-foreground" style={tableTextStyle}>Sample</span>
+                              )}
                             </td>
                           )
                         })}
@@ -1775,10 +2403,11 @@ export function PrintTemplateBuilder({
             </div>
           );
         } else {
-          // Standard field preview - show as {{field}}
+          // Standard field preview - show as {{field}} or image preview for Image Preview fields
           const fieldName = typeof element.value === "string" ? element.value : "field";
           const labelText = element.label || "";
           const labelPos = element.labelPosition || "left";
+          const isImagePreview = fieldConfig?.type === "Image Preview";
           
           const textStyle: React.CSSProperties = {
             fontSize: element.style?.fontSize ? `${element.style.fontSize}px` : undefined,
@@ -1787,7 +2416,22 @@ export function PrintTemplateBuilder({
             textDecoration: element.style?.textDecoration,
           };
           
-          const renderFieldContent = () => (
+          const renderFieldContent = () => {
+            if (isImagePreview) {
+              // Show image preview placeholder
+              return (
+                <div className={cn(
+                  "zd:w-full zd:h-full zd:flex zd:items-center zd:justify-center zd:bg-muted/30 zd:border zd:border-border zd:rounded",
+                  alignClasses.horizontal[horizontalAlign as keyof typeof alignClasses.horizontal]
+                )}>
+                  <div className="zd:flex zd:flex-col zd:items-center zd:gap-2 zd:text-muted-foreground">
+                    <Image className="zd:w-8 zd:h-8" />
+                    <span className="zd:text-xs">{fieldName}</span>
+                  </div>
+                </div>
+              );
+            }
+            return (
             <span
               className={cn(
                 "zd:text-sm zd:font-mono zd:block zd:w-full",
@@ -1798,6 +2442,7 @@ export function PrintTemplateBuilder({
               {`{{${fieldName}}}`}
             </span>
           );
+          };
           
           const horizontalItems = {
             left: "zd:items-start",
@@ -2039,16 +2684,40 @@ export function PrintTemplateBuilder({
           </div>
         );
         break;
-      case "anchor":
+      case "anchor": {
+        // Check if this is a group (has elements with group property matching this id)
+        const groupChildren = layout.filter(el => el.group === element.id);
+        if (groupChildren.length > 0) {
+          // This is a group - render as a container with nested children
         content = (
-          <div className={cn("zd:h-full zd:w-full zd:border-2 zd:border-dashed zd:border-blue/50 zd:rounded zd:bg-blue/5 zd:flex zd:items-center zd:justify-center")}>
-            <div className="zd:text-xs zd:text-primary zd:font-medium zd:flex zd:flex-col zd:items-center zd:gap-1">
-              <Anchor className="zd:w-4 zd:h-4" />
-              <span>Anchor Point</span>
+            <div className={cn("zd:h-full zd:w-full zd:rounded zd:bg-primary/5 zd:relative zd:overflow-visible zd:r")}>
+              {groupChildren.map((child, childIndex) => (
+                <TemplateElement 
+                  key={child.id}
+                  element={child} 
+                  index={index * 1000 + childIndex}
+                  isGroupChild={true}
+                  groupParent={element}
+                />
+              ))}
+            </div>
+          );
+        } else {
+          // Standalone anchor element (should not exist, but handle gracefully)
+          // This should not happen since we removed anchor as a tool type
+          // But keep this for backward compatibility with existing data
+          // Show as empty group
+          content = (
+            <div className={cn("zd:h-full zd:w-full zd:rounded zd:bg-muted/30 zd:flex zd:items-center zd:justify-center")}>
+              <div className="zd:text-xs zd:text-muted-foreground zd:flex zd:flex-col zd:items-center zd:gap-1">
+                <LayoutGrid className="zd:w-4 zd:h-4" />
+                <span>{t("Group (empty)")}</span>
             </div>
           </div>
         );
+        }
         break;
+      }
       default:
         content = <div className="zd:p-0">{typeof element.value === "string" ? element.value : ""}</div>;
     }
@@ -2072,12 +2741,18 @@ export function PrintTemplateBuilder({
           "zd:absolute zd:group",
           isSelected && "zd:border zd:border-blue-500",
           isAnchored && "zd:opacity-90", // Visual indicator that element is anchored
-          isAnchorTarget && "zd:border-2 zd:border-dashed zd:border-blue-500/70 zd:rounded-lg" // Show dashed border when selected element anchors to this
+          isAnchorTarget && "zd:outline-1 zd:outline-dashed zd:outline-blue-500/70 zd:rounded-lg" // Show dashed border when selected element anchors to this
         )}
-        style={{
+        style={(() => {
+          // For groups and group children, ensure they are clickable and interactive
+          const containerStyle: React.CSSProperties = {
           ...elementStyle,
           cursor: readonly ? "default" : elementStyle.cursor,
-        }}
+            // Groups and group children need pointer-events to be clickable
+            pointerEvents: 'auto',
+          };
+          return containerStyle;
+        })()}
         onMouseEnter={(e) => {
           // Show hover effect in anchor selection mode (not dragging)
           if (selectingAnchorFor && !isDragging && element.id !== selectingAnchorFor) {
@@ -2096,6 +2771,7 @@ export function PrintTemplateBuilder({
         }}
         onMouseDown={(e) => {
           if (!readonly && !(e.target as HTMLElement).closest('.resize-handle')) {
+            // Allow interaction with group children - they can be selected and dragged
             // In anchor selection mode we only prevent drag/select; anchor is set on click
             if (selectingAnchorFor) {
               e.preventDefault();
@@ -2119,14 +2795,28 @@ export function PrintTemplateBuilder({
           }
         }}
         onClick={(e) => {
+          // Allow clicking on group children - they can be selected and customized
           // Anchor selection mode: single click sets anchor
           if (selectingAnchorFor) {
             e.preventDefault();
             e.stopPropagation();
+            
+            // If clicking on a group child, anchor to the parent group instead
+            let targetElement = element;
+            if (element.group) {
+              const parentGroup = layout.find(el => el.id === element.group);
+              if (parentGroup) {
+                targetElement = parentGroup;
+              } else {
+                // Parent group not found, skip
+                return;
+              }
+            }
+            
             // Keep original element selected
             setSelectedElements(new Set([selectingAnchorFor]));
-            if (element.id !== selectingAnchorFor) {
-              if (wouldCreateLoop(selectingAnchorFor, element.id, layout)) {
+            if (targetElement.id !== selectingAnchorFor) {
+              if (wouldCreateLoop(selectingAnchorFor, targetElement.id, layout)) {
                 alert(t("Cannot anchor: This would create a circular dependency"));
                 setSelectingAnchorFor(null);
                 setHoveredAnchorElementId(null);
@@ -2134,14 +2824,29 @@ export function PrintTemplateBuilder({
               }
               const selectedElement = layout.find(el => el.id === selectingAnchorFor);
               if (selectedElement) {
-                const currentOffset = typeof selectedElement.anchorOffset === "object" 
-                  ? selectedElement.anchorOffset 
-                  : { x: 0, y: typeof selectedElement.anchorOffset === "number" ? selectedElement.anchorOffset : 10 };
-                const anchorCode = element.code || element.id;
+                // Calculate offset to maintain current position
+                // Get current visual position of the element (may already be anchored)
+                const currentElementPos = selectedElement.anchorTo
+                  ? calculateAnchorPosition(selectedElement, layout)
+                  : { x: selectedElement.transform?.x || 0, y: selectedElement.transform?.y || 0 };
+                
+                // Get anchor element's position
+                const anchorElementPos = targetElement.anchorTo
+                  ? calculateAnchorPosition(targetElement, layout)
+                  : { x: targetElement.transform?.x || 0, y: targetElement.transform?.y || 0 };
+                
+                // Calculate offset to maintain current position
+                // offset = currentElementPosition - anchorElementPosition
+                const calculatedOffset = {
+                  x: currentElementPos.x - anchorElementPos.x,
+                  y: currentElementPos.y - anchorElementPos.y
+                };
+                
+                const anchorCode = targetElement.code || targetElement.id;
                 handleUpdateElement(selectingAnchorFor, { 
                   anchorTo: anchorCode,
                   anchorPosition: "top-left",
-                  anchorOffset: currentOffset
+                  anchorOffset: calculatedOffset
                 });
               }
             }
@@ -2150,11 +2855,13 @@ export function PrintTemplateBuilder({
             return;
           }
           // Don't select if clicking on delete button
-          if ((e.target as HTMLElement).closest('button[title="Delete Element"]')) {
+          const target = e.target as HTMLElement;
+          if (target.closest('button[title="Delete Element"]')) {
             return;
           }
-          if (!isDragging && !isResizing && !(e.target as HTMLElement).closest('.resize-handle')) {
-            handleSelectElement(element.id, e.ctrlKey || e.metaKey);
+          if (!isDragging && !isResizing && !target.closest('.resize-handle')) {
+            // Allow selecting group children - they can be customized
+            handleSelectElement(element.id, e.ctrlKey || e.metaKey, e.shiftKey);
           }
         }}
       >
@@ -2178,13 +2885,7 @@ export function PrintTemplateBuilder({
         {selectingAnchorFor && hoveredAnchorElementId === element.id && !isDragging && element.id !== selectingAnchorFor && (
           <>
             <div 
-              className="zd:absolute zd:inset-0 zd:ring-2 zd:ring-green-500 zd:rounded-lg zd:pointer-events-none zd:z-[100]"
-              style={{ 
-                boxShadow: '0 0 0 2px rgba(34, 197, 94, 0.5), 0 0 10px rgba(34, 197, 94, 0.3)',
-              }}
-            />
-            <div 
-              className="zd:absolute zd:-inset-1 zd:ring-2 zd:ring-green-500 zd:rounded-lg zd:pointer-events-none zd:z-[100] zd:animate-pulse"
+              className="zd:absolute zd:-inset-1 zd:outline-1 zd:outline-dashed zd:outline-green-500 zd:rounded-lg zd:pointer-events-none zd:z-[100] zd:animate-pulse"
             />
           </>
         )}
@@ -2209,7 +2910,8 @@ export function PrintTemplateBuilder({
         </div>
 
         {/* Resize handles - show even when anchored (anchored elements can resize but not drag) */}
-        {isSelected && !readonly && !isDragging && (
+        {/* Groups cannot be resized - they auto-size based on children */}
+        {isSelected && !readonly && !isDragging && !isGroup && (
           <>
             {/* Corner handles - smaller */}
             <div
@@ -2267,20 +2969,240 @@ export function PrintTemplateBuilder({
         )}
       </div>
     );
-  }, [
-    selectedElements,
-    draggedElementId,
-    dragStartPos,
-    dragCurrentPos,
-    readonly,
-    handleSelectElement,
-    handleDeleteElement,
-    handleElementDragStart,
-    snapValue,
-  ]);
+  };
+  
+  TemplateElement.displayName = "TemplateElement";
+
+  // Build layers tree structure (groups and their children)
+  const layersTree = useMemo(() => {
+    const groups = layout.filter(el => el.type === "anchor" && layout.some(child => child.group === el.id));
+    const standaloneElements = layout.filter(el => {
+      const isGroup = el.type === "anchor" && layout.some(child => child.group === el.id);
+      const isGroupChild = !!el.group;
+      return !isGroup && !isGroupChild;
+    });
+    
+    return [
+      ...groups.map(group => ({
+        element: group,
+        children: layout.filter(el => el.group === group.id),
+        isGroup: true,
+      })),
+      ...standaloneElements.map(el => ({
+        element: el,
+        children: [],
+        isGroup: false,
+      })),
+    ].sort((a, b) => {
+      // Sort by y position
+      const aY = a.element.transform?.y || 0;
+      const bY = b.element.transform?.y || 0;
+      return aY - bY;
+    });
+  }, [layout]);
 
   return (
     <div className="zd:flex zd:flex-1 zd:h-full zd:relative">
+      {/* Left Sidebar - Layers Panel */}
+      {!readonly && showLayersPanel && (
+        <div className="zd:w-[280px] zd:flex-shrink-0 zd:border-r zd:border-border zd:bg-background zd:flex zd:flex-col zd:overflow-hidden">
+          <div className="zd:px-4 zd:py-2.5 zd:border-b zd:border-border zd:bg-muted/50 zd:flex zd:items-center zd:justify-between">
+            <h3 className="zd:text-sm zd:font-semibold">{t("Layers")}</h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowLayersPanel(false)}
+              title={t("Hide Layers")}
+            >
+              <X className="zd:w-4 zd:h-4" />
+            </Button>
+          </div>
+          <div className="zd:flex-1 zd:overflow-y-auto zd:p-2">
+            {layersTree.length === 0 ? (
+              <div className="zd:text-sm zd:text-muted-foreground zd:text-center zd:py-8">
+                {t("No elements")}
+              </div>
+            ) : (
+              <div className="zd:space-y-1">
+                {layersTree.map(({ element, children, isGroup }) => {
+                  const isSelected = selectedElements.has(element.id);
+                  const elementLabel = element.type === "field" 
+                    ? (element.value as string || element.code || element.id)
+                    : element.type === "text"
+                    ? (element.value as string || t("Text"))
+                    : element.type === "reference"
+                    ? (element.referenceField || t("Reference"))
+                    : element.type === "anchor" && isGroup
+                    ? t("Group")
+                    : element.type;
+                  
+                  return (
+                    <div key={element.id} className="zd:space-y-0.5">
+                      <div
+                        className={cn(
+                          "zd:px-2 zd:py-1.5 zd:rounded zd:cursor-pointer zd:flex zd:items-center zd:gap-2 zd:text-sm zd:transition-colors",
+                          isSelected 
+                            ? "zd:bg-primary zd:text-primary-foreground" 
+                            : "zd:hover:bg-muted"
+                        )}
+                        onClick={(e) => {
+                          if (e.ctrlKey || e.metaKey) {
+                            const newSelected = new Set(selectedElements);
+                            if (newSelected.has(element.id)) {
+                              newSelected.delete(element.id);
+                            } else {
+                              newSelected.add(element.id);
+                            }
+                            setSelectedElements(newSelected);
+                          } else if (e.shiftKey) {
+                            // Range selection with Shift key
+                            if (selectedElements.size > 0 && lastSelectedElementId) {
+                              const lastSelected = layout.find(el => el.id === lastSelectedElementId);
+                              if (lastSelected) {
+                                const currentIndex = layersTree.findIndex(l => l.element.id === element.id);
+                                const lastIndex = layersTree.findIndex(l => l.element.id === lastSelected.id);
+                                if (currentIndex !== -1 && lastIndex !== -1) {
+                                  const start = Math.min(currentIndex, lastIndex);
+                                  const end = Math.max(currentIndex, lastIndex);
+                                  const range = layersTree.slice(start, end + 1);
+                                  const rangeIds = new Set(selectedElements);
+                                  range.forEach(l => rangeIds.add(l.element.id));
+                                  setSelectedElements(rangeIds);
+                                  setLastSelectedElementId(element.id);
+                                } else {
+                                  // Fallback: add to selection
+                                  const newSelected = new Set(selectedElements);
+                                  newSelected.add(element.id);
+                                  setSelectedElements(newSelected);
+                                  setLastSelectedElementId(element.id);
+                                }
+                              } else {
+                                // Fallback: add to selection
+                                const newSelected = new Set(selectedElements);
+                                newSelected.add(element.id);
+                                setSelectedElements(newSelected);
+                                setLastSelectedElementId(element.id);
+                              }
+                            } else {
+                              // First selection with Shift - just select this element
+                              setSelectedElements(new Set([element.id]));
+                              setLastSelectedElementId(element.id);
+                            }
+                          } else {
+                            setSelectedElements(new Set([element.id]));
+                            setLastSelectedElementId(element.id);
+                          }
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setSelectedElements(new Set([element.id]));
+                        }}
+                      >
+                        {isGroup ? (
+                          <LayoutGrid className="zd:w-4 zd:h-4 zd:flex-shrink-0" />
+                        ) : (
+                          <Hash className="zd:w-4 zd:h-4 zd:flex-shrink-0" />
+                        )}
+                        <span className="zd:flex-1 zd:truncate">{elementLabel}</span>
+                        {isGroup && (
+                          <span className="zd:text-xs zd:text-muted-foreground">
+                            ({children.length})
+                          </span>
+                        )}
+                      </div>
+                      {isGroup && children.length > 0 && (
+                        <div className="zd:pl-6 zd:space-y-0.5">
+                          {children.map(child => {
+                            const isChildSelected = selectedElements.has(child.id);
+                            const childLabel = child.type === "field" 
+                              ? (child.value as string || child.code || child.id)
+                              : child.type === "text"
+                              ? (child.value as string || t("Text"))
+                              : child.type === "reference"
+                              ? (child.referenceField || t("Reference"))
+                              : child.type;
+                            
+                            return (
+                              <div
+                                key={child.id}
+                                className={cn(
+                                  "zd:px-2 zd:py-1 zd:rounded zd:cursor-pointer zd:flex zd:items-center zd:gap-2 zd:text-xs zd:transition-colors",
+                                  isChildSelected 
+                                    ? "zd:bg-primary/80 zd:text-primary-foreground" 
+                                    : "zd:hover:bg-muted/50"
+                                )}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (e.ctrlKey || e.metaKey) {
+                                    const newSelected = new Set(selectedElements);
+                                    if (newSelected.has(child.id)) {
+                                      newSelected.delete(child.id);
+                                    } else {
+                                      newSelected.add(child.id);
+                                    }
+                                    setSelectedElements(newSelected);
+                                  } else if (e.shiftKey) {
+                                    // Range selection with Shift key
+                                    if (selectedElements.size > 0 && lastSelectedElementId) {
+                                      const lastSelected = layout.find(el => el.id === lastSelectedElementId);
+                                      if (lastSelected) {
+                                        const allChildren = children;
+                                        const currentIndex = allChildren.findIndex(c => c.id === child.id);
+                                        const lastIndex = allChildren.findIndex(c => c.id === lastSelected.id);
+                                        if (currentIndex !== -1 && lastIndex !== -1) {
+                                          const start = Math.min(currentIndex, lastIndex);
+                                          const end = Math.max(currentIndex, lastIndex);
+                                          const range = allChildren.slice(start, end + 1);
+                                          const rangeIds = new Set(selectedElements);
+                                          range.forEach(c => rangeIds.add(c.id));
+                                          setSelectedElements(rangeIds);
+                                          setLastSelectedElementId(child.id);
+                                        } else {
+                                          // Fallback: add to selection
+                                          const newSelected = new Set(selectedElements);
+                                          newSelected.add(child.id);
+                                          setSelectedElements(newSelected);
+                                          setLastSelectedElementId(child.id);
+                                        }
+                                      } else {
+                                        // Fallback: add to selection
+                                        const newSelected = new Set(selectedElements);
+                                        newSelected.add(child.id);
+                                        setSelectedElements(newSelected);
+                                        setLastSelectedElementId(child.id);
+                                      }
+                                    } else {
+                                      // First selection with Shift - just select this child
+                                      setSelectedElements(new Set([child.id]));
+                                      setLastSelectedElementId(child.id);
+                                    }
+                                  } else {
+                                    setSelectedElements(new Set([child.id]));
+                                    setLastSelectedElementId(child.id);
+                                  }
+                                }}
+                                onContextMenu={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setSelectedElements(new Set([child.id]));
+                                }}
+                              >
+                                <Hash className="zd:w-3 zd:h-3 zd:flex-shrink-0" />
+                                <span className="zd:flex-1 zd:truncate">{childLabel}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
       {/* Main Canvas Area */}
       <div className="zd:flex-1 zd:flex zd:flex-col zd:overflow-hidden">
         {/* Top Toolbar - Minimal Design */}
@@ -2472,6 +3394,26 @@ export function PrintTemplateBuilder({
             </>
           )}
           
+          {/* Layers Panel Toggle */}
+          {!readonly && (
+            <>
+              <div className="zd:w-px zd:h-4 zd:bg-border" />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowLayersPanel(!showLayersPanel)}
+                title={showLayersPanel ? t("Hide Layers") : t("Show Layers")}
+              >
+                {showLayersPanel ? (
+                  <ChevronLeft className="zd:w-4 zd:h-4" />
+                ) : (
+                  <ChevronRight className="zd:w-4 zd:h-4" />
+                )}
+                <span>{t("Layers")}</span>
+              </Button>
+            </>
+          )}
+          
           {/* Sidebar Toggle */}
           {!readonly && (
             <>
@@ -2530,7 +3472,17 @@ export function PrintTemplateBuilder({
               if (elementDiv) {
                 const elementId = elementDiv.getAttribute('data-element-id');
                 if (elementId && elementId !== selectingAnchorFor) {
+                  const element = layout.find(el => el.id === elementId);
+                  if (element) {
+                    // If hovering over a group child, show hover on the parent group instead
+                    if (element.group) {
+                      setHoveredAnchorElementId(element.group);
+                    } else {
                   setHoveredAnchorElementId(elementId);
+                    }
+                  } else {
+                    setHoveredAnchorElementId(null);
+                  }
                 } else {
                   setHoveredAnchorElementId(null);
                 }
@@ -2676,7 +3628,26 @@ export function PrintTemplateBuilder({
                 </div>
               </div>
             )}
-            {layout.map((element, index) => renderElement(element, index))}
+            {/* Render groups first (groups render their children inside), then regular elements */}
+            {layout
+              .filter(el => {
+                // Render groups (anchor elements with children) first
+                const isGroup = el.type === "anchor" && layout.some(child => child.group === el.id);
+                return isGroup;
+              })
+              .map((element, index) => (
+                <TemplateElement key={element.id} element={element} index={index} />
+              ))}
+            {/* Render elements that are not groups and not group children */}
+            {layout
+              .filter(el => {
+                const isGroup = el.type === "anchor" && layout.some(child => child.group === el.id);
+                const isGroupChild = !!el.group;
+                return !isGroup && !isGroupChild;
+              })
+              .map((element, index) => (
+                <TemplateElement key={element.id} element={element} index={index} />
+              ))}
           </div>
           </div>
         </div>
@@ -2721,6 +3692,25 @@ export function PrintTemplateBuilder({
           {selectedElements.size > 0 ? (
             selectedElements.size > 1 ? (
               // Multiple elements selected - show bulk actions
+              (() => {
+                // Check if any selected elements are groups (type === "anchor" with children)
+                const selectedElementsList = Array.from(selectedElements).map(id => layout.find(el => el.id === id)).filter(Boolean) as PrintTemplateElement[];
+                const hasGroups = selectedElementsList.some(el => {
+                  const isGroup = el.type === "anchor" && layout.some(child => child.group === el.id);
+                  return isGroup;
+                });
+                const hasNonGroups = selectedElementsList.some(el => {
+                  const isGroup = el.type === "anchor" && layout.some(child => child.group === el.id);
+                  return !isGroup;
+                });
+                const hasMixedSelection = hasGroups && hasNonGroups;
+                
+                // Get all selected group IDs
+                const selectedGroupIds = selectedElementsList
+                  .filter(el => el.type === "anchor" && layout.some(child => child.group === el.id))
+                  .map(el => el.id);
+                
+                return (
               <div className="zd:space-y-3">
                 <div className="zd:space-y-1">
                   <label className="zd:text-sm zd:font-medium">{t("Selected Elements")}</label>
@@ -2728,6 +3718,52 @@ export function PrintTemplateBuilder({
                     {selectedElements.size} {selectedElements.size === 1 ? t("element") : t("elements")} {t("selected")}
                   </div>
                 </div>
+                    {hasMixedSelection ? (
+                      // Mixed selection: show only ungroup menu
+                      selectedGroupIds.length > 0 && (
+                        <Button
+                          variant="outline"
+                          className="zd:w-full"
+                          onClick={() => {
+                            // Ungroup all selected groups
+                            selectedGroupIds.forEach(groupId => {
+                              handleUngroupElements(groupId);
+                            });
+                          }}
+                        >
+                          <LayoutGrid className="zd:w-4 zd:h-4" />
+                          <span>{t("Ungroup")} {selectedGroupIds.length} {selectedGroupIds.length === 1 ? t("Group") : t("Groups")}</span>
+                        </Button>
+                      )
+                    ) : hasGroups ? (
+                      // Only groups selected: show ungroup menu
+                      selectedGroupIds.length > 0 && (
+                        <Button
+                          variant="outline"
+                          className="zd:w-full"
+                          onClick={() => {
+                            // Ungroup all selected groups
+                            selectedGroupIds.forEach(groupId => {
+                              handleUngroupElements(groupId);
+                            });
+                          }}
+                        >
+                          <LayoutGrid className="zd:w-4 zd:h-4" />
+                          <span>{t("Ungroup")} {selectedGroupIds.length} {selectedGroupIds.length === 1 ? t("Group") : t("Groups")}</span>
+                        </Button>
+                      )
+                    ) : (
+                      // Only non-groups selected: show group menu
+                      <Button
+                        variant="outline"
+                        className="zd:w-full"
+                        onClick={handleGroupElements}
+                        disabled={selectedElements.size < 2}
+                      >
+                        <LayoutGrid className="zd:w-4 zd:h-4" />
+                        <span>{t("Group")}</span>
+                      </Button>
+                    )}
                 <Button
                   variant="destructive"
                   className="zd:w-full"
@@ -2745,11 +3781,16 @@ export function PrintTemplateBuilder({
                   <span>{t("Delete")} {selectedElements.size} {selectedElements.size === 1 ? t("Element") : t("Elements")}</span>
                 </Button>
               </div>
+                );
+              })()
             ) : (
               // Single element selected - show customization
               Array.from(selectedElements).map((id) => {
                 const element = layout.find((el) => el.id === id);
                 if (!element) return null;
+                
+                // Check if element is a group child
+                const isGroupChild = !!element.group;
                 
                 const mergeStyleUpdate = (styleUpdates: Partial<PrintTemplateElement["style"]> = {}) => {
                   const newStyle = { ...(element.style || {}) };
@@ -3082,6 +4123,11 @@ export function PrintTemplateBuilder({
                 {element.transform && (
                   <div className="zd:space-y-1">
                     <label className="zd:text-sm zd:font-medium">{t("Position & Size")}</label>
+                    {isGroupChild && (
+                      <p className="zd:text-xs zd:text-muted-foreground zd:italic">
+                        {t("Position is managed by the group")}
+                      </p>
+                    )}
                     <div className="zd:grid zd:grid-cols-2 zd:gap-2">
                       <div>
                         <label className="zd:text-xs zd:text-muted-foreground">X</label>
@@ -3096,6 +4142,8 @@ export function PrintTemplateBuilder({
                               },
                             })
                           }
+                          disabled={isGroupChild}
+                          readOnly={isGroupChild}
                         />
                       </div>
                       <div>
@@ -3111,6 +4159,8 @@ export function PrintTemplateBuilder({
                               },
                             })
                           }
+                          disabled={isGroupChild}
+                          readOnly={isGroupChild}
                         />
                       </div>
                       <div>
@@ -3147,15 +4197,73 @@ export function PrintTemplateBuilder({
                   </div>
                 )}
 
+                {/* Group/Ungroup */}
+                {(() => {
+                  const isGroup = element.type === "anchor" && layout.some(el => el.group === element.id);
+                  const groupChildren = isGroup ? layout.filter(el => el.group === element.id) : [];
+                  const belongsToGroup = !!element.group;
+                  
+                  if (isGroup || belongsToGroup) {
+                    return (
+                      <div className="zd:space-y-1 zd:border-t zd:border-border zd:pt-3">
+                        <label className="zd:text-sm zd:font-medium">{t("Group")}</label>
+                        {isGroup && (
+                          <>
+                            <div className="zd:text-xs zd:text-muted-foreground zd:mb-2">
+                              {t("This is a group containing")} {groupChildren.length} {t("element(s)")}
+                            </div>
+                            <div className="zd:text-xs zd:text-muted-foreground zd:mb-2 zd:font-mono zd:bg-muted/50 zd:p-1 zd:rounded">
+                              {t("Group ID")}: {element.id}
+                            </div>
+                          </>
+                        )}
+                        {belongsToGroup && (
+                          <>
+                            <div className="zd:text-xs zd:text-muted-foreground zd:mb-2">
+                              {t("This element belongs to a group")}
+                            </div>
+                            <div className="zd:text-xs zd:text-muted-foreground zd:mb-2 zd:font-mono zd:bg-muted/50 zd:p-1 zd:rounded">
+                              {t("Group ID")}: {element.group}
+                            </div>
+                          </>
+                        )}
+                        {(isGroup || belongsToGroup) && (
+                          <Button
+                            variant="outline"
+                            className="zd:w-full"
+                            onClick={() => {
+                              if (isGroup) {
+                                handleUngroupElements(element.id);
+                              } else if (element.group) {
+                                handleUngroupElements(element.group);
+                              }
+                            }}
+                          >
+                            <Grid3x3 className="zd:w-4 zd:h-4" />
+                            <span>{t("Ungroup")}</span>
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
                 {/* Anchor Settings */}
                 <div className="zd:space-y-1 zd:border-t zd:border-border zd:pt-3">
                   <label className="zd:text-sm zd:font-medium">{t("Anchor")}</label>
+                  {isGroupChild && (
+                    <p className="zd:text-xs zd:text-muted-foreground zd:italic">
+                      {t("Anchor settings are managed by the group")}
+                    </p>
+                  )}
                   <div className="zd:space-y-2 zd:mt-2">
                     <div className="zd:space-y-1">
                       <label className="zd:text-xs zd:text-muted-foreground">{t("Anchor To")}</label>
                       <div className="zd:flex zd:gap-2">
                         <Select
                           value={element.anchorTo || ""}
+                          disabled={isGroupChild}
                           onChange={(value) => {
                             if (value === "") {
                               handleUpdateElement(id, { 
@@ -3193,6 +4301,7 @@ export function PrintTemplateBuilder({
                           <Button
                           variant={selectingAnchorFor === id ? "solid" : "outline"}
                             size="sm"
+                            disabled={isGroupChild}
                             onClick={() => {
                             if (selectingAnchorFor === id) {
                               setSelectingAnchorFor(null);
@@ -3202,7 +4311,7 @@ export function PrintTemplateBuilder({
                               setHoveredAnchorElementId(null);
                             }
                             }}
-                          title={t("Click on canvas to select anchor")}
+                          title={isGroupChild ? t("Anchor settings are managed by the group") : t("Click on canvas to select anchor")}
                           >
                           <Eye className="zd:w-4 zd:h-4" />
                           </Button>
@@ -3235,6 +4344,8 @@ export function PrintTemplateBuilder({
                                   const currentOffset = typeof element.anchorOffset === "object" ? element.anchorOffset : { x: 0, y: typeof element.anchorOffset === "number" ? element.anchorOffset : 0 };
                                   handleUpdateElement(id, { anchorOffset: { x: Number(e.target.value) || 0, y: currentOffset.y } });
                                 }}
+                                disabled={isGroupChild}
+                                readOnly={isGroupChild}
                               />
                             </div>
                             <div>
@@ -3246,6 +4357,8 @@ export function PrintTemplateBuilder({
                                   const currentOffset = typeof element.anchorOffset === "object" ? element.anchorOffset : { x: 0, y: typeof element.anchorOffset === "number" ? element.anchorOffset : 0 };
                                   handleUpdateElement(id, { anchorOffset: { x: currentOffset.x, y: Number(e.target.value) || 0 } });
                                 }}
+                                disabled={isGroupChild}
+                                readOnly={isGroupChild}
                               />
                             </div>
                           </div>

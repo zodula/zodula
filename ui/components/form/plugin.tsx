@@ -16,7 +16,8 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
         fieldKey,
         formData,
         docId,
-        fieldPath
+        fieldPath,
+        doctype
     }: {
         fieldOptions: Zodula.Field;
         model?: any;
@@ -29,6 +30,7 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
         formData?: any;
         docId: string;
         fieldPath?: string;
+        doctype?: Zodula.DoctypeConfig;
     }) => React.ReactNode;
 
     public cellRender: ({
@@ -68,7 +70,8 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
             fieldKey,
             formData,
             docId,
-            fieldPath
+            fieldPath,
+            doctype
         }: {
             fieldOptions: Zodula.Field;
             model?: any;
@@ -81,6 +84,7 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
             formData?: any;
             docId: string;
             fieldPath?: string;
+            doctype?: Zodula.DoctypeConfig;
         }) => React.ReactNode;
         cellRender?: ({
             fieldOptions,

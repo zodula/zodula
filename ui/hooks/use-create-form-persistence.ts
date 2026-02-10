@@ -20,7 +20,6 @@ interface CreateFormPersistenceState {
 
 // Create the Zustand store with persistence to localStorage
 export const useCreateFormPersistenceStore = create<CreateFormPersistenceState>()(
-  persist(
     (set, get) => ({
       persistedForms: {},
 
@@ -57,10 +56,7 @@ export const useCreateFormPersistenceStore = create<CreateFormPersistenceState>(
       clearAll: () => {
         set({ persistedForms: {} });
       },
-    }),
-    {
-      name: 'zodula-create-form-persistence', // localStorage key
-    }
-  )
+    })
 );
+
 

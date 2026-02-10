@@ -105,7 +105,7 @@ export function useDoc<DT extends Zodula.DoctypeName = Zodula.DoctypeName, TDoc 
 
     useEffect(() => {
         loadDoc();
-    }, [...deps, effectiveId, doctype]);
+    }, [...deps, effectiveId, doctype, id]);
 
     const reload = useCallback(async () => {
         if (!doctype || !effectiveId) return null;

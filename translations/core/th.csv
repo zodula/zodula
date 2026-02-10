@@ -5,7 +5,10 @@
 "Key", "คีย์"
 "Translation", "การแปล"
 "Create", "สร้าง"
-"Refresh", "รีเฟรช"
+"Refresh", "รีเฟรช",
+"Save", "บันทึก",
+"Submit", "เสนอ",
+"Update", "อัพเดท",
 "Updated At", "อัพเดทเมื่อ"
 "Updated By", "อัพเดทโดย"
 "App", "แอพ"
@@ -67,4 +70,5 @@
 "Draft", "ร่าง"
 "Submitted", "เสนอ"
 "Cancelled", "ยกเลิก"
-"Deleted", "ลบ"
+"Deleted", "ลบ",
+"Action", "การกระทำ"

@@ -72,27 +72,15 @@ export class ZodulaDoctypeHelper {
             const config = fields[fieldName as keyof typeof fields]
             if (!config) continue
             let value = doc[fieldName as keyof typeof doc] as any
-
+            
             if (config.default !== undefined && (value === undefined || value === null) && !config.plain) {
                 value = ZodulaDoctypeHelper.formatValue(config.default as string)
             }
 
-            // id cannot contain "/" or any special characters
-            if (fieldName === "id" && (value?.includes("/"))) {
-                throw new ErrorWithCode(`ID cannot contain "/" or any special characters`, {
-                    status: 400,
-                })
-            }
-            // id cannot start with "-"
-            if (fieldName === "id" && value?.startsWith("-")) {
-                throw new ErrorWithCode(`ID cannot start with "-"`, {
-                    status: 400,
-                })
-            }
-
             // if input can parse to Date
-            if (["Date", "DateTime", "Time"].includes(config.type as any)) {
+            if (["Date", "DateTime", "Time"].includes(config.type as any) && value !== null) {
                 const fieldType = config.type
+                
                 if (value === "NOW()") {
                     value = format(new Date(), "yyyy-MM-dd HH:mm:ss")
                 } else if (value === "TODAY()") {
@@ -253,13 +241,13 @@ export class ZodulaDoctypeHelper {
         let can = await ZodulaDoctypeHelper.can(doctypeName, action, data?.owner === user.id, userRoles, bypass)
 
         if(can && (action !== "can_get" && action !== "can_select")) {
-            if(!userOrganizations.includes(data?.organization || "SYS")) {
+            if(!userOrganizations.includes(data?.organization || "System Panel")) {
                 can = false
             }
             if(userRoles.includes("System Admin")) {
                 can = true
             }
-            if(doctype?.name === "zodula__Organization" && data?.organization === "SYS") {
+            if(doctype?.name === "zodula__Organization" && data?.organization === "System Panel") {
                 can = true
             }
         }
@@ -280,7 +268,7 @@ export class ZodulaDoctypeHelper {
 
     static async getChildRecords<TN extends Zodula.DoctypeName = Zodula.DoctypeName>(id: string, child: DoctypeChild, options: GETOptions<TN>) {
         const db = Database("main")
-        const ids = await db.all(`SELECT id FROM "${child.childDoctype}" WHERE "${child.childFieldName}" = '${id}' ORDER BY "idx" ASC`) as any[]
+        const ids = await db.all(`SELECT id FROM "${child.childDoctype}" WHERE "parentid" = '${id}' AND "parentype" = '${child.parentDoctype}' AND "parentfield" = '${child.parentFieldName}' ORDER BY "idx" ASC`) as any[]
         const records = await Promise.all(ids.map(async (doc) => {
             return await zodula.doctype(child.childDoctype).get(doc?.id as string).bypass(options.bypass)
         }))
@@ -322,8 +310,8 @@ export class ZodulaDoctypeHelper {
         //     })
         // }
 
-        if(doctype.is_global == 1 && input.organization !== "SYS") {
-            throw new ErrorWithCode(`Global doctype can only be created in SYS organization`, {
+        if(doctype.is_global == 1 && input.organization !== "System Panel") {
+            throw new ErrorWithCode(`Global doctype can only be created in System Panel organization`, {
                 status: 400,
             })
         }
@@ -377,6 +365,9 @@ export class ZodulaDoctypeHelper {
 
         // Validate individual unique fields
         for (const fieldName of individualUniqueFields) {
+            if(fieldName === "id"){
+                continue
+            }
             const value = input[fieldName as keyof typeof input]
             if (value === undefined || value === null || value === "") {
                 continue // Skip empty values (they won't violate uniqueness)

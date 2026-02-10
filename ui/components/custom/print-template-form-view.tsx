@@ -140,9 +140,41 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
       
       // Load items
       if (doc.items && Array.isArray(doc.items) && doc.items.length > 0) {
-        const elements = doc.items
-          .sort((a: any, b: any) => (a.idx || 0) - (b.idx || 0))
-          .map((item: any) => isPrintTemplate ? itemToElement(item) : letterHeadItemToElement(item));
+        const items = doc.items.sort((a: any, b: any) => (a.idx || 0) - (b.idx || 0));
+        const elements = items.map((item: any) => isPrintTemplate ? itemToElement(item) : letterHeadItemToElement(item));
+        
+        // Fix group references: map group codes to group database ids
+        // Create a mapping from code to database id for group elements (type: "anchor")
+        const groupCodeToId = new Map<string, string>();
+        elements.forEach((el) => {
+          if (el.type === "anchor" && el.code) {
+            // Map code to database id
+            groupCodeToId.set(el.code, el.id);
+            // Also map id to id (for backward compatibility)
+            groupCodeToId.set(el.id, el.id);
+          }
+        });
+        
+        // Update children's group references from code to database id
+        elements.forEach((el) => {
+          if (el.group) {
+            // Try to find the group by matching code
+            const groupId = groupCodeToId.get(el.group);
+            if (groupId) {
+              // Update group reference to use the database id
+              el.group = groupId;
+            } else {
+              // If not found by code, try to find by id (backward compatibility)
+              const groupElement = elements.find((g) => 
+                g.type === "anchor" && g.id === el.group
+              );
+              if (groupElement) {
+                el.group = groupElement.id;
+              }
+            }
+          }
+        });
+        
         setLayout(elements);
         initialLayoutRef.current = JSON.parse(JSON.stringify(elements));
       } else {
@@ -205,7 +237,7 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
     setIsSaving(true);
     try {
       if (docId) {
-        // Update existing doc
+        // Update existing doc - include items in payload so parent fields auto-populate
         const payload: any = { ...formData };
         
         // Handle guided background if it's a File (new upload) - for both Print Template and Letter Head
@@ -213,86 +245,31 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
           payload.guided_background = guidedBackground;
         }
         
-        await zodula.doc.update_doc(doctype, docId, payload);
-
-        // Save items
-        {
-          // Get current items
-          const filterKey = isPrintTemplate ? "print_template" : "letter_head";
-          const { docs: currentItems } = await zodula.doc.select_docs(itemDoctype, {
-            filters: [[filterKey as any, "=", docId]],
-            limit: 10000,
-            sort: "idx",
-            order: "asc",
-          });
-
-          const currentItemIds = new Set(currentItems.map((item) => item.id));
-          const newItemIds = new Set(layout.map((el) => el.id));
-
-          // Delete removed items (only items that have been saved to the database have an id)
-          const itemsToDelete = currentItems.filter((item) => item.id && !newItemIds.has(item.id));
-          if (itemsToDelete.length > 0) {
-            // Use bulk delete if multiple items, otherwise single delete
-            if (itemsToDelete.length === 1 && itemsToDelete[0]?.id) {
-              await zodula.doc.delete_doc(itemDoctype, itemsToDelete[0].id);
-            } else {
-              await zodula.doc.delete_docs(itemDoctype, itemsToDelete.map(item => item.id).filter((id): id is string => !!id));
-            }
+        // Create a map from group id to group code for reference conversion
+        const groupIdToCode = new Map<string, string>();
+        layout.forEach((el) => {
+          // Groups are elements with type "anchor" (or could be identified by having children)
+          if (el.type === "anchor" && el.code) {
+            groupIdToCode.set(el.id, el.code);
           }
-
-          // Create or update items
-          const itemsToCreate: any[] = [];
-          const itemsToUpdate: Array<{ id: string; payload: any }> = [];
-
-          layout.forEach((element, idx) => {
-            const payload = isPrintTemplate
-              ? elementToItemPayload(element, docId, idx)
-              : elementToLetterHeadItemPayload(element, docId, idx);
-            if (currentItemIds.has(element.id)) {
-              // Update existing item - remove the parent reference field
-              const key = isPrintTemplate ? "print_template" : "letter_head";
-              const updatePayload: any = { ...payload };
-              delete updatePayload[key];
-              itemsToUpdate.push({ id: element.id, payload: updatePayload });
-            } else {
-              // Create new item
-              itemsToCreate.push(payload);
-            }
-          });
-
-          // Create new items
-          if (itemsToCreate.length > 0) {
-            const created = await zodula.doc.create_docs(itemDoctype, itemsToCreate);
-            // Update layout with new IDs
-            if (created && created.length > 0) {
-              let newItemCounter = 0;
-              const finalLayout = layout.map((el) => {
-                if (!currentItemIds.has(el.id)) {
-                  if (newItemCounter < created.length) {
-                    const newId = created[newItemCounter]?.id;
-                    if (newId) {
-                      newItemCounter++;
-                      return { ...el, id: newId };
-                    }
-                  }
-                }
-                return el;
-              });
-              setLayout(finalLayout);
-            }
-          }
-
-          // Update existing items
-          for (const { id: itemId, payload } of itemsToUpdate) {
-            await zodula.doc.update_doc(itemDoctype, itemId, payload);
+        });
+        
+        // Convert layout elements to item payloads and include in main payload
+        // Parent fields (parentid, parenttype, parentfield) will be auto-populated by the server
+        // Convert group references from id to code before saving
+        payload.items = layout.map((element, idx) => {
+          // If element has a group reference, convert it from id to code
+          const elementToSave = { ...element };
+          if (elementToSave.group && groupIdToCode.has(elementToSave.group)) {
+            elementToSave.group = groupIdToCode.get(elementToSave.group)!;
           }
           
-          // If layout is empty, ensure all items are deleted and state is updated
-          if (layout.length === 0 && currentItems.length > 0) {
-            // All items should have been deleted above, but ensure state is cleared
-            setLayout([]);
-          }
-        }
+          return isPrintTemplate
+            ? elementToItemPayload(elementToSave, docId, idx)
+            : elementToLetterHeadItemPayload(elementToSave, docId, idx);
+        });
+        
+        await zodula.doc.update_doc(doctype, docId, payload);
 
         await reload();
         if (onSave) onSave();
@@ -305,17 +282,33 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
           payload.guided_background = guidedBackground;
         }
         
+        // Create a map from group id to group code for reference conversion
+        const groupIdToCode = new Map<string, string>();
+        layout.forEach((el) => {
+          // Groups are elements with type "anchor" (or could be identified by having children)
+          if (el.type === "anchor" && el.code) {
+            groupIdToCode.set(el.id, el.code);
+          }
+        });
+        
+        // Include items in payload for new doc creation - parent fields will be auto-populated
+        // Convert group references from id to code before saving
+        if (layout.length > 0) {
+          payload.items = layout.map((element, idx) => {
+            // If element has a group reference, convert it from id to code
+            const elementToSave = { ...element };
+            if (elementToSave.group && groupIdToCode.has(elementToSave.group)) {
+              elementToSave.group = groupIdToCode.get(elementToSave.group)!;
+            }
+            
+            return isPrintTemplate
+              ? elementToItemPayload(elementToSave, "", idx) // docId not needed for new docs
+              : elementToLetterHeadItemPayload(elementToSave, "", idx);
+          });
+        }
+        
         const created = await zodula.doc.create_doc(doctype, payload);
         if (created) {
-          // Save items
-          if (layout.length > 0) {
-            const itemsToCreate = layout.map((element, idx) =>
-              isPrintTemplate
-                ? elementToItemPayload(element, created.id, idx)
-                : elementToLetterHeadItemPayload(element, created.id, idx)
-            );
-            await zodula.doc.create_docs(itemDoctype, itemsToCreate);
-          }
           replace(`/desk/${org}/doctypes/${doctype}/form/${created.id}`);
           if (onSave) onSave();
         }

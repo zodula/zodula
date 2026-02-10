@@ -32,7 +32,6 @@ export default $doctype<"zodula__Workspace">({
         type: "Reference Table",
         label: "Workspace Items",
         reference: "zodula__Workspace Item",
-        reference_field: "workspace",
         required: 0
     }
 }, {

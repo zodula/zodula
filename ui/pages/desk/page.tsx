@@ -91,7 +91,7 @@ export default function DeskPage() {
         globalSetting?.id || "",
         "logo",
         (globalSetting?.logo as string) || "",
-        "SYS"
+        "System Panel"
       ) + "?w=40&h=40"
     : "/public/zodula/zodula-logo.png";
 
@@ -130,11 +130,11 @@ export default function DeskPage() {
           {/* Organization List */}
           <div className="zd:space-y-3">
             {organizations.map((org) => {
-              const isSelected = selectedOrgId === org.id;
+              const isSelected = selectedOrgId === org?.id;
               return (
                 <button
-                  key={org.id}
-                  onClick={() => handleSelectOrganization(org.id)}
+                  key={org?.id}
+                  onClick={() => handleSelectOrganization(org?.id)}
                   className={cn(
                     "zd:w-full zd:flex zd:items-center zd:gap-4 zd:p-4 zd:rounded-lg zd:border zd:bg-background",
                     "zd:hover:bg-accent zd:hover:border-accent zd:transition-colors zd:cursor-pointer",
@@ -147,10 +147,10 @@ export default function DeskPage() {
                   <BuildingIcon className="zd:w-5 zd:h-5 zd:text-muted-foreground zd:flex-shrink-0" />
                   <div className="zd:flex-1 zd:min-w-0">
                     <div className="zd:font-medium zd:text-foreground zd:truncate">
-                      {org.name || org.id}
+                      {org?.name || org?.id}
                     </div>
                     <div className="zd:text-sm zd:text-muted-foreground">
-                      {t(tierLevelLabels[org.tier_level as keyof typeof tierLevelLabels] || "Free")}
+                      {t(tierLevelLabels[org?.tier_level as keyof typeof tierLevelLabels] || "Free")}
                     </div>
                   </div>
                   <ChevronRight className="zd:w-5 zd:h-5 zd:text-muted-foreground zd:flex-shrink-0" />

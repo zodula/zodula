@@ -100,7 +100,6 @@ const InlineFieldEditor = ({ field, value, onChange, formData, docId, readonly, 
             value={value}
             onChange={handleFieldChange}
             hideFormControl={true}
-            className="zd:h-8"
             formData={formData}
             required={field.required === 1}
             readonly={fieldReadonly}
@@ -323,6 +322,7 @@ export const ReferenceTablePlugin = new FormPlugin({
                             .filter((field): field is string => !!field);
                         const fetchFields = [...new Set(rootFields)];
 
+
                         // Fetch the referenced document with all needed fields
                         await fetchDoc(
                             sourceField.reference as Zodula.DoctypeName,
@@ -340,14 +340,68 @@ export const ReferenceTablePlugin = new FormPlugin({
                             const fetchedDoc = cachedDoc.data;
                             // Update all dependent fields
                             for (const dependentField of dependentFields) {
+                                // Get the field config for the field that will RECEIVE the value (the field in the child doctype)
+                                const receivingFieldConfig = fields.find(f => f.name === dependentField.fieldName);
+                                
+                                if (!receivingFieldConfig) {
+                                    continue;
+                                }
+                                
                                 // Support dot notation for nested fields
                                 const fetchedValue = getNestedValue(
                                     fetchedDoc,
                                     dependentField.fetchPath
                                 );
 
-                                if (fetchedValue !== undefined && fetchedValue !== null) {
-                                    // Update the dependent field in the row
+                                // Check if the RECEIVING field is an Image Preview field that should construct a file path
+                                const isImagePreview = receivingFieldConfig.type === "Image Preview";
+                                
+                                console.log(`[Reference Table] Field type check:`, {
+                                    fieldName: dependentField.fieldName,
+                                    fieldType: receivingFieldConfig.type,
+                                    isImagePreview,
+                                    fetchedValue,
+                                    fetchPath: dependentField.fetchPath
+                                });
+                                
+                                if (isImagePreview && fetchedValue !== undefined && fetchedValue !== null && fetchedValue !== "") {
+                                    // Construct file path: /files/<parent_organization>/<referenced_doctype>/<referenced_id>/<field_name>/<field_value>
+                                    // fetchPath might be nested like "customer.logo" or just "logo"
+                                    const fetchPathParts = dependentField.fetchPath.split('.');
+                                    const parentFieldName = fetchPathParts[fetchPathParts.length - 1];
+                                    const organization = props.formData?.organization || "System Panel";
+                                    
+                                    // If fetchedValue is already a full path starting with /files/, use it as-is
+                                    // Otherwise, construct the path
+                                    let filePath: string;
+                                    if (typeof fetchedValue === 'string' && fetchedValue.startsWith('/files/')) {
+                                        filePath = fetchedValue;
+                                    } else {
+                                        // Extract just the filename if it's a full path or URL
+                                        const filename = typeof fetchedValue === 'string' 
+                                            ? fetchedValue.split('/').pop() || fetchedValue
+                                            : String(fetchedValue);
+                                        filePath = `/files/${organization}/${sourceField.reference}/${value}/${parentFieldName}/${filename}`;
+                                    }
+                                    
+                                    console.log(`[Reference Table] ✅ Constructing Image Preview file path:`, {
+                                        fieldName: dependentField.fieldName,
+                                        organization,
+                                        referencedDoctype: sourceField.reference,
+                                        referencedId: value,
+                                        parentFieldName,
+                                        fetchedValue,
+                                        filePath
+                                    });
+                                    
+                                    updatedRow[dependentField.fieldName] = filePath;
+                                } else if (fetchedValue !== undefined && fetchedValue !== null) {
+                                    // Regular field update (for non-Image Preview fields)
+                                    console.log(`[Reference Table] Regular field update (not Image Preview):`, {
+                                        fieldName: dependentField.fieldName,
+                                        fieldType: receivingFieldConfig.type,
+                                        fetchedValue
+                                    });
                                     updatedRow[dependentField.fieldName] = fetchedValue;
                                 }
                             }
@@ -409,6 +463,14 @@ export const ReferenceTablePlugin = new FormPlugin({
 
             const newTableData = [...tableData];
             newTableData[rowIndex] = updatedRow;
+            
+            // Trigger parent form scripts with nested field path (e.g., "tax_and_charges.rate")
+            const nestedFieldChangeHandler = (props as any).onNestedFieldChange;
+            if (nestedFieldChangeHandler && props.fieldKey) {
+                const nestedFieldPath = `${props.fieldKey}.${fieldName}`;
+                await nestedFieldChangeHandler(nestedFieldPath, value, tableData[rowIndex]?.[fieldName], rowIndex);
+            }
+            
             props.onChange?.(newTableData);
         };
 
@@ -478,7 +540,7 @@ export const ReferenceTablePlugin = new FormPlugin({
         });
 
         const handleEditRow = async (index: number, rowData: any) => {
-            if (props.readonly || !doctypeDoc) return;
+            if (!doctypeDoc) return;
 
             // Create a form component for editing the row
             const EditRowDialog = ({ isOpen, onClose, initialData }: { isOpen: boolean; onClose: (result?: any) => void; initialData?: any }) => {
@@ -604,11 +666,129 @@ export const ReferenceTablePlugin = new FormPlugin({
                     // Get old value before updating
                     const oldValue = dialogFormData[fieldName];
                     
-                    // Update dialog form
-                    handleChange(fieldName, value);
-
                     // Create updated form data for script context
                     let updatedFormData = { ...dialogFormData, [fieldName]: value };
+
+                    // Handle fetch_from: Find all fields that depend on this field
+                    const dependentFields: Array<{ fieldName: string; fetchPath: string }> = [];
+
+                    // Find all fields that have fetch_from pointing to the changed field
+                    fields.forEach((field) => {
+                        if (
+                            field.fetch_from &&
+                            field.fetch_from.startsWith(fieldName + ".")
+                        ) {
+                            // Extract the path after the source field (e.g., "product_name" from "product.product_name")
+                            const fetchPath = field.fetch_from.substring(
+                                fieldName.length + 1
+                            );
+                            dependentFields.push({
+                                fieldName: field.name || "",
+                                fetchPath: fetchPath,
+                            });
+                        }
+                    });
+
+                    // Fetch data for dependent fields if the value is not empty
+                    if (dependentFields.length > 0 && value) {
+                        const sourceField = fields.find(f => f.name === fieldName);
+
+                        // Handle Reference field type - need to fetch the referenced document
+                        if (sourceField?.reference) {
+                            try {
+                                // Collect all unique root fields to fetch in one call
+                                const rootFields = dependentFields
+                                    .map((df) => {
+                                        const pathParts = df.fetchPath.split(".");
+                                        return pathParts[0]; // Get the root field name
+                                    })
+                                    .filter((field): field is string => !!field);
+                                const fetchFields = [...new Set(rootFields)];
+
+                                // Fetch the referenced document with all needed fields
+                                await fetchDoc(
+                                    sourceField.reference as Zodula.DoctypeName,
+                                    value,
+                                    fetchFields
+                                );
+
+                                // Get the fetched document from the cache
+                                const cachedDoc = getDoc(
+                                    sourceField.reference as Zodula.DoctypeName,
+                                    value
+                                );
+
+                                if (cachedDoc?.data) {
+                                    const fetchedDoc = cachedDoc.data;
+                                    // Update all dependent fields
+                                    for (const dependentField of dependentFields) {
+                                        // Get the field config for the field that will RECEIVE the value (the field in the child doctype)
+                                        const receivingFieldConfig = fields.find(f => f.name === dependentField.fieldName);
+                                        
+                                        if (!receivingFieldConfig) {
+                                            continue;
+                                        }
+                                        
+                                        // Support dot notation for nested fields
+                                        const fetchedValue = getNestedValue(
+                                            fetchedDoc,
+                                            dependentField.fetchPath
+                                        );
+
+                                        // Check if the RECEIVING field is an Image Preview field that should construct a file path
+                                        const isImagePreview = receivingFieldConfig.type === "Image Preview";
+                                        
+                                        if (isImagePreview && fetchedValue !== undefined && fetchedValue !== null && fetchedValue !== "") {
+                                            // Construct file path: /files/<parent_organization>/<referenced_doctype>/<referenced_id>/<field_name>/<field_value>
+                                            // fetchPath might be nested like "customer.logo" or just "logo"
+                                            const fetchPathParts = dependentField.fetchPath.split('.');
+                                            const parentFieldName = fetchPathParts[fetchPathParts.length - 1];
+                                            const organization = props.formData?.organization || "System Panel";
+                                            
+                                            // If fetchedValue is already a full path starting with /files/, use it as-is
+                                            // Otherwise, construct the path
+                                            let filePath: string;
+                                            if (typeof fetchedValue === 'string' && fetchedValue.startsWith('/files/')) {
+                                                filePath = fetchedValue;
+                                            } else {
+                                                // Extract just the filename if it's a full path or URL
+                                                const filename = typeof fetchedValue === 'string' 
+                                                    ? fetchedValue.split('/').pop() || fetchedValue
+                                                    : String(fetchedValue);
+                                                filePath = `/files/${organization}/${sourceField.reference}/${value}/${parentFieldName}/${filename}`;
+                                            }
+                                            
+                                            updatedFormData[dependentField.fieldName] = filePath;
+                                            handleChange(dependentField.fieldName, filePath);
+                                        } else if (fetchedValue !== undefined && fetchedValue !== null) {
+                                            // Regular field update (for non-Image Preview fields)
+                                            updatedFormData[dependentField.fieldName] = fetchedValue;
+                                            handleChange(dependentField.fieldName, fetchedValue);
+                                        }
+                                    }
+                                }
+                            } catch (error) {
+                                console.warn(
+                                    `Failed to fetch data for field ${fieldName} in EditRowDialog:`,
+                                    error
+                                );
+                                // Clear dependent fields if fetch fails
+                                for (const dependentField of dependentFields) {
+                                    updatedFormData[dependentField.fieldName] = null;
+                                    handleChange(dependentField.fieldName, null);
+                                }
+                            }
+                        }
+                    } else if (dependentFields.length > 0 && !value) {
+                        // Clear dependent fields if source field is cleared
+                        for (const dependentField of dependentFields) {
+                            updatedFormData[dependentField.fieldName] = null;
+                            handleChange(dependentField.fieldName, null);
+                        }
+                    }
+
+                    // Update dialog form
+                    handleChange(fieldName, value);
 
                     // Execute UI scripts for the child doctype (similar to table list)
                     if (doctypeDoc?.id) {
@@ -669,7 +849,7 @@ export const ReferenceTablePlugin = new FormPlugin({
                             fields={formFields}
                             values={dialogFormData}
                             onChange={handleFieldChange}
-                            doctype={doctypeDoc?.id as Zodula.DoctypeName}
+                            doctype={doctypeDoc as unknown as Zodula.DoctypeConfig}
                             enableScripts={true}
                             translate
                         />
@@ -784,7 +964,7 @@ export const ReferenceTablePlugin = new FormPlugin({
                                             onDrop={dropZoneProps.onDrop}
                                             data-drop-index={dropZoneProps['data-drop-index']}
                                         >
-                                            <td className="zd:px-2 zd:py-2  no-print">
+                                            <td className="zd:p-0.5  no-print">
                                                 {!props.readonly && (
                                                     <div
                                                         draggable={dragProps.draggable}
@@ -797,7 +977,7 @@ export const ReferenceTablePlugin = new FormPlugin({
                                                     </div>
                                                 )}
                                             </td>
-                                            <td className="zd:px-2 zd:py-2">{index + 1}</td>
+                                            <td className="zd:p-0.5">{index + 1}</td>
                                             {/* <td className="zd:px-2 zd:py-2 no-print">
                                             <FormControl
                                                 field={idField}
@@ -810,14 +990,14 @@ export const ReferenceTablePlugin = new FormPlugin({
                                             />
                                         </td> */}
                                             {displayFields.map((field) => (
-                                                <td key={field.name} className="zd:px-2 zd:py-2">
+                                                <td key={field.name} className="zd:p-0.5">
                                                     <InlineFieldEditor
                                                         docId={props.docId}
                                                         field={field}
                                                         value={row[field.name]}
                                                         onChange={(value) => handleFieldChange(index, field.name, value)}
                                                         formData={{ ...props.formData, ...row }} // Merge parent and row data so dynamic references can resolve from row fields first, then parent fields
-                                                        readonly={field.readonly === 1}
+                                                        readonly={field.readonly === 1 || props.readonly}
                                                         doctype={doctypeDoc?.id}
                                                         onRowUpdate={(fieldName, newValue) => handleRowFieldUpdate(index, fieldName, newValue)}
                                                         fieldPath={`${props.fieldKey}.${index}.${field.name}`} // Pass the nested field path
@@ -826,19 +1006,20 @@ export const ReferenceTablePlugin = new FormPlugin({
                                                     />
                                                 </td>
                                             ))}
-                                            <td className="zd:px-2 zd:py-2 no-print zd:sticky zd:right-0">
-                                                <div className="zd:flex zd:items-center zd:justify-end zd:gap-1 zd:bg-muted zd:rounded-lg zd:border">
+                                            <td className="no-print zd:sticky zd:right-0">
+                                                <div className="zd:h-full zd:flex zd:items-center zd:justify-end zd:gap-1 zd:bg-muted zd:rounded-lg zd:border zd:w-fit">
                                                     <Button
                                                         hideLoading
                                                         variant="ghost"
+                                                        size="sm"
                                                         onClick={() => handleEditRow(index, row)}
-                                                        disabled={props.readonly}
                                                     >
                                                         <Pencil />
                                                     </Button>
                                                     {!props.readonly && (
                                                         <Button
                                                             variant="ghost"
+                                                            size="sm"
                                                             onClick={() => handleRemoveRow(index)}
                                                         >
                                                             <X className="zd:w-4 zd:h-4 zd:text-destructive zd:hover:text-destructive" />

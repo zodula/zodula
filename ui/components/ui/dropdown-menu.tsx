@@ -45,7 +45,7 @@ const DropdownMenuSubContent = React.forwardRef<
   <DropdownMenuPrimitive.SubContent
     ref={ref}
     className={cn(
-      "zd:z-50 zd:min-w-[8rem] zd:overflow-hidden zd:rounded-md zd:border zd:bg-popover zd:p-1 zd:text-popover-foreground zd:shadow-lg zd:data-[state=open]:zd:animate-in zd:data-[state=closed]:zd:animate-out zd:data-[state=closed]:zd:fade-out-0 zd:data-[state=open]:zd:fade-in-0 zd:data-[state=closed]:zd:zoom-out-95 zd:data-[state=open]:zd:zoom-in-95 zd:data-[side=bottom]:zd:slide-in-from-top-2 zd:data-[side=left]:zd:slide-in-from-right-2 zd:data-[side=right]:zd:slide-in-from-left-2 zd:data-[side=top]:zd:slide-in-from-bottom-2",
+      "zd:z-50 zd:min-w-[8rem] zd:overflow-hidden zd:rounded-md zd:border zd:bg-popover zd:text-popover-foreground zd:shadow-lg zd:data-[state=open]:zd:animate-in zd:data-[state=closed]:zd:animate-out zd:data-[state=closed]:zd:fade-out-0 zd:data-[state=open]:zd:fade-in-0 zd:data-[state=closed]:zd:zoom-out-95 zd:data-[state=open]:zd:zoom-in-95 zd:data-[side=bottom]:zd:slide-in-from-top-2 zd:data-[side=left]:zd:slide-in-from-right-2 zd:data-[side=right]:zd:slide-in-from-left-2 zd:data-[side=top]:zd:slide-in-from-bottom-2",
       className
     )}
     {...props}
@@ -63,7 +63,7 @@ const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        "zd:z-50 zd:min-w-[8rem] zd:overflow-hidden zd:rounded-md zd:border zd:bg-popover zd:p-1 zd:text-popover-foreground zd:shadow-md zd:data-[state=open]:zd:animate-in zd:data-[state=closed]:zd:animate-out zd:data-[state=closed]:zd:fade-out-0 zd:data-[state=open]:zd:fade-in-0 zd:data-[state=closed]:zd:zoom-out-95 zd:data-[state=open]:zd:zoom-in-95 zd:data-[side=bottom]:zd:slide-in-from-top-2 zd:data-[side=left]:zd:slide-in-from-right-2 zd:data-[side=right]:zd:slide-in-from-left-2 zd:data-[side=top]:zd:slide-in-from-bottom-2",
+        "zd:z-50 zd:min-w-[8rem] zd:overflow-hidden zd:rounded-md zd:border zd:bg-popover zd:text-popover-foreground zd:shadow-md zd:data-[state=open]:zd:animate-in zd:data-[state=closed]:zd:animate-out zd:data-[state=closed]:zd:fade-out-0 zd:data-[state=open]:zd:fade-in-0 zd:data-[state=closed]:zd:zoom-out-95 zd:data-[state=open]:zd:zoom-in-95 zd:data-[side=bottom]:zd:slide-in-from-top-2 zd:data-[side=left]:zd:slide-in-from-right-2 zd:data-[side=right]:zd:slide-in-from-left-2 zd:data-[side=top]:zd:slide-in-from-bottom-2",
         className
       )}
       {...props}

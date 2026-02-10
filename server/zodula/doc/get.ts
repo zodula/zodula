@@ -54,7 +54,7 @@ export class ZodulaDoctypeGetter<
       if (!this.options.bypass) {
         const user = await session.user(true);
         const old = (await db.get(
-          `SELECT * FROM "${doctype?.name}" WHERE "id" = '${this.id}' AND (${isGlobal ? "1=1" : `("organization" = "${organization}" OR "organization" = "SYS")`})`    
+          `SELECT * FROM "${doctype?.name}" WHERE "id" = '${this.id}' AND (${isGlobal ? "1=1" : `("organization" = "${organization}" OR "organization" = "System Panel")`})`    
         )) as any;
 
         const { can } =

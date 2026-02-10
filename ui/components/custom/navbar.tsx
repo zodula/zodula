@@ -111,7 +111,7 @@ export const Navbar = ({ children }: NavbarProps) => {
 
     // Add doctype results
     doctypeResults.docs.forEach((doc) => {
-      if(doc.is_global === 1 && org !== "SYS") {
+      if(doc.is_global === 1 && org !== "System Panel") {
         return;
       }
       const translatedLabel = t(doc.label || doc.name);
@@ -177,7 +177,7 @@ export const Navbar = ({ children }: NavbarProps) => {
       <div className="zd:flex zd:w-full zd:items-center zd:justify-center zd:border-b no-print">
         <div
           className={cn(
-            "zd:flex zd:gap-4 zd:items-center zd:justify-between zd:px-4 zd:py-2 zd:w-full zd:max-w-8xl",
+            "zd:flex zd:gap-4 zd:items-center zd:justify-between zd:px-4 zd:py-2 zd:w-full zd:max-w-9xl",
             fullWidth ? "zd:max-w-screen" : ""
           )}
         >
@@ -196,7 +196,7 @@ export const Navbar = ({ children }: NavbarProps) => {
                         zodula__WebsiteSetting?.id || "",
                         "logo",
                         (zodula__WebsiteSetting?.logo as string) || "",
-                        "SYS"
+                        "System Panel"
                       ) + "?w=40&h=40"
                     : "/public/zodula/zodula-logo.png"
                 }

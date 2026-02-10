@@ -22,7 +22,7 @@ interface FormProps<T extends Record<string, Zodula.Field>> {
   onChange?: (fieldName: keyof T, value: any) => void;
   readonly?: boolean;
   docId?: string;
-  doctype?: Zodula.DoctypeName;
+  doctype?: Zodula.DoctypeConfig;
   debug?: boolean;
   tabs?: TabConfig[];
   translate?: boolean;
@@ -37,6 +37,7 @@ interface FormProps<T extends Record<string, Zodula.Field>> {
     Record<number, Record<string, Record<string, any>>>
   >;
   parentContext?: FormContext<any>;
+  onNestedFieldChange?: (nestedFieldPath: string, value: any, oldValue: any, idx?: number) => Promise<void>;
 }
 
 export const Form = <T extends Record<string, Zodula.Field>>(
@@ -277,8 +278,6 @@ export const Form = <T extends Record<string, Zodula.Field>>(
     setActiveTab(tab);
   };
 
-  const isCreate = !props.values?.doc_status;
-
   if (tabs.length === 0) {
     return <div>{t("No fields")}</div>;
   }
@@ -331,7 +330,6 @@ export const Form = <T extends Record<string, Zodula.Field>>(
                         props.values
                       );
                       const isFieldReadonly =
-                        (!isCreate && !!field.only_create) ||
                         !!field.readonly ||
                         props.readonly;
                       const isFieldRequired = field.required === 1;
@@ -343,6 +341,7 @@ export const Form = <T extends Record<string, Zodula.Field>>(
                             className="zd:opacity-0 zd:pointer-events-none"
                           >
                             <FormControl
+                              doctype={props.doctype}
                               formData={props.values}
                               docId={props.docId}
                               fieldKey={key as string}
@@ -385,6 +384,9 @@ export const Form = <T extends Record<string, Zodula.Field>>(
                           childTableFieldPropertyOverrides={
                             props.childTableFieldPropertyOverrides
                           }
+                          parentContext={props.parentContext}
+                          onNestedFieldChange={props.onNestedFieldChange}
+                          doctype={props.doctype}
                         />
                       );
                     })}

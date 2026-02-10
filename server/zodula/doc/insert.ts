@@ -8,6 +8,7 @@ import type { Bunely } from "bunely";
 import path from "path";
 import fs from "fs/promises";
 import { ErrorWithCode } from "@/zodula/error";
+import type { DoctypeMetadata } from "../../loader/plugins/doctype";
 
 interface InsertOptions {
   bypass: boolean;
@@ -47,20 +48,24 @@ export class ZodulaDoctypeInsert<
       const db = Database("main");
       const user = await this.session.user(true);
       const doctype = loader.from("doctype").get(this.doctypeName);
-      const organization = await this.session.organization(true);
+      const organizationName = await this.session.organization(true);
+      const organization = await zodula.doctype("zodula__Organization").get(organizationName || "System Panel").bypass(true).fields(["abbr","name"])
 
       if(!this.input.organization) {
-        this.input.organization = organization || "SYS";
+        this.input.organization = organization?.name || "System Panel";
+        this.input.organization_abbr = organization?.abbr || "";
+
       }
       if(doctype.config.is_global === 1) {
-        this.input.organization = "SYS";
+        this.input.organization = "System Panel";
+        this.input.organization_abbr = organization?.abbr || "";
       }
 
       // Check tier requirements and max_doc limits
-      await this.validateTierRequirements(doctype, organization || "SYS");
+      await this.validateTierRequirements(doctype, organization?.name || "System Panel");
 
       // Prepare the document data
-      let prepared = await this.prepareDocumentData(user, doctype);
+      let prepared = await this.prepareDocumentData(user, doctype, organization?.abbr || "", organization?.name || "System Panel");
 
       // Validate readonly fields
       ZodulaDoctypeHelper.validateDoc(
@@ -114,7 +119,9 @@ export class ZodulaDoctypeInsert<
 
   private async prepareDocumentData(
     user: any,
-    doctype: any
+    doctype: DoctypeMetadata,
+    organizationAbbr: string,
+    organizationName: string
   ): Promise<Zodula.SelectDoctype<TN>> {
     let prepared = {
       ...this.input,
@@ -128,7 +135,7 @@ export class ZodulaDoctypeInsert<
     } as Zodula.SelectDoctype<TN>;
 
     // Generate new ID
-    const newId = await naming(this.doctypeName, prepared);
+    let newId = await naming(this.doctypeName, prepared, organizationAbbr, organizationName || "");
     prepared.id = newId;
 
     // Apply override if specified
@@ -313,7 +320,7 @@ export class ZodulaDoctypeInsert<
             process.cwd(),
             ".zodula_data",
             "files",
-            prepared.organization || "SYS",
+            prepared.organization || "System Panel",
             "doctypes",
             doctypeName,
             docId,
@@ -325,7 +332,7 @@ export class ZodulaDoctypeInsert<
           process.cwd(),
           ".zodula_data",
           "files",
-          prepared.organization || "SYS",
+          prepared.organization || "System Panel",
           doctypeName,
           docId,
           fieldName,
@@ -339,7 +346,7 @@ export class ZodulaDoctypeInsert<
             process.cwd(),
             ".zodula_data",
             "files",
-            prepared.organization || "SYS",
+            prepared.organization || "System Panel",
             doctypeName,
             docId,
             fieldName
@@ -352,7 +359,7 @@ export class ZodulaDoctypeInsert<
                 process.cwd(),
                 ".zodula_data",
                 "files",
-                prepared.organization || "SYS",
+                prepared.organization || "System Panel",
                 doctypeName,
                 docId,
                 fieldName,
@@ -488,7 +495,7 @@ export class ZodulaDoctypeInsert<
 
   private async insertExtendRelationships(
     db: any,
-    doctype: any,
+    doctype: DoctypeMetadata,
     result: Zodula.SelectDoctype<TN>,
     extendsList: Record<string, any>
   ) {
@@ -503,25 +510,11 @@ export class ZodulaDoctypeInsert<
 
       if (!fieldConfig || !refDoctypeSchema) continue;
 
-      // Find the child to get the child field name
-      const child = doctype.children.find(
-        (c: any) =>
-          c.parentDoctype === this.doctypeName &&
-          c.parentFieldName === key &&
-          c.type === "Extend"
-      );
-      const childFieldName = child?.childFieldName;
-
-      if (!childFieldName) {
-        throw new ErrorWithCode(
-          `Could not find child field name for relationship ${this.doctypeName}/${key} -> ${refDoctypeName}`,
-          { status: 500 }
-        );
-      }
-
       try {
         let updatedPayload = { ...payload };
-        updatedPayload[childFieldName] = result.id;
+        updatedPayload["parentid"] = result.id;
+        updatedPayload["parentype"] = this.doctypeName;
+        updatedPayload["parentfield"] = key;
 
         let formattedPayload = { ...updatedPayload };
         ZodulaDoctypeHelper.formatDoc(
@@ -546,7 +539,7 @@ export class ZodulaDoctypeInsert<
 
   private async insertRefTableRelationships(
     db: any,
-    doctype: any,
+    doctype: DoctypeMetadata,
     result: Zodula.SelectDoctype<TN>,
     refTableList: Record<string, any[]>
   ) {
@@ -561,28 +554,14 @@ export class ZodulaDoctypeInsert<
 
       if (!fieldConfig || !refDoctypeSchema) continue;
 
-      // Find the child to get the child field name
-      const child = doctype.children.find(
-        (c: any) =>
-          c.parentDoctype === this.doctypeName &&
-          c.parentFieldName === key &&
-          c.type === "Reference Table"
-      );
-      const childFieldName = child?.childFieldName;
-
-      if (!childFieldName) {
-        throw new ErrorWithCode(
-          `Could not find child field name for relationship ${this.doctypeName}/${key} -> ${refDoctypeName}`,
-          { status: 500 }
-        );
-      }
-
       try {
         (result as any)[key] = [];
 
         for (let index = 0; index < payloadArray?.length || 0; index++) {
           let payload = { ...payloadArray[index] };
-          payload[childFieldName] = result.id;
+          payload["parentid"] = result.id;
+          payload["parentype"] = this.doctypeName;
+          payload["parentfield"] = key;
 
           let formattedPayload = { ...payload };
           ZodulaDoctypeHelper.formatDoc(

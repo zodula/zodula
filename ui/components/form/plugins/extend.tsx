@@ -7,6 +7,7 @@ import { ClientFieldHelper } from "@/zodula/client/field";
 import { useUIScript } from "@/zodula/ui";
 import { useRouter } from "../../router";
 import { popup } from "../../ui/popit";
+import { useDocStore } from "../../../hooks/use-doc-store";
 
 export const ExtendPlugin = new FormPlugin({
     types: ["Extend"],
@@ -28,6 +29,13 @@ export const ExtendPlugin = new FormPlugin({
     });
 
     const { push } = useRouter();
+    const { fetchDoc, getDoc } = useDocStore();
+
+    // Helper function to get nested value from object using dot notation
+    const getNestedValue = (obj: any, path: string): any => {
+        if (!obj || !path) return undefined;
+        return path.split('.').reduce((current, key) => current?.[key], obj);
+    };
 
     // Client script hook for the child doctype
     const { execute } = useUIScript(doctypeDoc?.id || '', {
@@ -140,6 +148,91 @@ export const ExtendPlugin = new FormPlugin({
             [fieldName]: value
         };
 
+        // Find dependent fields that use fetch_from on this field
+        const dependentFields: Array<{ fieldName: string; fetchPath: string }> = [];
+        fields.forEach((field) => {
+            if (
+                field.fetch_from &&
+                field.fetch_from.startsWith(fieldName + ".")
+            ) {
+                const fetchPath = field.fetch_from.substring(
+                    fieldName.length + 1
+                );
+                dependentFields.push({
+                    fieldName: field.name || "",
+                    fetchPath: fetchPath,
+                });
+            }
+        });
+
+        // Handle fetch_from logic before running scripts
+        if (dependentFields.length > 0 && value) {
+            const sourceField = fields.find(f => f.name === fieldName);
+
+            // Handle Reference field type - need to fetch the referenced document
+            if (sourceField?.reference) {
+                try {
+                    // Collect all unique root fields to fetch in one call
+                    const rootFields = dependentFields
+                        .map((df) => df.fetchPath.split(".")[0])
+                        .filter((v): v is string => !!v);
+                    const fetchFields = [...new Set(rootFields)];
+
+                    await fetchDoc(
+                        sourceField.reference as Zodula.DoctypeName,
+                        value,
+                        fetchFields
+                    );
+
+                    const cachedDoc = getDoc(
+                        sourceField.reference as Zodula.DoctypeName,
+                        value
+                    );
+
+                    if (cachedDoc?.data) {
+                        const fetchedDoc = cachedDoc.data;
+                        for (const dependentField of dependentFields) {
+                            // Get the field config for the field that will RECEIVE the value (the field in the child doctype)
+                            const receivingFieldConfig = fields.find(f => f.name === dependentField.fieldName);
+                            
+                            const fetchedValue = getNestedValue(
+                                fetchedDoc,
+                                dependentField.fetchPath
+                            );
+
+                            // Check if the RECEIVING field is an Image Preview field that should construct a file path
+                            if (receivingFieldConfig?.type === "Image Preview" && fetchedValue !== undefined && fetchedValue !== null && fetchedValue !== "") {
+                                // Construct file path: /files/<parent_organization>/<referenced_doctype>/<referenced_id>/<field_name>/<field_value>
+                                // fetchPath might be nested like "customer.logo" or just "logo"
+                                const fetchPathParts = dependentField.fetchPath.split('.');
+                                const parentFieldName = fetchPathParts[fetchPathParts.length - 1];
+                                const organization = props.formData?.organization || "System Panel";
+                                const filePath = `/files/${organization}/${sourceField.reference}/${value}/${parentFieldName}/${fetchedValue}`;
+                                newValue[dependentField.fieldName] = filePath;
+                            } else if (fetchedValue !== undefined && fetchedValue !== null) {
+                                // Regular field update (for non-Image Preview fields)
+                                newValue[dependentField.fieldName] = fetchedValue;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.warn(
+                        `Failed to fetch data for field ${fieldName} in Extend field:`,
+                        error
+                    );
+                    // Clear dependent fields if fetch fails
+                    for (const dependentField of dependentFields) {
+                        newValue[dependentField.fieldName] = null;
+                    }
+                }
+            }
+        } else if (dependentFields.length > 0 && !value) {
+            // Clear dependent fields if source field is cleared
+            for (const dependentField of dependentFields) {
+                newValue[dependentField.fieldName] = null;
+            }
+        }
+
         // If we have a fieldPath (nested field), update the parent object structure
         if (props.fieldPath && props.fieldPath.includes('.')) {
             // Create a deep copy of the parent form data
@@ -176,7 +269,7 @@ export const ExtendPlugin = new FormPlugin({
                 values={props.value || {}}
                 onChange={handleFieldChange}
                 readonly={props.readonly}
-                doctype={doctypeDoc?.id as Zodula.DoctypeName}
+                doctype={doctypeDoc as unknown as Zodula.DoctypeConfig}
                 enableScripts={true}
             />
         </div>

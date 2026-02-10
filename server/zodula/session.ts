@@ -5,7 +5,7 @@ import { Database } from "../database/database";
 export class ZodulaSession {
   private getSystemUser() {
     return {
-      name: "SYS",
+      name: "System Panel",
       email: "system@example.com",
       password: "password",
       is_active: 1,
@@ -16,7 +16,7 @@ export class ZodulaSession {
       updated_by: "1",
       doc_status: 1,
       owner: "1",
-      organization: "SYS",
+      organization: "System Panel",
     } satisfies Zodula.SelectDoctype<"zodula__User">;
   }
 

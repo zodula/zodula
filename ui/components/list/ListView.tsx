@@ -120,7 +120,7 @@ export function ListView({
       label: t("ID"),
       sortable: true,
       render: (doc: any) => {
-        return doc.organization === "SYS" ? <span className="zd:underline">{doc.id}</span> : <span className="">{doc.id}</span>;
+        return doc.organization === "System Panel" ? <span className="zd:underline">{doc.id}</span> : <span className="">{doc.id}</span>;
       },
     });
 

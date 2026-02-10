@@ -72,7 +72,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         if (!pathname.startsWith("/desk/")) return null;
         const parts = pathname.split("/");
         // ["", "desk", ":org", ...]
-        return parts.length >= 3 ? parts[2] || null : null;
+        const res = parts.length >= 3 ? parts[2] || null : null;
+        // decode the slug
+        return res ? decodeURIComponent(res) : null;
     }, [router]);
 
     // Fetch organization based on org slug

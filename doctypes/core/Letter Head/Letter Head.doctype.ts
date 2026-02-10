@@ -58,7 +58,6 @@ export default $doctype<"zodula__Letter Head">({
         type: "Reference Table",
         label: "Items",
         reference: "zodula__Letter Head Item",
-        reference_field: "letter_head",
         required: 0
     }
 }, {

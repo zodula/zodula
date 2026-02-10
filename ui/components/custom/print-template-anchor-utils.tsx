@@ -92,6 +92,7 @@ export function calculateAnchorPosition(
       newY = anchorY;
       break;
     case "inside":
+    case "top-left": // "top-left" is treated as "inside" with offset
       const offsetX = typeof offset === "object" ? offset.x : 0;
       const offsetY = typeof offset === "object" ? offset.y : 0;
       newX = anchorX + offsetX;

@@ -15,6 +15,7 @@ export interface FormControlProps {
   className?: string;
   type?: string;
   noPrint?: boolean;
+  doctype?: Zodula.DoctypeConfig;
   // Field-specific props
   field?: any;
   fieldKey: string;
@@ -31,6 +32,8 @@ export interface FormControlProps {
   org?: string;
   childExtendFieldPropertyOverrides?: Record<string, Record<string, Record<string, any>>>; // Child Extend field property overrides
   childTableFieldPropertyOverrides?: Record<string, Record<number, Record<string, Record<string, any>>>>; // Child Reference Table field property overrides
+  parentContext?: any; // Parent form context
+  onNestedFieldChange?: (nestedFieldPath: string, value: any, oldValue: any, idx?: number) => Promise<void>; // Handler for nested field changes
 }
 
 const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
@@ -60,6 +63,9 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
       org,
       childExtendFieldPropertyOverrides,
       childTableFieldPropertyOverrides,
+      parentContext,
+      onNestedFieldChange,
+      doctype,
     },
     ref
   ) => {
@@ -110,6 +116,9 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
                 org={org}
                 childExtendFieldPropertyOverrides={childExtendFieldPropertyOverrides}
                 childTableFieldPropertyOverrides={childTableFieldPropertyOverrides}
+                parentContext={parentContext}
+                onNestedFieldChange={onNestedFieldChange}
+                doctype={doctype}
               />
               {!!field.description && showDescription && (
                 <p className="zd:text-muted-foreground zd:mt-1">

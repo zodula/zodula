@@ -75,7 +75,8 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
         const doctype = loader.from("doctype").get(this.doctypeName)
         const user = await zodula.session.user()
         let old = await zodula.doctype(this.doctypeName).get(this.id).bypass(true).unsafe()
-        const organization = old?.organization || "SYS"
+        console.log("deleting", this.id, this.doctypeName);
+        const organization = old?.organization || "System Panel"
         if(!old?.organization) {
             old.organization = organization
         }
@@ -134,7 +135,7 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
         // delete children documents
         const childrenMeta = doctype.children
         for (const childMeta of childrenMeta) {
-            await db.delete(childMeta.childDoctype).where(childMeta.childFieldName, "=", id).returning("*").execute()
+            await db.delete(childMeta.childDoctype).where("parentid", "=", id).where("parentype", "=", doctype.name).where("parentfield", "=", childMeta.parentFieldName).returning("*").execute()
         }
 
         // check for linked documents

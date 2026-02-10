@@ -71,6 +71,42 @@ interface DocFormViewProps {
   resetForm?: boolean;
 }
 
+// Helper function to compare values (handles different types)
+// Moved outside component to prevent recreation on every render
+function valuesAreEqual(val1: any, val2: any): boolean {
+  // Fast path: same reference
+  if (val1 === val2) return true;
+  
+  // Handle null/undefined
+  if (val1 == null && val2 == null) return true;
+  if (val1 == null || val2 == null) return false;
+  
+  // Handle arrays and objects - use shallow comparison first for performance
+  if (typeof val1 === 'object' && typeof val2 === 'object') {
+    // Fast path: if they're arrays, check length first
+    if (Array.isArray(val1) && Array.isArray(val2)) {
+      if (val1.length !== val2.length) return false;
+      // For arrays, only do deep comparison if lengths match
+      if (val1.length === 0) return true;
+      // For small arrays, do shallow comparison first
+      if (val1.length <= 10) {
+        for (let i = 0; i < val1.length; i++) {
+          if (val1[i] !== val2[i]) {
+            // Only do deep comparison if shallow fails
+            return JSON.stringify(val1) === JSON.stringify(val2);
+          }
+        }
+        return true;
+      }
+    }
+    // For objects, use JSON.stringify (necessary for deep comparison)
+    return JSON.stringify(val1) === JSON.stringify(val2);
+  }
+  
+  // Handle primitive types
+  return val1 === val2;
+}
+
 export function DocFormView({
   doctype,
   id,
@@ -510,6 +546,74 @@ export function DocFormView({
     return current;
   }, []);
 
+  // Handler for nested field changes (e.g., "tax_and_charges.rate")
+  const handleNestedFieldChange = useCallback(
+    async (nestedFieldPath: string, value: any, oldValue: any, idx?: number) => {
+      // Parse nested field path (e.g., "tax_and_charges.rate")
+      const parts = nestedFieldPath.split('.', 2);
+      const tableField = parts[0];
+      const childField = parts[1];
+      if (!tableField || !childField) return;
+
+      // Get current table data
+      const currentData = getFormData();
+      const tableData = (currentData[tableField] || []) as any[];
+      
+      // Update the specific row's field value BEFORE building updatedFormData
+      // This ensures scripts see the updated value
+      const updatedTableData = [...tableData];
+      if (idx !== undefined && idx >= 0) {
+        if (!updatedTableData[idx]) {
+          updatedTableData[idx] = {};
+        }
+        updatedTableData[idx] = {
+          ...updatedTableData[idx],
+          [childField]: value
+        };
+      }
+      
+      // Build updated form data snapshot for scripts with the updated table data
+      const updatedFormData = {
+        ...currentData,
+        [tableField]: updatedTableData
+      };
+      
+      // Also update the form store immediately so getValue returns the latest data
+      setFormFieldValue(tableField as keyof typeof formFields, updatedTableData);
+
+      // Execute UI scripts for nested field change
+      await execute("field_change", nestedFieldPath, {
+        fieldName: nestedFieldPath,
+        value,
+        oldValue,
+        formData: updatedFormData,
+        getValue: (name: string) => {
+          // Handle nested field paths
+          if (name.includes('.')) {
+            const parts = name.split('.', 2);
+            const tableFieldName = parts[0];
+            const childFieldName = parts[1];
+            if (tableFieldName && childFieldName) {
+              const table = updatedFormData[tableFieldName] as any[];
+              if (Array.isArray(table)) {
+                // For paths like "tax_and_charges.rate", get from current row (idx)
+                if (idx !== undefined && idx >= 0 && table[idx]) {
+                  return (table[idx] as any)?.[childFieldName];
+                }
+                // Fallback: return first row's value
+                return (table[0] as any)?.[childFieldName];
+              }
+            }
+          }
+          return updatedFormData[name];
+        },
+        getValues: () => updatedFormData,
+        idx: idx
+      });
+    },
+    [getFormData, execute, setFormFieldValue, formFields]
+  );
+
   // Centralized field change handler: fetch_from + scripts + form store update
   const handleFieldChange = useCallback(
     async (fieldName: keyof typeof formFields, value: any) => {
@@ -586,11 +690,34 @@ export function DocFormView({
             if (cachedDoc?.data) {
               const fetchedDoc = cachedDoc.data;
               for (const dependentField of dependentFields) {
+                // Get the field config for the field that will RECEIVE the value (the field in the current form)
+                // This is NOT the field in the referenced doctype - it's the field in THIS form that has fetch_from
+                const receivingFieldConfig = formFields[dependentField.fieldName];
+                
+                if (!receivingFieldConfig) {
+                  console.warn(`[Image Preview] Field config not found for receiving field: ${dependentField.fieldName}`);
+                  continue;
+                }
+                
                 const fetchedValue = getNestedValue(
                   fetchedDoc,
                   dependentField.fetchPath
                 );
-                if (fetchedValue !== undefined && fetchedValue !== null) {
+                
+                // IMPORTANT: Check the type of the RECEIVING field (the one in the current form that will get the value)
+                // NOT the type of the field in the referenced doctype
+                const isImagePreviewField = receivingFieldConfig.type === "Image Preview";
+                
+                if (isImagePreviewField && fetchedValue !== undefined && fetchedValue !== null && fetchedValue !== "") {
+                  // Construct file path: /files/<parent_organization>/<referenced_doctype>/<referenced_id>/<field_name>/<field_value>
+                  // fetchPath might be nested like "customer.logo" or just "logo"
+                  const fetchPathParts = dependentField.fetchPath.split('.');
+                  const parentFieldName = fetchPathParts[fetchPathParts.length - 1];
+                  const organization = currentData?.organization || "System Panel";
+                  const filePath = `/files/${organization}/${sourceField.reference}/${value}/${parentFieldName}/${fetchedValue}`;
+                  dependentUpdates[dependentField.fieldName] = filePath;
+                } else if (fetchedValue !== undefined && fetchedValue !== null) {
+                  // Regular field update (for non-Image Preview fields)
                   dependentUpdates[dependentField.fieldName] = fetchedValue;
                 }
               }
@@ -1037,15 +1164,34 @@ export function DocFormView({
       const oldValue = (doc as any)[fieldName];
       const newValue = latestFormData[fieldName];
       
-      // Check if value has changed
+      // Special handling for Reference Table fields:
+      // Always include reference table fields if they exist in either doc or form data
+      // This ensures reference table fields are included in the payload at render time
+      const field = formFields[fieldName];
+      if (field?.type === "Reference Table") {
+        // Prefer form data value if it exists (user may have modified it)
+        if (newValue !== undefined) {
+          changedFields[fieldName] = newValue;
+        } 
+        // If form data doesn't have it but doc does, include it from doc
+        // This ensures reference table fields from doc are included at render time
+        else if (oldValue !== undefined && oldValue !== null) {
+          changedFields[fieldName] = oldValue;
+        }
+        // Otherwise, skip (both are undefined/null)
+        return;
+      }
+      
+      // For non-Reference Table fields, check if value has changed
       if (!valuesAreEqual(oldValue, newValue)) {
         changedFields[fieldName] = newValue;
       }
     });
 
     // Normalize Reference Table fields before returning
-    return normalizeReferenceTableFields(changedFields);
-  }, [getFormData, doc, normalizeReferenceTableFields])
+    const normalized = normalizeReferenceTableFields(changedFields);
+    return normalized;
+  }, [getFormData, doc, normalizeReferenceTableFields, formFields])
 
   const handleUpdate = useCallback(async () => {
     try {
@@ -1060,32 +1206,47 @@ export function DocFormView({
   // ===== COMPUTED VALUES =====
   const isSingle = doctypeDoc?.is_single === 1;
 
-  // Helper function to compare values (handles different types)
-  const valuesAreEqual = useCallback((val1: any, val2: any): boolean => {
-    // Handle null/undefined
-    if (val1 == null && val2 == null) return true;
-    if (val1 == null || val2 == null) return false;
-    
-    // Handle arrays and objects
-    if (typeof val1 === 'object' && typeof val2 === 'object') {
-      return JSON.stringify(val1) === JSON.stringify(val2);
-    }
-    
-    // Handle primitive types
-    return val1 === val2;
-  }, []);
-
   // Helper function to deeply compare two objects for dirty checking
+  // Optimized with early bailouts for better performance
   const areObjectsEqual = useCallback((obj1: any, obj2: any): boolean => {
+    // Fast path: same reference
     if (obj1 === obj2) return true;
     if (obj1 == null || obj2 == null) return obj1 == obj2;
     
-    // Get all unique keys from both objects
-    const allKeys = new Set([...Object.keys(obj1), ...Object.keys(obj2)]);
+    const keys1 = Object.keys(obj1);
+    const keys2 = Object.keys(obj2);
     
-    for (const key of allKeys) {
+    // Early bailout: if key counts differ, they might still be equal (undefined vs missing)
+    // But if difference is large, likely different
+    if (Math.abs(keys1.length - keys2.length) > 10) {
+      return false;
+    }
+    
+    // Get all unique keys from both objects
+    const allKeys = new Set([...keys1, ...keys2]);
+    
+    // For very large objects, do a quick sample check first to bail out early
+    let keysToCheck = Array.from(allKeys);
+    if (allKeys.size > 100) {
+      const sampleKeys = keysToCheck.slice(0, 20);
+      for (const key of sampleKeys) {
+        const val1 = obj1[key];
+        const val2 = obj2[key];
+        if (val1 === undefined && val2 === undefined) continue;
+        if (val1 === undefined && val2 == null) continue;
+        if (val1 == null && val2 === undefined) continue;
+        if (!valuesAreEqual(val1, val2)) return false;
+      }
+      // If sample passes, only check remaining keys (skip the sample keys)
+      keysToCheck = keysToCheck.slice(20);
+    }
+    
+    for (const key of keysToCheck) {
       const val1 = obj1[key];
       const val2 = obj2[key];
+      
+      // Fast path: same reference
+      if (val1 === val2) continue;
       
       // Handle undefined - treat as equal if both are undefined or missing
       if (val1 === undefined && val2 === undefined) continue;
@@ -1099,7 +1260,7 @@ export function DocFormView({
     }
     
     return true;
-  }, [valuesAreEqual]);
+  }, []);
 
   const handleSave = useCallback(async () => {
     const payload = getUpdatePayload();
@@ -1111,7 +1272,7 @@ export function DocFormView({
       replace(`/desk/${org}/doctypes/${doctype}/form/${updatedDoc.id}`);
     } else {
       // ID unchanged - just reload
-      reload();
+      handleReload();
     }
   }, [doctype, id, org, replace, reload, isSingle, getUpdatePayload])
 
@@ -1340,6 +1501,7 @@ export function DocFormView({
   );
 
   // ===== FORM STATE =====
+  // Optimized isDirty check with early bailouts to prevent jiggling
   const isDirty = useMemo(() => {
     if (mode === "create") {
       return Object.values(formData).some(
@@ -1348,7 +1510,17 @@ export function DocFormView({
     }
     if (!doc) return false;
     
-    // Compare formData with doc using proper deep comparison
+    // Quick shallow comparison first - if references match, definitely not dirty
+    if (formData === doc) return false;
+    
+    // Early bailout: if key counts differ significantly, likely dirty
+    const formKeys = Object.keys(formData);
+    const docKeys = Object.keys(doc);
+    if (Math.abs(formKeys.length - docKeys.length) > 5) {
+      return true; // Likely dirty if key counts differ significantly
+    }
+    
+    // Compare formData with doc using optimized deep comparison
     return !areObjectsEqual(formData, doc);
   }, [formData, doc, mode, areObjectsEqual]);
 
@@ -1359,7 +1531,7 @@ export function DocFormView({
   }, []);
 
   // ===== RENDER COMPONENTS =====
-  const primaryButtonRender = useCallback(() => {
+  const PrimaryButtonRender = React.memo(() => {
     if (mode === "create") {
       return (
         <Button
@@ -1368,7 +1540,7 @@ export function DocFormView({
           variant="solid"
         >
           <Save className="zd:w-4 zd:h-4 zd:mr-1" />
-          {isLoading ? "Creating..." : "Create"}
+          {t("Create")}
         </Button>
       );
     }
@@ -1392,8 +1564,8 @@ export function DocFormView({
     } else if (doctypeDoc?.is_submittable === 1 && doc?.doc_status === 1) {
       return (
         <Button onClick={handleUpdate} className="zd:h-8" disabled={!isDirty}>
-          {t("Update")}
           <SaveIcon />
+          {t("Update")}
         </Button>
       );
     } else if (doc?.doc_status == 0) {
@@ -1404,7 +1576,9 @@ export function DocFormView({
         </Button>
       );
     }
-  }, [mode, isLoading, isDirty, doc?.doc_status, doctypeDoc?.is_submittable, handleSave, handleSubmit, handleUpdate, t]);
+    
+    return null;
+  });
 
   // ===== LOADING & ERROR STATES =====
   if (mode === "edit" && loading) {
@@ -1471,7 +1645,6 @@ export function DocFormView({
             </span>
           </div>
         }
-        subtitle={isSingle ? "" : t(doctypeLabel)}
         sidebarContent={sidebarContent}
         actionSection={
           doctypeDoc?.is_system_generated === 1 ? (
@@ -1594,7 +1767,7 @@ export function DocFormView({
                   </Button>
                 );
               })}
-              {primaryButtonRender()}
+              <PrimaryButtonRender />
             </div>
           )
         }
@@ -1609,11 +1782,12 @@ export function DocFormView({
             fields={formFields}
             values={formData}
             onChange={handleFieldChange}
-            doctype={doctype}
+            doctype={doctypeDoc as unknown as Zodula.DoctypeConfig}
             tabs={doctypeDoc?.tabs ? JSON.parse(doctypeDoc.tabs) : []}
             childExtendFieldPropertyOverrides={childExtendFieldPropertyOverrides}
             childTableFieldPropertyOverrides={childTableFieldPropertyOverrides}
             parentContext={(parentFormContext as any) || undefined}
+            onNestedFieldChange={handleNestedFieldChange}
           />
           <div className="">
             {!!doc?.id && <AuditTrail doctype={doctype} docId={id!} />}

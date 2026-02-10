@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useEffect, useState } from "react";
 import { FormPlugin } from "../plugin";
 import { Input } from "../../ui/input";
+import { cn } from "@/zodula/ui/lib/utils";
 
 export const TextInputPlugin = new FormPlugin({
   types: ["Text", "Password", "Integer", "Float", "Data", "Email"] as const,

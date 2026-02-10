@@ -25,7 +25,7 @@ export const NavbarLayout = ({
         {router.pathname.startsWith("/desk") && !hideNavbar && <Navbar />}
         <div
           className={cn(
-            "zd:flex zd:flex-col zd:gap-4 zd:w-full zd:max-w-8xl zd:p-4 zd:overflow-visible",
+            "zd:flex zd:flex-col zd:gap-4 zd:w-full zd:max-w-9xl zd:p-4 zd:overflow-visible",
             (fullWidth || hideNavbar) ? "zd:max-w-screen" : "",
             contentClassName || ""
           )}

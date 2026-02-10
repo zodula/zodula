@@ -28,9 +28,9 @@ export const Breadcrumb = ({ className = "", items, showHome = true }: Breadcrum
 
         if (showHome) {
             breadcrumbItems.push({
-                label: org === "SYS" ? t("SYS") : org || "",
+                label: org === "System Panel" ? t("System Panel") : org || "",
                 href: `/desk/${org}`,
-                icon: org === "SYS" ? <GlobeIcon className="zd:w-4 zd:h-4" /> : <BuildingIcon className="zd:w-4 zd:h-4" />
+                icon: org === "System Panel" ? <GlobeIcon className="zd:w-4 zd:h-4" /> : <BuildingIcon className="zd:w-4 zd:h-4" />
             })
         }
 

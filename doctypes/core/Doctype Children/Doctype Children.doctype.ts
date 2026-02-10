@@ -14,11 +14,6 @@ export default $doctype({
         reference: "zodula__Field",
         required: 1
     }),
-    child_field_name: $f.VirtualReference({
-        label: "Child Field Name",
-        reference: "zodula__Field",
-        required: 1
-    }),
     type: $f.Select({
         label: "Type",
         options: "Reference Table\nExtend",

@@ -6,6 +6,7 @@ import { DateTimePlugin } from "./datetime";
 import { CheckboxPlugin } from "./checkbox";
 import { EditorPlugin } from "./editor";
 import { FileUploadPlugin } from "./file-upload";
+import { ImagePreviewPlugin } from "./image-preview";
 import { ReferenceTablePlugin } from "./reference-table";
 import { ExtendPlugin } from "./extend";
 import { CurrencyPlugin } from "./currency";
@@ -19,9 +20,10 @@ export const plugins = [
     CheckboxPlugin,
     EditorPlugin,
     FileUploadPlugin,
+    ImagePreviewPlugin,
     ReferenceTablePlugin,
     ExtendPlugin,
     CurrencyPlugin
 ] as const;
 
-export { TextInputPlugin, TextareaPlugin, SelectPlugin, ReferencePlugin, DateTimePlugin, CheckboxPlugin, EditorPlugin, FileUploadPlugin, ReferenceTablePlugin, CurrencyPlugin };
+export { TextInputPlugin, TextareaPlugin, SelectPlugin, ReferencePlugin, DateTimePlugin, CheckboxPlugin, EditorPlugin, FileUploadPlugin, ImagePreviewPlugin, ReferenceTablePlugin, CurrencyPlugin };

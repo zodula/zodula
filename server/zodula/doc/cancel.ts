@@ -5,6 +5,7 @@ import { ZodulaDoctypeHelper } from "./helper";
 import { zodula } from "..";
 import type { Bunely } from "bunely";
 import { ErrorWithCode } from "@/zodula/error";
+import type { DoctypeMetadata } from "../../loader/plugins/doctype";
 
 interface CancelOptions {
   bypass: boolean;
@@ -134,7 +135,7 @@ export class ZodulaDoctypeCancel<
 
   private async executeCancel(
     db: Bunely,
-    doctype: any,
+    doctype: DoctypeMetadata,
     old: Zodula.SelectDoctype<TN>,
     prepared: Zodula.SelectDoctype<TN>
   ): Promise<Zodula.SelectDoctype<TN>> {

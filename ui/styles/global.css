@@ -118,15 +118,16 @@
 
     /* cleared everything with the initial value, but I manually entered everything from the documentation table */
     --spacing-8xl: 96rem;
+    --spacing-9xl: 128rem;
     --font-weight-medium: 300;
     --font-weight-semibold: 400;
-    --font-weight-bold: 600;
+    --font-weight-bold: 500;
 }
 
 
 @layer base {
     * {
-        @apply zd:border-border zd:outline-ring/50 zd:text-base zd:font-medium;
+        @apply zd:border-border zd:outline-ring/50;
         /* font-family: "Prompt", sans-serif; */
     }
 

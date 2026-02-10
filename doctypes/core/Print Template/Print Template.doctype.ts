@@ -73,7 +73,6 @@ export default $doctype<"zodula__Print Template">({
         type: "Reference Table",
         label: "Items",
         reference: "zodula__Print Template Item",
-        reference_field: "print_template",
         required: 0
     }
 }, {

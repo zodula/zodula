@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronUp, XIcon } from "lucide-react";
 import { Input } from "./input";
@@ -116,9 +116,9 @@ const Select = ({
   const selectedValues =
     multiple && value
       ? value
-          .split(",")
-          .map((v) => v.trim())
-          .filter(Boolean)
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean)
       : [];
 
   // Get selected options for display
@@ -173,21 +173,21 @@ const Select = ({
   let filteredOptions =
     searchable && searchValue
       ? options.filter((option) => {
-          if (multiple && searchValue.includes(",")) {
-            // In multiple mode, search based on the last value after comma
-            const lastValue = searchValue.split(",").pop()?.trim() || "";
-            return (
-              option.label.toLowerCase().includes(lastValue.toLowerCase()) ||
-              option.value.toLowerCase().includes(lastValue.toLowerCase())
-            );
-          } else {
-            // Single mode or no comma - search the entire value
-            return (
-              option.label.toLowerCase().includes(searchValue.toLowerCase()) ||
-              option.value.toLowerCase().includes(searchValue.toLowerCase())
-            );
-          }
-        })
+        if (multiple && searchValue.includes(",")) {
+          // In multiple mode, search based on the last value after comma
+          const lastValue = searchValue.split(",").pop()?.trim() || "";
+          return (
+            option.label.toLowerCase().includes(lastValue.toLowerCase()) ||
+            option.value.toLowerCase().includes(lastValue.toLowerCase())
+          );
+        } else {
+          // Single mode or no comma - search the entire value
+          return (
+            option.label.toLowerCase().includes(searchValue.toLowerCase()) ||
+            option.value.toLowerCase().includes(searchValue.toLowerCase())
+          );
+        }
+      })
       : options;
 
   // Sort filtered options by relevance
@@ -443,7 +443,7 @@ const Select = ({
   // Handle search input change
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    
+
     // Only update searchValue if searchable is true (it's used for filtering)
     if (searchable) {
       setSearchValue(newValue);
@@ -541,9 +541,9 @@ const Select = ({
   // Display value for multiple mode
   const displayValue = multiple
     ? searchValue ||
-      selectedOptions.map((opt) => getDisplayText(opt, displayMode)).join(",")
+    selectedOptions.map((opt) => getDisplayText(opt, displayMode)).join(",")
     : searchValue ||
-      (selectedOption ? getDisplayText(selectedOption, displayMode) : value);
+    (selectedOption ? getDisplayText(selectedOption, displayMode) : value);
 
   // Determine if input should be read-only
   // Input is read-only when: explicit readOnly prop is true, OR when both searchable and allowFreeText are false
@@ -556,12 +556,34 @@ const Select = ({
     }
   };
 
+  const cursorClass = useMemo(() => {
+    let cursor = "zd:cursor-pointer";
+    if (allowFreeText) {
+      cursor = "zd:cursor-text";
+    }
+    if (isInputReadOnly) {
+      cursor = "zd:cursor-default";
+    }
+    return cursor;
+  }, [allowFreeText, isInputReadOnly]);
+
+  const wrapperStyle = useMemo(() => {
+    let cursor = "pointer";
+    if (cursorClass === "zd:cursor-default") {
+      cursor = "default";
+    }
+    if (cursorClass === "zd:cursor-text") {
+      cursor = "text";
+    }
+    return { cursor };
+  }, [cursorClass]);
+
   return (
     <div
       ref={containerRef}
       className={cn(
         "zd:relative",
-        !disabled && isInputReadOnly ? "zd:cursor-pointer" : "",
+        cursorClass,
         className ?? ""
       )}
       onClick={handleContainerClick}
@@ -583,21 +605,16 @@ const Select = ({
           !allowFreeText && !searchable && !clearable ? "zd:select-none" : "",
           inputClassName ?? "",
           disabled
-            ? "zd:cursor-default zd:text-muted-foreground"
-            : isInputReadOnly
-              ? "zd:cursor-pointer zd:text-muted-foreground"
-              : "zd:cursor-text"
+            ? "zd:text-muted-foreground"
+            : cursorClass,
+          !readOnly ? "zd:text-primary" : "",
         )}
-        wrapperStyle={
-          !disabled && isInputReadOnly
-            ? { cursor: "pointer" }
-            : undefined
-        }
+        wrapperStyle={wrapperStyle}
         prefix={prefix}
         suffix={
           <div className="zd:flex zd:items-center zd:gap-1 no-print">
             {suffix}
-            {clearable && value && (
+            {clearable && value && !isInputReadOnly && (
               <button
                 type="button"
                 onClick={handleClear}

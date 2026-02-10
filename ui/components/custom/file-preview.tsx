@@ -361,7 +361,7 @@ const FilePreviewContent: React.FC<{
     };
 
     return (
-        <div className={cn("zd:max-w-8xl zd:w-[90vw] zd:h-[90vh] zd:flex zd:flex-col", className || '')}>
+        <div className={cn("zd:max-w-9xl zd:w-[90vw] zd:h-[90vh] zd:flex zd:flex-col", className || '')}>
             {/* Header */}
             <div className="zd:flex zd:items-center zd:justify-between zd:p-4 zd:border-b">
                 <div className="zd:flex zd:items-center zd:space-x-3 zd:flex-1">

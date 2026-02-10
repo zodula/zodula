@@ -115,8 +115,6 @@ export interface DoctypeChild {
     childDoctype: Zodula.DoctypeName;
     /** The field name in the parent doctype (Reference Table or Extend field) */
     parentFieldName: string;
-    /** The field name in the child doctype that references the parent */
-    childFieldName: string;
     /** The type of relationship: "Reference Table" or "Extend" */
     type: "Reference Table" | "Extend";
 }
@@ -383,16 +381,6 @@ export class DoctypeLoader implements DoctypePlugin {
             if (reference === doctypeName) {
                 continue;
             }
-
-            // Validate that reference_field is provided
-            const childFieldName = fieldConfig.reference_field;
-            if (!childFieldName) {
-                throw new Error(
-                    `Reference Table/Extend field "${fieldName}" in doctype "${doctypeName}" must have "reference_field" specified. ` +
-                    `This field indicates which field in the child doctype "${reference}" links back to the parent.`
-                );
-            }
-
             const childrenList = children.get(doctypeName) || [];
 
             // Create child relationship
@@ -400,7 +388,6 @@ export class DoctypeLoader implements DoctypePlugin {
                 parentDoctype: doctypeName,
                 childDoctype: reference as Zodula.DoctypeName,
                 parentFieldName: fieldName,
-                childFieldName: childFieldName,
                 type: fieldConfig.type as "Reference Table" | "Extend"
             };
 
@@ -645,15 +632,6 @@ export class DoctypeLoader implements DoctypePlugin {
                 // Don't validate self-references
                 if (reference === doctype.name) {
                     continue;
-                }
-
-                // Validate that reference_field is provided
-                if (!fieldConfig.reference_field) {
-                    throw new Error(
-                        `Reference Table/Extend field "${fieldName}" in doctype "${doctype.name}" must have "reference_field" specified. ` +
-                        `This field indicates which field in the child doctype "${reference}" links back to the parent. ` +
-                        `Example: reference_field: "sales_invoice" (the field name in the child doctype that references this parent)`
-                    );
                 }
             }
         }

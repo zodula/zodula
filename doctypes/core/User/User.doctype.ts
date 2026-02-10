@@ -23,13 +23,11 @@ export default $doctype<"zodula__User">({
         type: "Reference Table",
         label: "Organization Roles",
         reference: "zodula__Organization Role",
-        reference_field: "user",
     },
     roles: {
         type: "Reference Table",
         label: "Roles",
         reference: "zodula__User Role",
-        reference_field: "user",
         required: 0
     }
 }, {

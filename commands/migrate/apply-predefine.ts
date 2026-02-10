@@ -92,6 +92,9 @@ async function upsertFieldsBatch(
 
     const fieldPayload = {
       id,
+      parentid: null,
+      parentype: null,
+      parentfield: null,
       type: fieldSchema.type,
       required: fieldSchema.required ? 1 : 0,
       name: fieldName,
@@ -105,7 +108,6 @@ async function upsertFieldsBatch(
       default: fieldSchema.default || null,
       plain: fieldSchema.plain ? 1 : 0,
       reference: fieldSchema.reference || null,
-      reference_field: fieldSchema.reference_field || null,
       is_auto_generated: fieldSchema.is_auto_generated ? 1 : 0,
       unique: fieldSchema.unique ? 1 : 0,
       group: fieldSchema.group || null,
@@ -130,7 +132,7 @@ async function upsertFieldsBatch(
       only_db: fieldSchema.only_db ? 1 : 0,
       width: fieldSchema.width || null,
       fetch_from: fieldSchema.fetch_from || null,
-      organization: "SYS",
+      organization: "System Panel",
       in_quick_entry: fieldSchema.in_quick_entry ? 1 : 0 || null,
       perm_level: fieldSchema.perm_level || "0",
       only_once: fieldSchema.only_once ? 1 : 0 || null,
@@ -228,12 +230,15 @@ async function upsertRelativesBatch(
 
     const relativePayload = {
       id: newId,
+      parentid: null,
+      parentype: null,
+      parentfield: null,
       parent_doctype: relativeItem.parentDoctype,
       child_doctype: relativeItem.childDoctype,
       child_field_name: relativeItem.childFieldName,
       idx: relativeIdx++,
       vector: "[]",
-      organization: "SYS",
+      organization: "System Panel",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype Relative">>;
 
@@ -320,14 +325,16 @@ async function upsertChildrenBatch(
 
     const childPayload = {
       id: newId,
-      parent_doctype: childItem.parentDoctype,
+      parentid: null,
+      parentype: null,
+      parentfield: null,
       child_doctype: childItem.childDoctype,
+      parent_doctype: childItem.parentDoctype,
       parent_field_name: childItem.parentFieldName,
-      child_field_name: childItem.childFieldName,
       type: childItem.type,
       idx: childIdx++,
       vector: "[]",
-      organization: "SYS",
+      organization: "System Panel",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype Children">>;
 
@@ -419,12 +426,15 @@ async function upsertApp(
     const basePayload = createBasePayload();
     const appPayload = {
       id: app.packageName,
+      parentid: null,
+      parentype: null,
+      parentfield: null,
       name: app.packageName,
       version: appVersion,
       description: app.package.description || null,
       idx,
       vector: "[]",
-      organization: "SYS",
+      organization: "System Panel",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__App">>;
 
@@ -534,6 +544,9 @@ async function upsertDoctype(
     const basePayload = createBasePayload();
     const doctypePayload = {
       id: doctype.name,
+      parentid: null,
+      parentype: null,
+      parentfield: null,
       name: doctype.name,
       label: doctype.config.label || doctype.name || null,
       json_model: JSON.stringify(doctype.schema, null, 2),
@@ -554,8 +567,8 @@ async function upsertDoctype(
       is_global: doctype.config.is_global ? 1 : 0,
       is_quick_entry: doctype.config.is_quick_entry ? 1 : 0,
       additional_connections: doctype.config.additional_connections || null,
-      insert_tier_required: doctype.config.insert_tier_required ? 1 : 0,
-      organization: "SYS",
+      insert_tier_required: doctype.config.insert_tier_required as "0" | "1" | "2" | "3" | "4" | "5" | null,
+      organization: "System Panel",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype">>;
 

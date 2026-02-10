@@ -20,7 +20,6 @@ export default $doctype<"zodula__Tier Config">({
         type: "Reference Table",
         label: "Doctype Items",
         reference: "zodula__Tier Config Doctype Item",
-        reference_field: "tier_config",
     }
 }, {
     naming_series: "{{app}} - {{tier_level}}",

@@ -21,6 +21,7 @@ class DoctypeAPIHelper {
     return filters;
   }
 
+
   static parseFiltersFromObject(rest: Record<string, any>) {
     const filters: Array<[string, string, any]> = [];
 
@@ -387,7 +388,7 @@ export const extendDoctype = () => {
               .page(+page)
               .sort(sort as any, order as "asc" | "desc")
               .q(q as string)
-              .fields(fields || (["*"] as any[]));
+              .fields((fields || (["*"] as any[])) as any[]);
 
             if (rest) {
               const filters = DoctypeAPIHelper.parseFiltersFromObject(rest);
@@ -413,7 +414,7 @@ export const extendDoctype = () => {
           );
         }
       },
-      DoctypeAPIHelper.getListRouteConfig(doctypeMeta)
+      // DoctypeAPIHelper.getListRouteConfig(doctypeMeta)
     );
 
     // bulk create docs

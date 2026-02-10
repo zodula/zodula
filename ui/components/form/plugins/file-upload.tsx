@@ -9,7 +9,7 @@ export const FileUploadPlugin = new FormPlugin({
     const doctype = props.fieldOptions.doctype;
     const docId = props.docId || "";
     const fieldName = props.fieldOptions.name;
-    const organization = props.formData?.organization || "SYS";
+    const organization = props.formData?.organization || "System Panel";
     const urlPrefix = [BASE_URL, "files", organization, doctype, docId || doctype, fieldName, ""].join("/");
     return (
         <>

@@ -3,7 +3,12 @@ export const standardFields = {
         type: "Reference",
         label: "Organization",
         reference: "zodula__Organization",
-        on_delete: "CASCADE",
+        allow_on_submit: 1,
+        in_list_view: 1,
+    },
+    organization_abbr: {
+        type: "Text",
+        label: "Organization Abbreviation",
         allow_on_submit: 1,
         in_list_view: 1,
     },
@@ -18,7 +23,6 @@ export const standardFields = {
         type: "Reference",
         label: "Owner",
         reference: "zodula__User",
-        on_delete: "SET NULL",
         allow_on_submit: 1
     },
     created_at: {
@@ -38,14 +42,12 @@ export const standardFields = {
     created_by: {
         type: "Reference",
         reference: "zodula__User",
-        on_delete: "SET NULL",
         label: "Created By",
         allow_on_submit: 1,
     },
     updated_by: {
         type: "Reference",
         reference: "zodula__User",
-        on_delete: "SET NULL",
         label: "Updated By",
         allow_on_submit: 1
     },
@@ -60,6 +62,24 @@ export const standardFields = {
         type: "Integer",
         label: "Idx",
         default: "0",
+        allow_on_submit: 1
+    },
+    parentid: {
+        type: "Text",
+        label: "Parent DocID",
+        default: "",
+        allow_on_submit: 1
+    },
+    parentype: {
+        type: "Text",
+        label: "Parent Doctype",
+        default: "",
+        allow_on_submit: 1
+    },
+    parentfield: {
+        type: "Text",
+        label: "Parent Fieldname",
+        default: "",
         allow_on_submit: 1
     },
     vector: {

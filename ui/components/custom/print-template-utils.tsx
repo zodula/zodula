@@ -7,7 +7,7 @@ export function elementToItemPayload(
   idx: number
 ): Zodula.InsertDoctype<"zodula__Print Template Item"> {
   const payload: Zodula.InsertDoctype<"zodula__Print Template Item"> = {
-    print_template: printTemplateId,
+    // Note: print_template field removed - parentid, parenttype, parentfield will be auto-populated
     type: element.type,
     value: typeof element.value === "string" ? element.value : "",
     align: element.align || "left",
@@ -70,6 +70,11 @@ export function elementToItemPayload(
   // Add code field if present
   if (element.code) {
     (payload as any).code = element.code;
+  }
+  
+  // Add group field if present (for group children)
+  if (element.group) {
+    (payload as any).group = element.group;
   }
   
   return payload;
@@ -145,6 +150,11 @@ export function elementToLetterHeadItemPayload(
   // Add code field if present
   if (element.code) {
     (payload as any).code = element.code;
+  }
+  
+  // Add group field if present (for group children)
+  if (element.group) {
+    (payload as any).group = element.group;
   }
   
   return payload;
@@ -258,6 +268,11 @@ export function itemToElement(
     element.code = (item as any).code;
   }
   
+  // Add group field if present (for group children)
+  if ((item as any).group) {
+    element.group = (item as any).group;
+  }
+  
   return element;
 }
 
@@ -368,6 +383,11 @@ export function letterHeadItemToElement(
   // Add code field if present
   if ((item as any).code) {
     element.code = (item as any).code;
+  }
+  
+  // Add group field if present (for group children)
+  if ((item as any).group) {
+    element.group = (item as any).group;
   }
   
   return element;

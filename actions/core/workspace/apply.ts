@@ -196,57 +196,59 @@ export default $action(async (ctx) => {
             }).bypass(true)
         }
 
-        // Export fixtures after applying workspace changes
-        try {
-            const actionLoader = $loader.from("action")
-            // Try both singular and plural action paths
-            const exportAction = actionLoader.get("zodula.fixtures.export") || actionLoader.get("zodula.fixtures.exports")
-            if (exportAction) {
-                // Get all workspace IDs that were affected
-                const allWorkspaceIds = [
-                    ...workspaceToUpdate.map(w => w.id),
-                    ...createdWorkspaces.map(w => w.id)
-                ].filter(Boolean) as string[]
+        // Export fixtures after applying workspace changes (only in developer mode)
+        if (process.env.ZODULA_PUBLIC_DEVELOPER_MODE == "true") {
+            try {
+                const actionLoader = $loader.from("action")
+                // Try both singular and plural action paths
+                const exportAction = actionLoader.get("zodula.fixtures.export") || actionLoader.get("zodula.fixtures.exports")
+                if (exportAction) {
+                    // Get all workspace IDs that were affected
+                    const allWorkspaceIds = [
+                        ...workspaceToUpdate.map(w => w.id),
+                        ...createdWorkspaces.map(w => w.id)
+                    ].filter(Boolean) as string[]
 
-                // Get all workspace item IDs that were affected
-                const allItemIds = [
-                    ...itemToUpdate.map(i => i.id),
-                    ...createdItems
-                ].filter(Boolean) as string[]
+                    // Get all workspace item IDs that were affected
+                    const allItemIds = [
+                        ...itemToUpdate.map(i => i.id),
+                        ...createdItems
+                    ].filter(Boolean) as string[]
 
-                // Export workspaces
-                if (allWorkspaceIds.length > 0) {
-                    const workspaceFields = ["id", "name", "idx", "workspace_parent", "icon", "app", "is_system"]
-                    const mockCtx = {
-                        ...ctx,
-                        body: {
-                            app: "zodula",
-                            doctype: "zodula__Workspace",
-                            ids: allWorkspaceIds,
-                            fields: workspaceFields
+                    // Export workspaces
+                    if (allWorkspaceIds.length > 0) {
+                        const workspaceFields = ["id", "name", "idx", "workspace_parent", "icon", "app", "is_system"]
+                        const mockCtx = {
+                            ...ctx,
+                            body: {
+                                app: "zodula",
+                                doctype: "zodula__Workspace",
+                                ids: allWorkspaceIds,
+                                fields: workspaceFields
+                            }
                         }
+                        await exportAction.handler(mockCtx)
                     }
-                    await exportAction.handler(mockCtx)
-                }
 
-                // Export workspace items
-                if (allItemIds.length > 0) {
-                    const itemFields = ["id", "idx", "type", "value", "options", "workspaceId"]
-                    const mockCtx = {
-                        ...ctx,
-                        body: {
-                            app: "zodula",
-                            doctype: "zodula__Workspace Item",
-                            ids: allItemIds,
-                            fields: itemFields
+                    // Export workspace items
+                    if (allItemIds.length > 0) {
+                        const itemFields = ["id", "idx", "type", "value", "options", "workspaceId"]
+                        const mockCtx = {
+                            ...ctx,
+                            body: {
+                                app: "zodula",
+                                doctype: "zodula__Workspace Item",
+                                ids: allItemIds,
+                                fields: itemFields
+                            }
                         }
+                        await exportAction.handler(mockCtx)
                     }
-                    await exportAction.handler(mockCtx)
                 }
+            } catch (exportError: any) {
+                // Log error but don't fail the entire operation
+                console.error('Failed to export fixtures:', exportError)
             }
-        } catch (exportError: any) {
-            // Log error but don't fail the entire operation
-            console.error('Failed to export fixtures:', exportError)
         }
 
         return ctx.json({
