@@ -332,9 +332,19 @@ export class ZodulaDoctypeSelector<
       }
 
       const { limit = -1, page = 1 } = this.options || {};
+      const children = doctype.children;
+      
+      // Find child field aliases from children (Reference Table and Extend fields)
+      const childFieldAliases = new Set<string>();
+      for (const child of children) {
+        childFieldAliases.add(child.parentFieldName);
+      }
+
       const requestedFields =
         this.options.fields.length > 0
-          ? this.options.fields?.map((field) => String(field))
+          ? this.options.fields
+              ?.map((field) => String(field))
+              ?.filter((field) => !childFieldAliases.has(field)) ?? []
           : ["*"];
 
       // Build JOINs for reference table filters
@@ -415,6 +425,27 @@ export class ZodulaDoctypeSelector<
               isOwn
             );
           }
+
+          // Fetch and attach child records (Extend and Reference Table fields)
+          if (children.length > 0) {
+            for (const child of children) {
+              const childRecords = await ZodulaDoctypeHelper.getChildRecords(
+                doc.id,
+                child,
+                {
+                  fields: [],
+                  bypass: this.options.bypass,
+                  override: this.options.override,
+                  unsafe: this.options.unsafe,
+                }
+              );
+
+              if (childRecords !== undefined) {
+                doc[child.parentFieldName as keyof Zodula.SelectDoctype<TN>] = childRecords as any;
+              }
+            }
+          }
+
           return this.options.unsafe
             ? doc
             : zodula.utils.safe(this.doctypeName, doc);

@@ -5,88 +5,102 @@ export const standardFields = {
         reference: "zodula__Organization",
         allow_on_submit: 1,
         in_list_view: 1,
+        no_print: 1,
     },
     organization_abbr: {
         type: "Text",
         label: "Organization Abbreviation",
         allow_on_submit: 1,
         in_list_view: 1,
+        no_print: 1,
     },
     id: {
         type: "Text",
         label: "ID",
         unique: 1,
         default: "HEX()",
-        allow_on_submit: 1
+        allow_on_submit: 1,
+        no_print: 1,
     },
     owner: {
         type: "Reference",
         label: "Owner",
         reference: "zodula__User",
-        allow_on_submit: 1
+        allow_on_submit: 1,
+        no_print: 1,
     },
     created_at: {
         type: "DateTime",
         label: "Created At",
         required: 1,
         default: "NOW()",
-        allow_on_submit: 1
+        allow_on_submit: 1,
+        no_print: 1,
     },
     updated_at: {
         type: "DateTime",
         label: "Updated At",
         required: 1,
         default: "NOW()",
-        allow_on_submit: 1
+        allow_on_submit: 1,
+        no_print: 1,
     },
     created_by: {
         type: "Reference",
         reference: "zodula__User",
         label: "Created By",
         allow_on_submit: 1,
+        no_print: 1,
     },
     updated_by: {
         type: "Reference",
         reference: "zodula__User",
         label: "Updated By",
-        allow_on_submit: 1
+        allow_on_submit: 1,
+        no_print: 1,
     },
     doc_status: {
         type: "Integer",
         required: 1,
         default: "0",
         label: "Document Status",
-        allow_on_submit: 1
+        allow_on_submit: 1,
+        no_print: 1,
     },
     idx: {
         type: "Integer",
         label: "Idx",
         default: "0",
-        allow_on_submit: 1
+        allow_on_submit: 1,
+        no_print: 1,
     },
     parentid: {
         type: "Text",
         label: "Parent DocID",
         default: "",
-        allow_on_submit: 1
+        allow_on_submit: 1,
+        no_print: 1,
     },
     parentype: {
         type: "Text",
         label: "Parent Doctype",
         default: "",
-        allow_on_submit: 1
+        allow_on_submit: 1,
+        no_print: 1,
     },
     parentfield: {
         type: "Text",
         label: "Parent Fieldname",
         default: "",
-        allow_on_submit: 1
+        allow_on_submit: 1,
+        no_print: 1,
     },
     vector: {
         type: "Text",
         label: "Vector",
         default: "[]",
-        allow_on_submit: 1
+        allow_on_submit: 1,
+        no_print: 1,
     }
 } as const satisfies Record<string, Zodula.Field>
 

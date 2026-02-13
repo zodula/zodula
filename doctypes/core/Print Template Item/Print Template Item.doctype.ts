@@ -130,6 +130,18 @@ export default $doctype<"zodula__Print Template Item">({
         type: "JSON",
         label: "Anchor Configuration",
         description: "For anchored elements: anchorTo (element ID), anchorPosition (top-left only), anchorOffset (pixels)"
+    },
+    columns: {
+        type: "Integer",
+        label: "Columns",
+        description: "Number of columns for group elements (only in fixed position mode)",
+        default: "1"
+    },
+    hide_no_value: {
+        type: "Check",
+        label: "Hide if No Value",
+        description: "Hide element if it has no value (for field, reference, text, and image elements)",
+        default: "0"
     }
 }, {
     label: "Print Template Item",

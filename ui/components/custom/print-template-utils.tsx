@@ -16,7 +16,7 @@ export function elementToItemPayload(
     transform_y: element.transform?.y || 0,
     transform_width: element.transform?.width || 200,
     transform_height: element.transform?.height || 30,
-    idx: idx,
+    idx: element.idx !== undefined ? element.idx : idx, // Use element.idx if present, otherwise use passed idx
   };
   
   // Style fields (font size/weight/style/decoration)
@@ -75,6 +75,16 @@ export function elementToItemPayload(
   // Add group field if present (for group children)
   if (element.group) {
     (payload as any).group = element.group;
+  }
+  
+  // Add columns for fixed position mode (group elements)
+  if (element.columns !== undefined) {
+    (payload as any).columns = element.columns;
+  }
+  
+  // Add hide_no_value field
+  if (element.hideNoValue !== undefined) {
+    (payload as any).hide_no_value = element.hideNoValue === true ? 1 : 0;
   }
   
   return payload;
@@ -157,6 +167,16 @@ export function elementToLetterHeadItemPayload(
     (payload as any).group = element.group;
   }
   
+  // Add columns for fixed position mode (group elements)
+  if (element.columns !== undefined) {
+    (payload as any).columns = element.columns;
+  }
+  
+  // Add hide_no_value field
+  if (element.hideNoValue !== undefined) {
+    (payload as any).hide_no_value = element.hideNoValue === true ? 1 : 0;
+  }
+  
   return payload;
 }
 
@@ -190,23 +210,27 @@ export function itemToElement(
     style: {},
   };
   
-  // Populate style from stored fields
-  if (item.style_font_size !== undefined) {
-    element.style = { ...(element.style || {}), fontSize: item.style_font_size as any };
+  // Populate style from stored fields (support both snake_case and camelCase from API)
+  const styleFontSize = (item as any).style_font_size ?? (item as any).styleFontSize;
+  if (styleFontSize !== undefined && styleFontSize !== null) {
+    element.style = { ...(element.style || {}), fontSize: Number(styleFontSize) || styleFontSize };
   }
-  if ((item as any).style_font_weight !== undefined) {
-    element.style = { ...(element.style || {}), fontWeight: (item as any).style_font_weight };
+  const styleFontWeight = (item as any).style_font_weight ?? (item as any).styleFontWeight;
+  if (styleFontWeight !== undefined) {
+    element.style = { ...(element.style || {}), fontWeight: styleFontWeight };
   }
-  if ((item as any).style_font_style !== undefined) {
-    element.style = { ...(element.style || {}), fontStyle: (item as any).style_font_style };
+  const styleFontStyle = (item as any).style_font_style ?? (item as any).styleFontStyle;
+  if (styleFontStyle !== undefined) {
+    element.style = { ...(element.style || {}), fontStyle: styleFontStyle };
   }
-  if ((item as any).style_text_decoration !== undefined) {
-    element.style = { ...(element.style || {}), textDecoration: (item as any).style_text_decoration };
+  const styleTextDecoration = (item as any).style_text_decoration ?? (item as any).styleTextDecoration;
+  if (styleTextDecoration !== undefined) {
+    element.style = { ...(element.style || {}), textDecoration: styleTextDecoration };
   }
   if (element.style && Object.keys(element.style).length === 0) {
     delete (element as any).style;
   }
-  
+
   // Parse fields for Reference Table/Extend types
   if (item.fields && typeof item.fields === "string") {
     try {
@@ -217,17 +241,18 @@ export function itemToElement(
   } else if (Array.isArray(item.fields)) {
     element.fields = item.fields;
   }
-  
-  // Parse table config for Reference Table fields
-  if (item.table_config) {
-    if (typeof item.table_config === "string") {
+
+  // Parse table config for Reference Table fields (support both snake_case and camelCase)
+  const rawTableConfig = (item as any).table_config ?? (item as any).tableConfig;
+  if (rawTableConfig !== undefined && rawTableConfig !== null) {
+    if (typeof rawTableConfig === "string") {
       try {
-        element.tableConfig = JSON.parse(item.table_config);
+        element.tableConfig = JSON.parse(rawTableConfig);
       } catch (e) {
         // Ignore parse errors
       }
-    } else if (typeof item.table_config === "object") {
-      element.tableConfig = item.table_config as any;
+    } else if (typeof rawTableConfig === "object") {
+      element.tableConfig = rawTableConfig as any;
     }
   }
   
@@ -271,6 +296,19 @@ export function itemToElement(
   // Add group field if present (for group children)
   if ((item as any).group) {
     element.group = (item as any).group;
+  }
+  
+  // Add idx and columns for fixed position mode
+  if ((item as any).idx !== undefined) {
+    element.idx = (item as any).idx;
+  }
+  if ((item as any).columns !== undefined) {
+    element.columns = (item as any).columns;
+  }
+  
+  // Add hide_no_value field
+  if ((item as any).hide_no_value !== undefined) {
+    element.hideNoValue = (item as any).hide_no_value === 1 || (item as any).hide_no_value === true;
   }
   
   return element;
@@ -388,6 +426,11 @@ export function letterHeadItemToElement(
   // Add group field if present (for group children)
   if ((item as any).group) {
     element.group = (item as any).group;
+  }
+  
+  // Add hide_no_value field
+  if ((item as any).hide_no_value !== undefined) {
+    element.hideNoValue = (item as any).hide_no_value === 1 || (item as any).hide_no_value === true;
   }
   
   return element;

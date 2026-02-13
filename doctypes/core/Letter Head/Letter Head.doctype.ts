@@ -13,9 +13,16 @@ export default $doctype<"zodula__Letter Head">({
     },
     format: {
         type: "Select",
-        options: "A4\nA3\nA5\nLetter\nLegal\nTabloid\nCustom",
+        options: "A4\nA3\nA5\nLetter\nLegal\nTabloid\n210x30mm\n30x30mm\nCustom",
         default: "A4",
         label: "Page Format"
+    },
+    align: {
+        type: "Select",
+        options: "left\nmiddle\nright",
+        default: "left",
+        label: "Alignment",
+        description: "Horizontal alignment when used with Print Template"
     },
     custom_width: {
         type: "Float",

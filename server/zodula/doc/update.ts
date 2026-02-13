@@ -630,6 +630,16 @@ export class ZodulaDoctypeUpdate<
       await db.run(`UPDATE "${child.childDoctype}" SET "parentid" = ? WHERE "parentid" = ? AND "parentype" = ? AND "parentfield" = ?`, [this.newId, this.oldId, doctype.name, child.parentFieldName]);
       let existings = await db.all(`SELECT id FROM "${child.childDoctype}" WHERE "parentid" = ? AND "parentype" = ? AND "parentfield" = ?`, [this.newId, doctype.name, child.parentFieldName])
       let payload = extendsList[child.parentFieldName]
+      let noDuplicates = [] as string[]
+      for (const existing of existings) {
+        if (!noDuplicates.find((noDuplicate) => noDuplicate === existing.id)) {
+          noDuplicates.push(existing.id)
+        }
+      }
+      for (const noDuplicate of noDuplicates) {
+        await zodula.doctype(child.childDoctype).delete(noDuplicate).bypass(this.options.bypass);
+      }
+
       const isExists = existings.find((existing: any) => existing.id === payload.id)
       if (isExists) {
         payload = await zodula.doctype(child.childDoctype).update(payload.id, {
@@ -646,19 +656,6 @@ export class ZodulaDoctypeUpdate<
           "parentfield": child.parentFieldName,
         }).bypass(this.options.bypass);
       }
-
-      // remove duplicates remain only one
-      existings = await db.all(`SELECT id FROM "${child.childDoctype}" WHERE "parentid" = ? AND "parentype" = ? AND "parentfield" = ?`, [this.newId, doctype.name, child.parentFieldName])
-      let noDuplicates = [] as string[]
-      for (const existing of existings) {
-        if (!noDuplicates.find((noDuplicate) => noDuplicate === existing.id)) {
-          noDuplicates.push(existing.id)
-        }
-      }
-      for (const noDuplicate of noDuplicates) {
-        await zodula.doctype(child.childDoctype).delete(noDuplicate).bypass(this.options.bypass);
-      }
-
       extendsList[child.parentFieldName] = payload
     }
 
@@ -678,9 +675,14 @@ export class ZodulaDoctypeUpdate<
       await db.run(`UPDATE "${child.childDoctype}" SET "parentid" = ? WHERE "parentid" = ? AND "parentype" = ? AND "parentfield" = ?`, [this.newId, this.oldId, doctype.name, child.parentFieldName]);
       let existings = await db.all(`SELECT id FROM "${child.childDoctype}" WHERE "parentid" = ? AND "parentype" = ? AND "parentfield" = ?`, [this.newId, doctype.name, child.parentFieldName])
       let payloadArray = refTableList[child.parentFieldName] || []
+      const missings = existings.filter((existing: any) => !payloadArray.find((payload: any) => payload.id === existing.id))
+      for (const missing of missings) {
+        await zodula.doctype(child.childDoctype).delete(missing.id).bypass(this.options.bypass);
+      }
       for (let index = 0; index < payloadArray.length; index++) {
         const payload = payloadArray[index]
         const isExists = existings.find((existing: any) => existing.id === payload.id)
+        console.log(payload?.id, isExists);
         if (isExists) {
           payloadArray[index] = await zodula.doctype(child.childDoctype).update(payload.id, {
             ...payload,
@@ -696,12 +698,6 @@ export class ZodulaDoctypeUpdate<
             "parentfield": child.parentFieldName,
           }).bypass(this.options.bypass);
         }
-      }
-
-      existings = await db.all(`SELECT id FROM "${child.childDoctype}" WHERE "parentid" = ? AND "parentype" = ? AND "parentfield" = ?`, [this.newId, doctype.name, child.parentFieldName])
-      const missings = existings.filter((existing: any) => !payloadArray.find((payload: any) => payload.id === existing.id))
-      for (const missing of missings) {
-        await zodula.doctype(child.childDoctype).delete(missing.id).bypass(this.options.bypass);
       }
       refTableList[child.parentFieldName] = payloadArray
     }

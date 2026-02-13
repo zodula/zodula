@@ -136,9 +136,16 @@ export default $doctype<"zodula__Letter Head Item">({
         type: "JSON",
         label: "Anchor Configuration",
         description: "For anchored elements: anchorTo (element ID), anchorPosition (top-left only), anchorOffset (pixels)"
+    },
+    hide_no_value: {
+        type: "Check",
+        label: "Hide if No Value",
+        description: "Hide element if it has no value (for field, reference, text, and image elements)",
+        default: "0"
     }
 }, {
     label: "Letter Head Item",
     search_fields: "type\nvalue",
-    display_field: "type"
+    display_field: "type",
+    is_child_doctype: 1
 })

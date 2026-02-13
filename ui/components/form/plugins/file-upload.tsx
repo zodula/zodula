@@ -11,6 +11,7 @@ export const FileUploadPlugin = new FormPlugin({
     const fieldName = props.fieldOptions.name;
     const organization = props.formData?.organization || "System Panel";
     const urlPrefix = [BASE_URL, "files", organization, doctype, docId || doctype, fieldName, ""].join("/");
+    console.log(urlPrefix);
     return (
         <>
             <FileUpload

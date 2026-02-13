@@ -464,6 +464,7 @@ const Select = ({
 
   // Handle clear button click
   const handleClear = (e: React.MouseEvent) => {
+    e.preventDefault();
     e.stopPropagation();
     onChange?.("");
     setSearchValue("");
@@ -614,13 +615,14 @@ const Select = ({
         suffix={
           <div className="zd:flex zd:items-center zd:gap-1 no-print">
             {suffix}
-            {clearable && value && !isInputReadOnly && (
+            {clearable && value && (
               <button
                 type="button"
                 onClick={handleClear}
-                className="zd:p-1 zd:cursor-pointer"
+                className="zd:p-1 zd:cursor-pointer zd:shrink-0 zd:flex zd:items-center zd:justify-center zd:rounded hover:zd:bg-muted/80"
+                title={placeholder || "Clear"}
               >
-                <XIcon />
+                <XIcon className="zd:w-4 zd:h-4" />
               </button>
             )}
             {!hideChevron && (

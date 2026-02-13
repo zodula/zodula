@@ -78,5 +78,7 @@ export const PAGE_FORMATS: Record<string, { width: number; height: number }> = {
   Letter: { width: 216, height: 279 },
   Legal: { width: 216, height: 356 },
   Tabloid: { width: 279, height: 432 },
+  "210x30mm": { width: 210, height: 30 },
+  "30x30mm": { width: 30, height: 30 },
 };
 

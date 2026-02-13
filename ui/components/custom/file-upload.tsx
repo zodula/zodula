@@ -217,7 +217,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
 
                         {/* File Info */}
                         <div className="zd:flex-1 zd:min-w-0 no-print">
-                            <div className="zd:flex zd:items-center zd:gap-2 zd:mb-1">
+                            <div className="zd:flex zd:items-center zd:gap-2 zd:mb-1 zd:truncate">
                                 {isFile ? (
                                     <p className="zd:text-sm zd:font-medium zd:truncate zd:cursor-pointer zd:hover:underline" onClick={() => {
                                         previewFile(`${urlPrefix}${value}`);

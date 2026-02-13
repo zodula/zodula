@@ -10,11 +10,11 @@ import { PrintTemplateElementHover } from "./print-template-element-hover";
 import { cn } from "../../lib/utils";
 import { BASE_URL } from "@/zodula/client/utils";
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
-import { PAGE_FORMATS, generateTemplateFromTabs as generateTemplateFromTabsUtil, type PrintTemplateElement as SharedPrintTemplateElement } from "@/zodula/client/code-utils";
+import { PAGE_FORMATS, generateFixedPositionTemplateFromTabs as generateFixedPositionTemplateFromTabsUtil, type PrintTemplateElement as SharedPrintTemplateElement } from "@/zodula/client/code-utils";
 import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
 import { useDoc } from "@/zodula/ui/hooks/use-doc";
 import { useDnd } from "@/zodula/ui/hooks/use-dnd";
-import { confirm } from "../ui/popit";
+import { confirm, popup } from "../ui/popit";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -35,7 +35,7 @@ import {
 
 export interface PrintTemplateElement {
   id: string;
-  code?: string; // Code for anchoring (stable identifier, not auto-generated id)
+  code?: string; // Code for stable identifier (not auto-generated id)
   type: "field" | "text" | "image" | "line" | "reference" | "custom_html" | "anchor";
   value?: string | File;
   align?: "left" | "center" | "right";
@@ -48,7 +48,7 @@ export interface PrintTemplateElement {
   // Label support for field and reference
   label?: string; // Label text to display
   labelPosition?: "left" | "right" | "top" | "bottom"; // Position of label relative to value
-  // Anchor support - element can be anchored to another element
+  // Anchor support - element can be anchored to another element (only when not fixed position)
   anchorTo?: string; // Code of element to anchor to (not id, as id is auto-generated)
   anchorPosition?: "top-left"; // Position relative to anchored element (only top-left supported)
   anchorOffset?: number | { x: number; y: number }; // Offset in pixels from anchor position (supports both number and {x, y})
@@ -85,6 +85,11 @@ export interface PrintTemplateElement {
   };
   // Group support - element can belong to a group
   group?: string; // Group ID that this element belongs to
+  // For fixed position mode: columns for groups (sections)
+  columns?: number; // Number of columns for group elements (only in fixed position mode)
+  idx?: number; // Index for ordering elements (only in fixed position mode)
+  // Hide if no value (for field and reference elements)
+  hideNoValue?: boolean; // Hide element if it has no value
 }
 
 interface PrintTemplateBuilderProps {
@@ -94,12 +99,28 @@ interface PrintTemplateBuilderProps {
   fields?: Zodula.Field[];
   readonly?: boolean;
   onPreview?: () => void;
-  format?: "A4" | "A3" | "A5" | "Letter" | "Legal" | "Tabloid" | "Custom";
+  format?: "A4" | "A3" | "A5" | "Letter" | "Legal" | "Tabloid" | "Custom" | "210x30mm" | "30x30mm";
   customWidth?: number; // in mm
   customHeight?: number; // in mm
+  marginTop?: number; // in mm
+  marginRight?: number; // in mm
+  marginBottom?: number; // in mm
+  marginLeft?: number; // in mm
   guidedBackground?: string | File; // Guided background image URL or File
   onGuidedBackgroundChange?: (background: string | File | null) => void; // Callback when guided background changes
   templateId?: string; // Template ID for file uploads
+  organization?: string; // Print template doc.organization for file uploads (FormControl org)
+  isLetterHead?: boolean; // Whether this is a Letter Head (not a Print Template)
+  letterHeadAlign?: "left" | "middle" | "right"; // Letter Head alignment
+  onLetterHeadAlignChange?: (align: "left" | "middle" | "right") => void; // Callback when Letter Head align changes
+  isFixedPosition?: boolean; // Whether elements use fixed position (idx-based) or free positioning
+  // Optional callbacks for Settings panel (Format, Margins, Fixed position) - when provided, Settings shows full options
+  onFormatChange?: (format: "A4" | "A3" | "A5" | "Letter" | "Legal" | "Tabloid" | "Custom" | "210x30mm" | "30x30mm") => void;
+  onCustomSizeChange?: (width: number, height: number) => void;
+  onMarginsChange?: (margins: { top: number; right: number; bottom: number; left: number }) => void;
+  onFixedPositionChange?: (value: boolean) => void;
+  /** When false, hide the Settings button in the toolbar (e.g. when parent provides its own Settings, e.g. form view header). Default true. */
+  showSettingsInToolbar?: boolean;
 }
 
 const TOOLS = [
@@ -388,9 +409,10 @@ function TableCustomizationPanel({
                                 }}
                                 placeholder={t("Auto")}
                                 min="0"
+                                max="100"
                                 className="zd:flex-1 zd:text-xs"
                               />
-                              <span className="zd:text-xs zd:text-muted-foreground">px</span>
+                              <span className="zd:text-xs zd:text-muted-foreground">%</span>
                             </div>
                             <span className="zd:text-xs zd:text-muted-foreground">{t("Leave empty for automatic width")}</span>
                           </div>
@@ -408,6 +430,173 @@ function TableCustomizationPanel({
   );
 }
 
+type SettingsPanelInitialData = {
+  format: string;
+  customWidth?: number;
+  customHeight?: number;
+  marginTop: number;
+  marginRight: number;
+  marginBottom: number;
+  marginLeft: number;
+  isFixedPosition: boolean;
+  guidedBackground?: string | File | null;
+  letterHeadAlign: "left" | "middle" | "right";
+  isLetterHead: boolean;
+  onFormatChange?: (format: any) => void;
+  onCustomSizeChange?: (width: number, height: number) => void;
+  onMarginsChange?: (margins: { top: number; right: number; bottom: number; left: number }) => void;
+  onFixedPositionChange?: (value: boolean) => void;
+  onGuidedBackgroundChange?: (background: string | File | null) => void;
+  onLetterHeadAlignChange?: (align: "left" | "middle" | "right") => void;
+  templateId?: string;
+  organization?: string;
+  t: (key: string) => string;
+};
+
+function SettingsPanel({
+  isOpen,
+  onClose,
+  initialData,
+}: {
+  isOpen: boolean;
+  onClose: (result?: any) => void;
+  initialData?: SettingsPanelInitialData;
+}) {
+  const d = initialData!;
+  const [format, setFormat] = useState(d.format || "A4");
+  const [customWidth, setCustomWidth] = useState(d.customWidth ?? 210);
+  const [customHeight, setCustomHeight] = useState(d.customHeight ?? (d.isLetterHead ? 30 : 297));
+  const [marginTop, setMarginTop] = useState(d.marginTop ?? 10);
+  const [marginRight, setMarginRight] = useState(d.marginRight ?? 10);
+  const [marginBottom, setMarginBottom] = useState(d.marginBottom ?? 10);
+  const [marginLeft, setMarginLeft] = useState(d.marginLeft ?? 10);
+  const [isFixedPosition, setIsFixedPosition] = useState(d.isFixedPosition);
+  const [letterHeadAlign, setLetterHeadAlign] = useState(d.letterHeadAlign || "left");
+
+  useEffect(() => {
+    if (isOpen) {
+      setFormat(d.format || "A4");
+      setCustomWidth(d.customWidth ?? 210);
+      setCustomHeight(d.customHeight ?? (d.isLetterHead ? 30 : 297));
+      setMarginTop(d.marginTop ?? 10);
+      setMarginRight(d.marginRight ?? 10);
+      setMarginBottom(d.marginBottom ?? 10);
+      setMarginLeft(d.marginLeft ?? 10);
+      setIsFixedPosition(d.isFixedPosition);
+      setLetterHeadAlign(d.letterHeadAlign || "left");
+    }
+  }, [isOpen, d.format, d.customWidth, d.customHeight, d.marginTop, d.marginRight, d.marginBottom, d.marginLeft, d.isFixedPosition, d.letterHeadAlign, d.isLetterHead]);
+
+  const handleDone = () => {
+    d.onFormatChange?.(format);
+    if (format === "Custom") d.onCustomSizeChange?.(customWidth, customHeight);
+    d.onMarginsChange?.({ top: marginTop, right: marginRight, bottom: marginBottom, left: marginLeft });
+    d.onFixedPositionChange?.(isFixedPosition);
+    d.onLetterHeadAlignChange?.(letterHeadAlign);
+    onClose();
+  };
+
+  const t = d.t;
+  return (
+    <div className="zd:space-y-4 zd:min-w-[280px]">
+      {d.onFormatChange && (
+        <div className="zd:space-y-2">
+          <label className="zd:text-sm zd:font-medium">{t("Page Format")}</label>
+          <Select
+            value={format}
+            onChange={(v) => setFormat(v)}
+            options={
+              d.isLetterHead
+                ? [
+                    { value: "210x30mm", label: "210x30mm" },
+                    { value: "30x30mm", label: "30x30mm" },
+                    { value: "Custom", label: "Custom" },
+                  ]
+                : [
+                    { value: "A4", label: "A4" },
+                    { value: "A3", label: "A3" },
+                    { value: "A5", label: "A5" },
+                    { value: "Letter", label: "Letter" },
+                    { value: "Legal", label: "Legal" },
+                    { value: "Tabloid", label: "Tabloid" },
+                    { value: "Custom", label: "Custom" },
+                  ]
+            }
+            className="zd:w-full"
+          />
+          {format === "Custom" && d.onCustomSizeChange && (
+            <div className="zd:grid zd:grid-cols-2 zd:gap-2 zd:mt-2">
+              <div>
+                <label className="zd:text-xs zd:font-medium">{t("Width (mm)")}</label>
+                <Input type="number" value={customWidth} onChange={(e) => setCustomWidth(Number(e.target.value) || 210)} className="zd:w-full zd:mt-1" />
+              </div>
+              <div>
+                <label className="zd:text-xs zd:font-medium">{t("Height (mm)")}</label>
+                <Input type="number" value={customHeight} onChange={(e) => setCustomHeight(Number(e.target.value) || (d.isLetterHead ? 30 : 297))} className="zd:w-full zd:mt-1" />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {d.onMarginsChange && (
+        <div className="zd:space-y-2">
+          <label className="zd:text-sm zd:font-medium">{t("Margins (mm)")}</label>
+          <div className="zd:grid zd:grid-cols-4 zd:gap-2">
+            <Input type="number" min={0} value={marginTop} onChange={(e) => setMarginTop(Number(e.target.value) || 0)} placeholder={t("T")} title={t("Top")} />
+            <Input type="number" min={0} value={marginRight} onChange={(e) => setMarginRight(Number(e.target.value) || 0)} placeholder={t("R")} title={t("Right")} />
+            <Input type="number" min={0} value={marginBottom} onChange={(e) => setMarginBottom(Number(e.target.value) || 0)} placeholder={t("B")} title={t("Bottom")} />
+            <Input type="number" min={0} value={marginLeft} onChange={(e) => setMarginLeft(Number(e.target.value) || 0)} placeholder={t("L")} title={t("Left")} />
+          </div>
+        </div>
+      )}
+      {!d.isLetterHead && d.onFixedPositionChange && (
+        <div className="zd:flex zd:items-center zd:gap-2">
+          <Checkbox checked={isFixedPosition} onCheckedChange={(checked: boolean) => setIsFixedPosition(checked)} />
+          <label className="zd:text-sm">{t("Fixed position layout")}</label>
+        </div>
+      )}
+      {d.onGuidedBackgroundChange && (
+        <div className="zd:space-y-2">
+          <label className="zd:text-sm zd:font-medium">{t("Guided Background")}</label>
+          <FormControl
+            field={{
+              type: "File",
+              name: "guided_background",
+              doctype: d.isLetterHead ? "zodula__Letter Head" : "zodula__Print Template",
+              accept: "image/*",
+            }}
+            fieldKey="guided_background"
+            value={d.guidedBackground}
+            onChange={(_fieldName, value) => d.onGuidedBackgroundChange?.(value as string | File | null)}
+            docId={d.templateId}
+            formData={{ organization: d.organization }}
+            hideFormControl={true}
+          />
+        </div>
+      )}
+      {d.isLetterHead && d.onLetterHeadAlignChange && (
+        <div className="zd:space-y-2">
+          <label className="zd:text-sm zd:font-medium">{t("Alignment")}</label>
+          <Select
+            value={letterHeadAlign}
+            onChange={(v) => setLetterHeadAlign(v as "left" | "middle" | "right")}
+            options={[
+              { value: "left", label: t("Left") },
+              { value: "middle", label: t("Middle") },
+              { value: "right", label: t("Right") },
+            ]}
+            className="zd:w-full"
+          />
+          <p className="zd:text-xs zd:text-muted-foreground">{t("Horizontal alignment when used with Print Template")}</p>
+        </div>
+      )}
+      <div className="zd:flex zd:justify-end zd:pt-2 zd:border-t zd:border-border">
+        <Button onClick={handleDone}>{t("Done")}</Button>
+      </div>
+    </div>
+  );
+}
+
 export function PrintTemplateBuilder({
   layout,
   onChange,
@@ -418,9 +607,23 @@ export function PrintTemplateBuilder({
   format = "A4",
   customWidth,
   customHeight,
+  marginTop = 10,
+  marginRight = 10,
+  marginBottom = 10,
+  marginLeft = 10,
   guidedBackground,
   onGuidedBackgroundChange,
   templateId,
+  organization,
+  isLetterHead = false,
+  letterHeadAlign = "left",
+  onLetterHeadAlignChange,
+  isFixedPosition = false,
+  onFormatChange,
+  onCustomSizeChange,
+  onMarginsChange,
+  onFixedPositionChange,
+  showSettingsInToolbar = true,
 }: PrintTemplateBuilderProps) {
   const { t } = useTranslation();
   
@@ -451,13 +654,14 @@ export function PrintTemplateBuilder({
   const objectUrlsRef = useRef<Map<string, string>>(new Map());
   const guidedBackgroundUrlRef = useRef<string | null>(null);
   const guidedBackgroundIsFileRef = useRef<boolean>(false);
-  const [hoveredAnchorElementId, setHoveredAnchorElementId] = useState<string | null>(null);
-  const [selectingAnchorFor, setSelectingAnchorFor] = useState<string | null>(null); // Element ID for which we're selecting an anchor
+  const [guidedBackgroundDisplayUrl, setGuidedBackgroundDisplayUrl] = useState<string | null>(null);
   const [tableSettingsTab, setTableSettingsTab] = useState<string>("general"); // Top-level tab for table settings
   const [showSidebar, setShowSidebar] = useState(true); // Right sidebar visibility state
   const [showLayersPanel, setShowLayersPanel] = useState(true); // Left layers panel visibility state
-  const [isDragging, setIsDragging] = useState(false); // Flag to prevent anchor recalculation during drag
+  const [isDragging, setIsDragging] = useState(false); // Flag to prevent recalculation during drag
   const [lastSelectedElementId, setLastSelectedElementId] = useState<string | null>(null); // Track last selected element for Shift+click range selection
+  const [hoveredAnchorElementId, setHoveredAnchorElementId] = useState<string | null>(null);
+  const [selectingAnchorFor, setSelectingAnchorFor] = useState<string | null>(null); // Element ID for which we're selecting an anchor
 
   // Check if setting anchorTo would create a loop
   const wouldCreateLoop = useCallback((elementId: string, anchorToId: string, allElements: PrintTemplateElement[]): boolean => {
@@ -529,10 +733,6 @@ export function PrintTemplateBuilder({
     const anchorPos = calculateAnchorPosition(anchorElement, allElements, visited);
     const anchorX = anchorPos.x;
     const anchorY = anchorPos.y;
-    const anchorWidth = anchorElement.transform?.width || 0;
-    const anchorHeight = anchorElement.transform?.height || 0;
-    const elementWidth = element.transform?.width || 0;
-    const elementHeight = element.transform?.height || 0;
     
     // Normalize offset to {x, y} format
     const offset = element.anchorOffset || { x: 0, y: 0 };
@@ -547,126 +747,29 @@ export function PrintTemplateBuilder({
     return { x: newX, y: newY };
   }, []);
 
-  // Update all anchored elements when layout changes
-  const updateAnchoredElements = useCallback((elements: PrintTemplateElement[]): PrintTemplateElement[] => {
-    // Build dependency graph to process anchors in correct order (topological sort)
-    // Use code for dependency tracking, fallback to id
-    const elementMap = new Map<string, PrintTemplateElement>();
-    const codeToIdMap = new Map<string, string>(); // Map code to id for dependency tracking
-    const dependencies = new Map<string, string[]>();
-    
-    elements.forEach(el => {
-      elementMap.set(el.id, el);
-      if (el.code) {
-        codeToIdMap.set(el.code, el.id);
-      }
-      if (el.anchorTo) {
-        if (!dependencies.has(el.id)) {
-          dependencies.set(el.id, []);
-        }
-        // Find the anchor element by code or id
-        const anchorElement = elements.find(a => (a.code && a.code === el.anchorTo) || (!a.code && a.id === el.anchorTo));
-        if (anchorElement) {
-          dependencies.get(el.id)!.push(anchorElement.id);
-        }
-      }
-    });
-    
-    // Topological sort: process elements that don't have anchors first, then those that anchor to them
-    const processed = new Set<string>();
-    const result: PrintTemplateElement[] = [];
-    const queue: PrintTemplateElement[] = elements.filter(el => !el.anchorTo);
-    
-    // Process elements without anchors first
-    queue.forEach(el => {
-      processed.add(el.id);
-      result.push(el);
-    });
-    
-    // Process anchored elements in dependency order
-    let changed = true;
-    while (changed) {
-      changed = false;
-      elements.forEach(el => {
-        if (processed.has(el.id)) return;
-        
-        const deps = dependencies.get(el.id) || [];
-        const allDepsProcessed = deps.every(depId => processed.has(depId));
-        
-        if (allDepsProcessed) {
-          // Calculate anchor position
-          const newPos = calculateAnchorPosition(el, result);
-          const updated = {
-            ...el,
-            transform: {
-              ...(el.transform || { x: 0, y: 0, width: 200, height: 30 }),
-              x: newPos.x,
-              y: newPos.y,
-            }
-          };
-          result.push(updated);
-          processed.add(el.id);
-          changed = true;
-        }
-      });
-    }
-    
-    // Add any remaining elements (shouldn't happen if no circular dependencies)
-    elements.forEach(el => {
-      if (!processed.has(el.id)) {
-        result.push(el);
-      }
-    });
-    
-    return result;
-  }, [calculateAnchorPosition]);
-
-  // Update anchored elements when layout changes from external source (initial load)
-  const isUpdatingAnchorsRef = useRef(false);
-  const lastLayoutRef = useRef<string>("");
-  
-  useEffect(() => {
-    // Skip if we're already updating anchors (to prevent infinite loops)
-    if (isUpdatingAnchorsRef.current) return;
-    
-    // Create a stable key for the layout to detect external changes
-    const layoutKey = JSON.stringify(layout.map(el => ({ 
-      id: el.id, 
-      x: el.transform?.x, 
-      y: el.transform?.y,
-      anchorTo: el.anchorTo,
-      anchorPosition: el.anchorPosition,
-      anchorOffset: el.anchorOffset
-    })));
-    
-    // Only update if layout actually changed
-    if (layoutKey === lastLayoutRef.current) return;
-    lastLayoutRef.current = layoutKey;
-    
-    if (layout.length > 0) {
-      const hasAnchors = layout.some(el => el.anchorTo);
-      if (hasAnchors) {
-        isUpdatingAnchorsRef.current = true;
-        const updated = updateAnchoredElements(layout);
-        // Only update if positions actually changed
-        const positionsChanged = updated.some((el) => {
-          const original = layout.find(o => o.id === el.id);
-          return original && (el.transform?.x !== original.transform?.x || el.transform?.y !== original.transform?.y);
-        });
-        if (positionsChanged) {
-          onChange(updated);
-        }
-        isUpdatingAnchorsRef.current = false;
-      }
-    }
-  }, [layout, updateAnchoredElements, onChange]);
+  // Get organization fields for easy access
+  const { docs: organizationFields } = useDocList({
+    doctype: "zodula__Field",
+    limit: 10000,
+    sort: "idx",
+    order: "asc",
+    filters: [["doctype", "=", "zodula__Organization"]],
+  }, []);
 
   const fieldOptions = useMemo(() => {
-    return fields.map((field) => ({
+    const regularFields = fields.map((field) => ({
       value: field.name,
       label: field.label || field.name,
     }));
-  }, [fields]);
+    
+    // Add organization fields with "organization." prefix
+    const orgFields = organizationFields.map((field: Zodula.SelectDoctype<"zodula__Field">) => ({
+      value: `organization.${field.name}`,
+      label: `Organization: ${field.label || field.name}`,
+    }));
+    
+    return [...regularFields, ...orgFields];
+  }, [fields, organizationFields]);
 
   // Get doctypes for reference element
   const { docs: doctypes } = useDocList({
@@ -878,11 +981,9 @@ export function PrintTemplateBuilder({
         return [];
       };
       
-      // Use the extracted function from code-utils
+      // Use the appropriate function based on fixed position mode
       const doctypeLabel = doctypeDoc?.label || doctype;
-      const newElements = await generateTemplateFromTabsUtil({
-        tabs,
-        fields: fields
+      const fieldConfigs = fields
           .filter(f => f.name) // Filter out fields without names
           .map(f => ({
             name: f.name!,
@@ -890,35 +991,41 @@ export function PrintTemplateBuilder({
             type: f.type,
             reference: f.reference || undefined,
             no_print: f.no_print === 1 || (f.no_print === true as any),
-          })),
+        }));
+      
+      if (!isFixedPosition) {
+        alert(t("Generate from tabs is only available for fixed position templates"));
+        return;
+      }
+      
+      const newElements = await generateFixedPositionTemplateFromTabsUtil({
+        tabs,
+        fields: fieldConfigs,
         pageDimensions: pageDimensions || { width: 210, height: 297 },
         doctypeLabel,
         fetchChildFields,
         doctype,
       });
       
-      // Update anchored elements to calculate final positions
-      const updatedElements = updateAnchoredElements(newElements);
-      
       // Count headers to debug
-      const headerCount = updatedElements.filter(el => el.type === "text" && el.value === doctypeLabel).length;
+      const headerCount = newElements.filter(el => el.type === "text" && el.value === doctypeLabel).length;
       if (headerCount > 1) {
-        console.error(`WARNING: Generated ${headerCount} headers! Expected only 1. Elements:`, updatedElements.map(el => ({ type: el.type, value: el.value, code: el.code })));
+        console.error(`WARNING: Generated ${headerCount} headers! Expected only 1. Elements:`, newElements.map(el => ({ type: el.type, value: el.value, code: el.code })));
       }
       
       // Apply the new layout (replace existing, don't append)
-      onChange(updatedElements);
-      addToHistory(updatedElements);
+      onChange(newElements);
+      addToHistory(newElements);
       setSelectedElements(new Set());
       
-      console.log(`Generated ${updatedElements.length} elements (${headerCount} header(s) + ${updatedElements.length - headerCount} other elements)`);
+      console.log(`Generated ${newElements.length} elements (${headerCount} header(s) + ${newElements.length - headerCount} other elements)`);
     } catch (error) {
       console.error("Error generating template from tabs:", error);
       alert(t("Failed to generate template. Please check doctype configuration."));
     } finally {
       setIsGenerating(false);
     }
-  }, [doctypeDoc, fields, pageDimensions, onChange, addToHistory, t, doctype, updateAnchoredElements, isGenerating]);
+  }, [doctypeDoc, fields, pageDimensions, onChange, addToHistory, t, doctype, isGenerating]);
 
   const handleAddElement = useCallback((type: string, x?: number, y?: number) => {
     if (readonly) return;
@@ -926,6 +1033,16 @@ export function PrintTemplateBuilder({
     const width = type === "anchor" ? 40 : 200; // Anchor elements minimum 40x40
     // Generate code for the element using timestamp + random hex
     const code = generateCode(type);
+    
+    // Calculate next idx for fixed position mode
+    let nextIdx = 0;
+    if (isFixedPosition) {
+      const maxIdx = layout.length > 0 
+        ? Math.max(...layout.map(el => el.idx ?? 0), -1)
+        : -1;
+      nextIdx = maxIdx + 1;
+    }
+    
     const newElement: PrintTemplateElement = {
       id: `element_${Date.now()}`,
       code: code,
@@ -939,6 +1056,7 @@ export function PrintTemplateBuilder({
         width: width, 
         height: height
       },
+      ...(isFixedPosition ? { idx: nextIdx } : {}),
       ...(type === "reference" ? {
         referenceDoctype: "",
         referenceIdFilter: "",
@@ -950,7 +1068,7 @@ export function PrintTemplateBuilder({
     addToHistory(newLayout);
     // Select the new element
     setSelectedElements(new Set([newElement.id]));
-  }, [layout, onChange, readonly, snapValue, snapSize, addToHistory, generateCode]);
+  }, [layout, onChange, readonly, snapValue, snapSize, addToHistory, generateCode, isFixedPosition]);
 
   // Handle keyboard delete
   useEffect(() => {
@@ -1047,8 +1165,8 @@ export function PrintTemplateBuilder({
       if (selectedIds.includes(el.id)) {
         const absPos = getAbsolutePosition(el);
         // Keep absolute positions (don't convert to relative)
-        // Always remove anchor properties from children when grouping
-        const { group, anchorTo, anchorPosition, anchorOffset, ...rest } = el;
+        // Always remove group property from children when grouping
+        const { group, ...rest } = el;
         
         return {
           ...rest,
@@ -1128,34 +1246,9 @@ export function PrintTemplateBuilder({
     
     const groupX = groupElement.transform.x || 0;
     const groupY = groupElement.transform.y || 0;
-    const groupCode = groupElement.code || groupId;
-    
-    // Get group's visual position (may be anchored)
-    const groupVisualPos = groupElement.anchorTo 
-      ? calculateAnchorPosition(groupElement, layout)
-      : { x: groupX, y: groupY };
     
     // Remove group from selected elements and convert positions
-    // Also remove anchors from elements that anchor to the group
     const newLayout = layout.map(el => {
-      // If element anchors to the group (by code or id), remove the anchor
-      if (el.anchorTo) {
-        const anchorsToGroup = el.anchorTo === groupCode || el.anchorTo === groupId;
-        if (anchorsToGroup) {
-          // Remove anchor properties
-          const { anchorTo, anchorPosition, anchorOffset, ...rest } = el;
-          return {
-            ...rest,
-            // Set position to current visual position (calculated from anchor)
-            transform: {
-              ...(el.transform || { x: 0, y: 0, width: 200, height: 30 }),
-              x: el.anchorTo ? calculateAnchorPosition(el, layout).x : (el.transform?.x || 0),
-              y: el.anchorTo ? calculateAnchorPosition(el, layout).y : (el.transform?.y || 0),
-            },
-          };
-        }
-      }
-      
       // Convert group children positions
       // Children positions are stored as absolute, but when rendered inside group container,
       // they are displayed relative to the group (childAbsolute - groupAbsolute).
@@ -1172,10 +1265,10 @@ export function PrintTemplateBuilder({
         const relativeX = childAbsX - groupX;
         const relativeY = childAbsY - groupY;
         
-        // Calculate new absolute position using group's visual position + relative offset
+        // Calculate new absolute position using group's position + relative offset
         // This ensures the child stays in the same visual position when ungrouped
-        const newAbsX = groupVisualPos.x + relativeX;
-        const newAbsY = groupVisualPos.y + relativeY;
+        const newAbsX = groupX + relativeX;
+        const newAbsY = groupY + relativeY;
         
         return {
           ...rest,
@@ -1192,7 +1285,7 @@ export function PrintTemplateBuilder({
     onChange(newLayout);
     addToHistory(newLayout);
     setSelectedElements(new Set());
-  }, [readonly, layout, onChange, addToHistory, calculateAnchorPosition]);
+  }, [readonly, layout, onChange, addToHistory]);
 
   // Function to update group sizes based on children
   const updateGroupSizes = useCallback((layout: PrintTemplateElement[]): PrintTemplateElement[] => {
@@ -1239,32 +1332,14 @@ export function PrintTemplateBuilder({
     });
   }, []);
 
-  const handleUpdateElement = useCallback((id: string, updates: Partial<PrintTemplateElement>, skipHistory = false, skipAnchorRecalc = false) => {
+  const handleUpdateElement = useCallback((id: string, updates: Partial<PrintTemplateElement>, skipHistory = false) => {
     if (readonly) return;
     
     let newLayout = layout.map((el) => {
       if (el.id === id) {
         const updated = { ...el, ...updates };
         
-        // If anchor settings changed, reset transform x/y to 0 (will be calculated from anchor)
-        const anchorChanged = updates.anchorTo !== undefined || updates.anchorPosition !== undefined || updates.anchorOffset !== undefined;
-        const wasAnchored = el.anchorTo !== undefined;
-        const isNowAnchored = updates.anchorTo !== undefined ? updates.anchorTo !== null : wasAnchored;
-        
-        if (anchorChanged && isNowAnchored) {
-          // Reset position when anchor settings change - it will be recalculated
-          updated.transform = {
-            ...(el.transform || { x: 0, y: 0, width: 200, height: 30 }),
-            x: 0,
-            y: 0,
-            ...(updates.transform ? {
-              width: updates.transform.width ?? el.transform?.width ?? 200,
-              height: Math.max(
-                updates.transform.height ?? el.transform?.height ?? 30
-              ),
-            } : {}),
-          };
-        } else if (updates.transform) {
+        if (updates.transform) {
         // Ensure transform is properly merged
           updated.transform = {
             ...(el.transform || { x: 0, y: 0, width: 200, height: 30 }),
@@ -1279,16 +1354,6 @@ export function PrintTemplateBuilder({
       return el;
     });
     
-    // If anchor settings changed or an element moved, update all anchored elements
-    // Skip anchor recalculation during drag to prevent loops
-    const anchorChanged = updates.anchorTo !== undefined || updates.anchorPosition !== undefined || updates.anchorOffset !== undefined;
-    const transformChanged = updates.transform?.x !== undefined || updates.transform?.y !== undefined;
-    
-    if ((anchorChanged || transformChanged) && !skipAnchorRecalc && !isDragging) {
-      // Update all anchored elements (including nested)
-      newLayout = updateAnchoredElements(newLayout);
-    }
-    
     // Update group sizes if a child element was modified
     const updatedElement = newLayout.find(el => el.id === id);
     if (updatedElement?.group) {
@@ -1300,7 +1365,7 @@ export function PrintTemplateBuilder({
       addToHistory(newLayout);
     }
     onChange(newLayout);
-  }, [layout, onChange, readonly, addToHistory, updateAnchoredElements, updateGroupSizes, isDragging]);
+  }, [layout, onChange, readonly, addToHistory, updateGroupSizes]);
 
   const handleUndo = useCallback(() => {
     if (historyIndex > 0 && history[historyIndex - 1]) {
@@ -1413,11 +1478,19 @@ export function PrintTemplateBuilder({
     const paperYInCanvas = paperRect.top - canvasRect.top + scrollTop;
     
     // Position relative to paper (unscaled coordinates)
-    const x = (mouseXInCanvas - paperXInCanvas) / scale;
-    const y = (mouseYInCanvas - paperYInCanvas) / scale;
+    let x = (mouseXInCanvas - paperXInCanvas) / scale;
+    let y = (mouseYInCanvas - paperYInCanvas) / scale;
+    
+    // Account for margins - positions should be relative to content area
+    // Convert mm to pixels (1mm ≈ 3.779527559 pixels at 96 DPI)
+    const mmToPx = 3.779527559;
+    if (!isFixedPosition) {
+      x = Math.max(0, x - marginLeft * mmToPx);
+      y = Math.max(0, y - marginTop * mmToPx);
+    }
     
     return { x: Math.max(0, x), y: Math.max(0, y) };
-  }, [zoom]);
+  }, [zoom, isFixedPosition, marginTop, marginLeft]);
 
   // Handle element drag start
   const handleElementDragStart = useCallback((e: React.MouseEvent, element: PrintTemplateElement) => {
@@ -1442,20 +1515,6 @@ export function PrintTemplateBuilder({
     const pos = getCanvasPosition(e);
     setDraggedElementId(targetElement.id);
     setIsDragging(true);
-    // Clear hover when dragging starts
-    setHoveredAnchorElementId(null);
-    
-    // Calculate current visual position (for anchored elements, this is the calculated position)
-    const currentVisualPos = targetElement.anchorTo 
-      ? calculateAnchorPosition(targetElement, layout)
-      : { x: targetElement.transform?.x || 0, y: targetElement.transform?.y || 0 };
-    
-    // Store initial offset if anchored
-    const initialOffset = targetElement.anchorTo 
-      ? (typeof targetElement.anchorOffset === "object" 
-          ? targetElement.anchorOffset 
-          : { x: 0, y: typeof targetElement.anchorOffset === "number" ? targetElement.anchorOffset : 0 })
-      : null;
     
     // Check if this is a group and store original child positions
     const isGroup = targetElement.type === "anchor" && layout.some(el => el.group === targetElement.id);
@@ -1475,10 +1534,10 @@ export function PrintTemplateBuilder({
       y: pos.y,
       elementX: targetElement.transform?.x || 0,
       elementY: targetElement.transform?.y || 0,
-      visualX: currentVisualPos.x,
-      visualY: currentVisualPos.y,
-      initialOffsetX: initialOffset?.x || 0,
-      initialOffsetY: initialOffset?.y || 0,
+      visualX: targetElement.transform?.x || 0,
+      visualY: targetElement.transform?.y || 0,
+      initialOffsetX: 0,
+      initialOffsetY: 0,
       childPositions: childPositions.size > 0 ? childPositions : undefined,
     });
     setDragCurrentPos({ x: pos.x, y: pos.y });
@@ -1487,7 +1546,7 @@ export function PrintTemplateBuilder({
     if (!selectedElements.has(targetElement.id)) {
       setSelectedElements(new Set([targetElement.id]));
     }
-  }, [readonly, getCanvasPosition, selectedElements, layout, calculateAnchorPosition]);
+  }, [readonly, getCanvasPosition, selectedElements, layout]);
 
   // Handle element drag - update directly without triggering anchor recalculation
   const handleElementDrag = useCallback((e: MouseEvent) => {
@@ -1505,59 +1564,9 @@ export function PrintTemplateBuilder({
     
     // Check if dragged element is a group
     const isGroup = element.type === "anchor" && layout.some(el => el.group === element.id);
-    const groupChildren = isGroup ? layout.filter(el => el.group === draggedElementId) : [];
     
-    // Recursively find all elements that anchor to the dragged element (directly or indirectly)
-    const findAllAnchoredElements = (anchorId: string, anchorCode: string | undefined, visited: Set<string> = new Set()): PrintTemplateElement[] => {
-      const result: PrintTemplateElement[] = [];
-      const directAnchors = layout.filter(el => {
-        if (!el.anchorTo || visited.has(el.id)) return false;
-        // Check if anchors to the given anchor by code or id
-        if (anchorCode && el.anchorTo === anchorCode) return true;
-        if (el.anchorTo === anchorId) return true;
-        return false;
-      });
-      
-      directAnchors.forEach(el => {
-        if (!visited.has(el.id)) {
-          visited.add(el.id);
-          result.push(el);
-          // Recursively find elements that anchor to this element
-          const nestedAnchors = findAllAnchoredElements(el.id, el.code, visited);
-          result.push(...nestedAnchors);
-        }
-      });
-      
-      return result;
-    };
-    
-    const allAnchoredElements = findAllAnchoredElements(element.id, element.code);
-    
-    // Store original positions of all anchored elements and their children
-    const anchoredElementPositions = new Map<string, { x: number; y: number }>();
-    const anchoredChildrenPositions = new Map<string, Map<string, { x: number; y: number }>>();
-    
-    allAnchoredElements.forEach(anchoredEl => {
-      const anchoredPos = calculateAnchorPosition(anchoredEl, layout);
-      anchoredElementPositions.set(anchoredEl.id, anchoredPos);
-      
-      // If anchored element is a group, store its children positions
-      const isAnchoredGroup = anchoredEl.type === "anchor" && layout.some(el => el.group === anchoredEl.id);
-      if (isAnchoredGroup) {
-        const anchoredGroupChildren = layout.filter(el => el.group === anchoredEl.id);
-        const childrenPos = new Map<string, { x: number; y: number }>();
-        anchoredGroupChildren.forEach(child => {
-          childrenPos.set(child.id, {
-            x: child.transform?.x || 0,
-            y: child.transform?.y || 0,
-          });
-        });
-        anchoredChildrenPositions.set(anchoredEl.id, childrenPos);
-      }
-    });
-    
-    // Update layout directly without triggering anchor recalculation during drag
-    let newLayout = layout.map((el) => {
+    // Update layout directly
+    const newLayout = layout.map((el) => {
       // If dragging a group, also update all its children
       if (isGroup && el.group === draggedElementId) {
         // Children move with the group - use original positions from drag start + delta
@@ -1584,57 +1593,7 @@ export function PrintTemplateBuilder({
       }
       
       if (el.id === draggedElementId) {
-        // Handle both group children and regular elements
-        const isGroupChild = el.group !== undefined;
-        if (el.anchorTo) {
-          // Anchored element - need to calculate offset change based on anchor alignment
-          // The new visual position should be: startVisualPos + delta
-          const newVisualX = dragStartPos.visualX + deltaX;
-          const newVisualY = dragStartPos.visualY + deltaY;
-          
-          // Find anchor element to calculate offset (by code or id)
-          const anchorElement = layout.find(a => {
-            if (a.code) {
-              return a.code === el.anchorTo;
-            }
-            // Fallback to id for backward compatibility
-            return a.id === el.anchorTo;
-          });
-          if (!anchorElement) {
-            // Fallback: just add delta to offset
-            const initialOffsetX = dragStartPos.initialOffsetX ?? 0;
-            const initialOffsetY = dragStartPos.initialOffsetY ?? 0;
-            return {
-              ...el,
-              anchorOffset: { 
-                x: snapValue(initialOffsetX + deltaX), 
-                y: snapValue(initialOffsetY + deltaY) 
-              },
-            };
-          }
-          
-          // Calculate anchor's visual position (might be anchored itself)
-          const anchorVisualPos = calculateAnchorPosition(anchorElement, layout);
-          const anchorWidth = anchorElement.transform?.width || 0;
-          const anchorHeight = anchorElement.transform?.height || 0;
-          const elementWidth = el.transform?.width || 0;
-          const elementHeight = el.transform?.height || 0;
-          
-          // Only support top-left alignment
-          // Offset is simply the difference between new visual position and anchor position
-          const newOffsetX = newVisualX - anchorVisualPos.x;
-          const newOffsetY = newVisualY - anchorVisualPos.y;
-          
-          return {
-            ...el,
-            anchorOffset: { 
-              x: snapValue(newOffsetX), 
-              y: snapValue(newOffsetY) 
-            },
-          };
-        } else {
-          // Not anchored - update position directly
-            // Children positions are absolute, so just add delta
+        // Update position directly
     const newX = snapValue(dragStartPos.elementX + deltaX);
     const newY = snapValue(dragStartPos.elementY + deltaY);
     
@@ -1646,133 +1605,21 @@ export function PrintTemplateBuilder({
         y: newY,
       },
           };
-        }
       }
       return el;
     });
     
-    // Update anchored elements positions - need to recalculate all elements that anchor to the dragged element
-    // First, update the dragged element itself if it's anchored
-    if (element.anchorTo) {
-      newLayout = updateAnchoredElements(newLayout);
-    }
-    
-    // Update all elements that anchor to the dragged element (directly or indirectly)
-    if (allAnchoredElements.length > 0) {
-      // Process in dependency order: elements that anchor directly first, then those that anchor to them
-      // We need to process in topological order to ensure parent positions are updated before children
-      const processed = new Set<string>();
-      const toProcess = [...allAnchoredElements];
-      
-      // Process elements in multiple passes to handle nested anchors
-      let changed = true;
-      let iterations = 0;
-      const maxIterations = 100; // Safety limit
-      
-      while (changed && toProcess.length > 0 && iterations < maxIterations) {
-        iterations++;
-        changed = false;
-        const remaining: PrintTemplateElement[] = [];
-        
-        for (const anchoredEl of toProcess) {
-          if (processed.has(anchoredEl.id)) continue;
-          
-          // Check if this element's anchor has been processed (or is the dragged element)
-          const anchorId = anchoredEl.anchorTo;
-          if (!anchorId) {
-            processed.add(anchoredEl.id);
-            continue;
-          }
-          
-          // Find the anchor element
-          const anchorElement = newLayout.find(a => {
-            if (a.code && anchorId === a.code) return true;
-            if (anchorId === a.id) return true;
-            return false;
-          });
-          
-          // If anchor is the dragged element or has been processed, we can process this element
-          if (anchorElement && (anchorElement.id === element.id || processed.has(anchorElement.id))) {
-            // Recalculate this element's position
-            const newPos = calculateAnchorPosition(anchoredEl, newLayout);
-            const originalPos = anchoredElementPositions.get(anchoredEl.id);
-            
-            if (originalPos !== undefined) {
-              // Update this element's position in newLayout
-              const elementIndex = newLayout.findIndex(el => el.id === anchoredEl.id);
-              if (elementIndex >= 0 && newLayout[elementIndex]) {
-                const existingElement = newLayout[elementIndex];
-                newLayout[elementIndex] = {
-                  ...existingElement,
-                  transform: {
-                    ...(existingElement.transform || { x: 0, y: 0, width: 200, height: 30 }),
-                    x: newPos.x,
-                    y: newPos.y,
-                  },
-                };
-              }
-              
-              processed.add(anchoredEl.id);
-              changed = true;
-            } else {
-              remaining.push(anchoredEl);
-            }
-          } else {
-            remaining.push(anchoredEl);
-          }
-        }
-        
-        toProcess.length = 0;
-        toProcess.push(...remaining);
-      }
-      
-      // Now update children of all anchored groups (process in any order since parents are already updated)
-      newLayout = newLayout.map(el => {
-        // If this is a child of a group that was anchored, update its position
-        if (el.group) {
-          const parentGroup = allAnchoredElements.find(ae => ae.id === el.group);
-          if (parentGroup && processed.has(parentGroup.id)) {
-            const childrenPos = anchoredChildrenPositions.get(parentGroup.id);
-            if (childrenPos) {
-              const originalChildPos = childrenPos.get(el.id);
-              if (originalChildPos !== undefined) {
-                // Calculate parent's new position
-                const newParentPos = calculateAnchorPosition(parentGroup, newLayout);
-                const originalParentPos = anchoredElementPositions.get(parentGroup.id);
-                if (originalParentPos !== undefined) {
-                  const parentDeltaX = newParentPos.x - originalParentPos.x;
-                  const parentDeltaY = newParentPos.y - originalParentPos.y;
-                  
-                  return {
-                    ...el,
-                    transform: {
-                      ...(el.transform || { x: 0, y: 0, width: 200, height: 30 }),
-                      x: snapValue(originalChildPos.x + parentDeltaX),
-                      y: snapValue(originalChildPos.y + parentDeltaY),
-                    },
-                  };
-                }
-              }
-            }
-          }
-        }
-        
-        return el;
-      });
-    }
-    
-    // Update layout directly (skip history and anchor recalculation flag)
+    // Update layout directly (skip history during drag)
     onChange(newLayout);
-  }, [draggedElementId, dragStartPos, getCanvasPosition, snapValue, layout, onChange, updateAnchoredElements, calculateAnchorPosition]);
+  }, [draggedElementId, dragStartPos, getCanvasPosition, snapValue, layout, onChange]);
 
   // Handle element drag end
   const handleElementDragEnd = useCallback(() => {
     setIsDragging(false);
     
-    // Finalize layout with proper anchor recalculation and group size updates
+    // Finalize layout with group size updates
     if (draggedElementId) {
-      let currentLayout = updateAnchoredElements(layout);
-      currentLayout = updateGroupSizes(currentLayout);
+      let currentLayout = updateGroupSizes(layout);
       addToHistory(currentLayout);
       onChange(currentLayout);
     }
@@ -1780,7 +1627,7 @@ export function PrintTemplateBuilder({
     setDraggedElementId(null);
     setDragStartPos(null);
     setDragCurrentPos(null);
-  }, [draggedElementId, layout, addToHistory, onChange, updateAnchoredElements, updateGroupSizes]);
+  }, [draggedElementId, layout, addToHistory, onChange, updateGroupSizes]);
 
   // Handle resize start
   const handleResizeStart = useCallback((e: React.MouseEvent, element: PrintTemplateElement, handle: string) => {
@@ -2008,36 +1855,61 @@ export function PrintTemplateBuilder({
     }
   }, [selectionBox, readonly, draggedElementId, resizingElementId, getCanvasPosition, layout]);
 
-  // Handle guided background URL
+  // Handle guided background URL (state triggers re-render so canvas shows the image)
+  // HTTP URLs are fetched and converted to blob URLs so they display reliably (CORS/credentials)
   useEffect(() => {
+    let cancelled = false;
     if (guidedBackground) {
       if (guidedBackground instanceof File) {
-        // Create object URL for File
         if (guidedBackgroundUrlRef.current && guidedBackgroundIsFileRef.current) {
           URL.revokeObjectURL(guidedBackgroundUrlRef.current);
         }
-        guidedBackgroundUrlRef.current = URL.createObjectURL(guidedBackground);
+        const objectUrl = URL.createObjectURL(guidedBackground);
+        guidedBackgroundUrlRef.current = objectUrl;
         guidedBackgroundIsFileRef.current = true;
+        setGuidedBackgroundDisplayUrl(objectUrl);
       } else {
-        // Clean up previous file URL if any
-        if (guidedBackgroundUrlRef.current && guidedBackgroundIsFileRef.current) {
-          URL.revokeObjectURL(guidedBackgroundUrlRef.current);
+        const urlString = guidedBackground;
+        const isHttp = /^https?:\/\//i.test(urlString);
+        if (isHttp) {
+          if (guidedBackgroundUrlRef.current && guidedBackgroundIsFileRef.current) {
+            URL.revokeObjectURL(guidedBackgroundUrlRef.current);
+          }
+          guidedBackgroundUrlRef.current = null;
+          guidedBackgroundIsFileRef.current = false;
+          (async () => {
+            try {
+              const res = await fetch(urlString, { credentials: "include" });
+              if (!res.ok || cancelled) return;
+              const blob = await res.blob();
+              if (cancelled) return;
+              const objectUrl = URL.createObjectURL(blob);
+              guidedBackgroundUrlRef.current = objectUrl;
+              guidedBackgroundIsFileRef.current = true;
+              setGuidedBackgroundDisplayUrl(objectUrl);
+            } catch {
+              if (!cancelled) setGuidedBackgroundDisplayUrl(urlString);
+            }
+          })();
+        } else {
+          if (guidedBackgroundUrlRef.current && guidedBackgroundIsFileRef.current) {
+            URL.revokeObjectURL(guidedBackgroundUrlRef.current);
+          }
+          guidedBackgroundUrlRef.current = urlString;
+          guidedBackgroundIsFileRef.current = false;
+          setGuidedBackgroundDisplayUrl(urlString);
         }
-        // Use string URL directly
-        guidedBackgroundUrlRef.current = guidedBackground;
-        guidedBackgroundIsFileRef.current = false;
       }
     } else {
-      // Clean up previous file URL if any
       if (guidedBackgroundUrlRef.current && guidedBackgroundIsFileRef.current) {
         URL.revokeObjectURL(guidedBackgroundUrlRef.current);
       }
       guidedBackgroundUrlRef.current = null;
       guidedBackgroundIsFileRef.current = false;
+      setGuidedBackgroundDisplayUrl(null);
     }
-    
     return () => {
-      // Clean up object URL if it was created from File
+      cancelled = true;
       if (guidedBackgroundUrlRef.current && guidedBackgroundIsFileRef.current) {
         URL.revokeObjectURL(guidedBackgroundUrlRef.current);
         guidedBackgroundUrlRef.current = null;
@@ -2059,11 +1931,36 @@ export function PrintTemplateBuilder({
     };
   }, []);
 
-  // Calculate dynamic page height based on elements
+  // Sort elements by idx for fixed position mode
+  const sortedLayout = useMemo(() => {
+    if (!isFixedPosition) return layout;
+    
+    // Sort by idx, with elements without idx at the end
+    return [...layout].sort((a, b) => {
+      const aIdx = a.idx ?? Infinity;
+      const bIdx = b.idx ?? Infinity;
+      return aIdx - bIdx;
+    });
+  }, [layout, isFixedPosition]);
+
+  // Calculate dynamic page height based on elements (Letter Head: single page only, no auto-increment)
   const dynamicPageHeight = useMemo(() => {
     const baseHeight = pageDimensions?.height || 297;
+    if (isLetterHead) {
+      return baseHeight;
+    }
     if (layout.length === 0) {
       return baseHeight;
+    }
+    if (isFixedPosition) {
+      // For fixed position, calculate height based on stacked elements
+      // This is a simplified calculation - elements stack vertically
+      const elementCount = sortedLayout.filter(el => {
+        const isGroup = el.type === "anchor" && layout.some(child => child.group === el.id);
+        return !isGroup || !el.group; // Count groups and standalone elements, not group children
+      }).length;
+      // Estimate: each element takes ~50px, add margins
+      return Math.max(baseHeight, elementCount * 50 + 40);
     }
     // Find the bottommost element
     const maxBottom = Math.max(
@@ -2075,10 +1972,15 @@ export function PrintTemplateBuilder({
     );
     // Add some padding (20mm) and ensure minimum height
     return Math.max(baseHeight, maxBottom + 20);
-  }, [layout, pageDimensions]);
+  }, [layout, pageDimensions, isFixedPosition, sortedLayout, isLetterHead]);
 
-  // Calculate page break positions
+  // Calculate page break positions (only for Print Templates, not Letter Heads)
   const pageBreakPositions = useMemo(() => {
+    // Letter Heads should not have page breaks
+    if (isLetterHead) {
+      return [];
+    }
+    
     const pageHeight = pageDimensions?.height || 297;
     const totalHeight = dynamicPageHeight;
     const breaks: number[] = [];
@@ -2091,7 +1993,7 @@ export function PrintTemplateBuilder({
     }
     
     return breaks;
-  }, [pageDimensions, dynamicPageHeight]);
+  }, [pageDimensions, dynamicPageHeight, isLetterHead]);
 
   // Template Element Component
   const TemplateElement = ({ 
@@ -2113,11 +2015,16 @@ export function PrintTemplateBuilder({
     const isGroup = element.type === "anchor" && layout.some(el => el.group === element.id);
     const groupChildren = isGroup ? layout.filter(el => el.group === element.id) : [];
     
-    // Calculate position - use anchor position if element is anchored, otherwise use transform position
-    // For groups that are anchored, we need to calculate their position based on the anchor
+    // Calculate position - in fixed position mode, ignore x/y and use relative positioning
     let baseX = element.transform?.x || 0;
     let baseY = element.transform?.y || 0;
     
+    // In fixed position mode, x/y positions don't affect rendering
+    if (isFixedPosition) {
+      // For fixed position, elements are positioned by their container (preview or group)
+      baseX = 0;
+      baseY = 0;
+    } else {
     // If element is anchored, calculate its position from the anchor
     if (element.anchorTo && !isGroupChild) {
       const anchoredPos = calculateAnchorPosition(element, layout);
@@ -2136,13 +2043,14 @@ export function PrintTemplateBuilder({
       // Convert absolute position to relative for rendering inside group container
       baseX = baseX - groupX;
       baseY = baseY - groupY;
+      }
     }
     
     // Use drag position if dragging, otherwise use element's stored position
     let currentX = baseX;
     let currentY = baseY;
     
-    if (isDragging && dragCurrentPos && dragStartPos) {
+    if (!isFixedPosition && isDragging && dragCurrentPos && dragStartPos) {
       // For group children, we need to handle the relative positioning during drag
       if (isGroupChild && groupParent && groupParent.transform) {
         // Get parent group's visual position (which may be anchored)
@@ -2164,18 +2072,38 @@ export function PrintTemplateBuilder({
         currentX = snapValue(dragStartPos.elementX + (dragCurrentPos.x - dragStartPos.x));
         currentY = snapValue(dragStartPos.elementY + (dragCurrentPos.y - dragStartPos.y));
       }
-    } else {
+    } else if (!isFixedPosition) {
       currentX = snapValue(baseX);
       currentY = snapValue(baseY);
     }
 
+    const isReferenceTable = element.type === "field" && fields.find((f) => f.name === element.value)?.type === "Reference Table";
+    
+    // Convert margins from mm to pixels for rendering (1mm ≈ 3.779527559 pixels at 96 DPI)
+    const mmToPx = 3.779527559;
+    const marginLeftPx = marginLeft * mmToPx;
+    const marginTopPx = marginTop * mmToPx;
+    
     const elementStyle: React.CSSProperties = {
-      position: "absolute",
-      left: `${currentX}px`,
-      top: `${currentY}px`,
+      position: isFixedPosition ? "relative" : "absolute",
+      ...(isFixedPosition ? {
+        flex: isReferenceTable ? "1" : 1,
+        width: "100%",
+        maxWidth: "100%",
+        boxSizing: "border-box",
+        overflow: isReferenceTable ? "hidden" : "visible",
+      } : {
+      left: `${currentX + marginLeftPx}px`,
+      top: `${currentY + marginTopPx}px`,
       width: `${element.transform?.width || 200}px`,
+      }),
+      ...(isFixedPosition ? {} : {
       height: `${element.transform?.height || 30}px`,
-      cursor: readonly ? "default" : isDragging ? "grabbing" : "grab",
+      }),
+      ...(isFixedPosition && element.transform?.height ? {
+        minHeight: `${element.transform.height}px`,
+      } : {}),
+      cursor: readonly || isFixedPosition ? "default" : isDragging ? "grabbing" : "grab",
       userSelect: "none",
       zIndex: (() => {
         // Use the isGroupChild prop if available, otherwise check from element.group
@@ -2266,7 +2194,7 @@ export function PrintTemplateBuilder({
             textDecoration: element.style?.textDecoration,
           };
           
-          // Calculate column widths to match element width
+          // Calculate column widths using percentages
           const elementWidth = element.transform?.width || 200
           const specifiedWidths = sortedColumns.filter((col: any) => col.width).map((col: any) => col.width)
           const totalSpecifiedWidth = specifiedWidths.reduce((sum: number, w: number) => sum + w, 0)
@@ -2274,44 +2202,57 @@ export function PrintTemplateBuilder({
           const columnsWithoutWidth = sortedColumns.length - columnsWithWidth
           
           content = (
-            <div className={cn("zd:h-full zd:w-full zd:overflow-hidden", alignClasses.vertical[verticalAlign as keyof typeof alignClasses.vertical])}>
+            <div 
+              className={cn("zd:h-full zd:w-full zd:overflow-hidden", alignClasses.vertical[verticalAlign as keyof typeof alignClasses.vertical])}
+              style={isFixedPosition ? {
+                width: "100%",
+                maxWidth: "100%",
+                overflow: "hidden",
+                boxSizing: "border-box"
+              } : undefined}
+            >
               {sortedColumns.length > 0 ? (
                 <table 
                   className="zd:text-xs"
                   style={{ 
                     borderCollapse: "collapse",
                     borderSpacing: 0,
-                    width: `${elementWidth}px`,
-                    tableLayout: "fixed"
+                    width: isFixedPosition ? "100%" : `${elementWidth}px`,
+                    maxWidth: isFixedPosition ? "100%" : undefined,
+                    tableLayout: "fixed",
+                    boxSizing: "border-box"
                   }}
                 >
                   {showHeader && (
                     <thead>
                       <tr>
                         {sortedColumns.map((col) => {
-                          // Calculate column width
-                          let colWidth: number | string = "auto"
+                          // Calculate column width as percentage
+                          let colWidth: string
                           if ((col as any).width) {
-                            colWidth = (col as any).width
+                            // Use specified percentage
+                            colWidth = `${(col as any).width}%`
                           } else if (columnsWithoutWidth > 0) {
-                            // Distribute remaining width equally among unspecified columns
-                            const remainingWidth = elementWidth - totalSpecifiedWidth
-                            colWidth = remainingWidth / columnsWithoutWidth
+                            // Distribute remaining percentage equally among unspecified columns
+                            const remainingPercentage = 100 - totalSpecifiedWidth
+                            colWidth = `${remainingPercentage / columnsWithoutWidth}%`
                           } else {
                             // All columns have width, distribute equally
-                            colWidth = elementWidth / sortedColumns.length
+                            colWidth = `${100 / sortedColumns.length}%`
                           }
                           
                           return (
                             <th
                               key={col.field}
-                              className="zd:px-1 zd:py-1 zd:font-medium zd:text-left"
+                              className="zd:font-medium zd:text-left"
                               style={{
-                                width: typeof colWidth === "number" ? `${colWidth}px` : colWidth,
+                                width: colWidth,
                                 minWidth: "30px",
                                 height: `${rowHeight}px`,
                                 border: showBorder ? "1px solid #000" : "none",
-                                padding: "2px",
+                                padding: "0 4px",
+                                verticalAlign: "top",
+                                lineHeight: 1,
                                 fontWeight: element.style?.fontWeight || "bold",
                                 backgroundColor: "#f0f0f0",
                                 overflow: "hidden",
@@ -2336,15 +2277,18 @@ export function PrintTemplateBuilder({
                         }}
                       >
                         {sortedColumns.map((col) => {
-                          // Calculate column width (same logic as header)
-                          let colWidth: number | string = "auto"
+                          // Calculate column width as percentage (same logic as header)
+                          let colWidth: string
                           if ((col as any).width) {
-                            colWidth = (col as any).width
+                            // Use specified percentage
+                            colWidth = `${(col as any).width}%`
                           } else if (columnsWithoutWidth > 0) {
-                            const remainingWidth = elementWidth - totalSpecifiedWidth
-                            colWidth = remainingWidth / columnsWithoutWidth
+                            // Distribute remaining percentage equally among unspecified columns
+                            const remainingPercentage = 100 - totalSpecifiedWidth
+                            colWidth = `${remainingPercentage / columnsWithoutWidth}%`
                           } else {
-                            colWidth = elementWidth / sortedColumns.length
+                            // All columns have width, distribute equally
+                            colWidth = `${100 / sortedColumns.length}%`
                           }
                           
                           // Check if this child field is Image Preview type
@@ -2355,12 +2299,13 @@ export function PrintTemplateBuilder({
                           return (
                             <td
                               key={col.field}
-                              className="zd:px-1 zd:py-1"
                               style={{
                                 height: `${rowHeight}px`,
-                                width: typeof colWidth === "number" ? `${colWidth}px` : colWidth,
+                                width: colWidth,
                                 border: showBorder ? "1px solid #000" : "none",
-                                padding: "2px",
+                                padding: "0 4px",
+                                verticalAlign: "top",
+                                lineHeight: 1,
                                 overflow: "hidden",
                                 textOverflow: "ellipsis",
                                 ...tableTextStyle,
@@ -2371,7 +2316,7 @@ export function PrintTemplateBuilder({
                                   <Image className="zd:w-4 zd:h-4 zd:text-muted-foreground" />
                                 </div>
                               ) : (
-                              <span className="zd:text-muted-foreground" style={tableTextStyle}>Sample</span>
+                              <span className="zd:text-muted-foreground" style={{ ...tableTextStyle, lineHeight: 1 }}>Sample</span>
                               )}
                             </td>
                           )
@@ -2738,7 +2683,7 @@ export function PrintTemplateBuilder({
         key={element.id}
         data-element-id={element.id}
         className={cn(
-          "zd:absolute zd:group",
+          isFixedPosition ? "zd:flex zd:group" : "zd:absolute zd:group",
           isSelected && "zd:border zd:border-blue-500",
           isAnchored && "zd:opacity-90", // Visual indicator that element is anchored
           isAnchorTarget && "zd:outline-1 zd:outline-dashed zd:outline-blue-500/70 zd:rounded-lg" // Show dashed border when selected element anchors to this
@@ -2982,10 +2927,17 @@ export function PrintTemplateBuilder({
       return !isGroup && !isGroupChild;
     });
     
-    return [
+    const tree = [
       ...groups.map(group => ({
         element: group,
-        children: layout.filter(el => el.group === group.id),
+        children: layout.filter(el => el.group === group.id).sort((a, b) => {
+          if (isFixedPosition) {
+            return (a.idx ?? Infinity) - (b.idx ?? Infinity);
+          }
+          const aY = a.transform?.y || 0;
+          const bY = b.transform?.y || 0;
+          return aY - bY;
+        }),
         isGroup: true,
       })),
       ...standaloneElements.map(el => ({
@@ -2993,13 +2945,416 @@ export function PrintTemplateBuilder({
         children: [],
         isGroup: false,
       })),
-    ].sort((a, b) => {
-      // Sort by y position
+    ];
+    
+    // Sort by idx in fixed position mode, otherwise by y position
+    return tree.sort((a, b) => {
+      if (isFixedPosition) {
+        const aIdx = a.element.idx ?? Infinity;
+        const bIdx = b.element.idx ?? Infinity;
+        return aIdx - bIdx;
+      }
       const aY = a.element.transform?.y || 0;
       const bY = b.element.transform?.y || 0;
       return aY - bY;
     });
-  }, [layout]);
+  }, [layout, isFixedPosition]);
+
+  // Create workspace items for drag and drop in fixed position mode
+  const layerWorkspaceItems = useMemo(() => {
+    if (!isFixedPosition) return [];
+    return layersTree.map((item, idx) => ({
+      id: item.element.id,
+      type: 'layer',
+      idx: idx * 10,
+      value: item.element.id,
+      workspaceId: 'layers',
+    }));
+  }, [layersTree, isFixedPosition]);
+
+  // Handle reordering elements by idx (for fixed position mode)
+  // newPosition is the array index where the element should be inserted (0-based)
+  const handleReorderElement = useCallback((elementId: string, newPosition: number) => {
+    if (!isFixedPosition || readonly) return;
+    
+    // Get all top-level elements (groups and standalone, not group children)
+    const topLevelElements = sortedLayout.filter(el => {
+      const isGroup = el.type === "anchor" && layout.some(child => child.group === el.id);
+      const isGroupChild = !!el.group;
+      return !isGroupChild;
+    });
+    
+    // Find the dragged element
+    const draggedElement = layout.find(e => e.id === elementId);
+    if (!draggedElement) return;
+    
+    // Remove dragged element from the list
+    const elementsWithoutDragged = topLevelElements.filter(el => el.id !== elementId);
+    
+    // Clamp newPosition to valid range
+    const insertIndex = Math.max(0, Math.min(newPosition, elementsWithoutDragged.length));
+    
+    // Insert the dragged element at the new position
+    const reorderedElements = [...elementsWithoutDragged];
+    reorderedElements.splice(insertIndex, 0, draggedElement);
+    
+    // Normalize idx values to be sequential (0, 1, 2, 3, ...) based on final order
+    const elementIdToNewIdx = new Map<string, number>();
+    reorderedElements.forEach((el, index) => {
+      elementIdToNewIdx.set(el.id, index);
+    });
+    
+    // Update layout with new idx values
+    const newLayout = layout.map(el => {
+      // Update top-level elements with normalized idx
+      const isTopLevel = !el.group;
+      if (isTopLevel && elementIdToNewIdx.has(el.id)) {
+        return { ...el, idx: elementIdToNewIdx.get(el.id)! };
+      }
+      return el;
+    });
+    
+    onChange(newLayout);
+    addToHistory(newLayout);
+  }, [isFixedPosition, readonly, layout, sortedLayout, onChange, addToHistory]);
+
+  // Handle moving element into group (for fixed position mode)
+  const handleMoveToGroup = useCallback((elementId: string, groupId: string | null) => {
+    if (!isFixedPosition || readonly) return;
+    
+    const newLayout = layout.map(el => {
+      if (el.id === elementId) {
+        return { ...el, group: groupId || undefined };
+      }
+      return el;
+    });
+    
+    onChange(newLayout);
+    addToHistory(newLayout);
+  }, [isFixedPosition, readonly, layout, onChange, addToHistory]);
+
+  // Enhanced drag and drop state for layers
+  const [draggedLayerElement, setDraggedLayerElement] = useState<{ id: string; isGroup: boolean; groupId?: string } | null>(null);
+  const [dragOverLayerElement, setDragOverLayerElement] = useState<{ id: string; isGroup: boolean } | null>(null);
+  const [dragOverLayerType, setDragOverLayerType] = useState<'before' | 'after' | 'inside' | null>(null);
+
+  // Determine drop type based on mouse position
+  const getLayerDropType = useCallback((e: React.DragEvent): 'before' | 'after' | 'inside' => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const height = rect.height;
+    
+    // Define zones: top 25% = before, middle 50% = inside, bottom 25% = after
+    return y < height * 0.25 ? 'before' : y > height * 0.75 ? 'after' : 'inside';
+  }, []);
+
+  // Handle layer drag start
+  const handleLayerDragStart = useCallback((elementId: string, isGroup: boolean, groupId?: string) => {
+    if (!isFixedPosition) return;
+    setDraggedLayerElement({ id: elementId, isGroup, groupId });
+  }, [isFixedPosition]);
+
+  // Handle layer drag end
+  const handleLayerDragEnd = useCallback(() => {
+    setDraggedLayerElement(null);
+    setDragOverLayerElement(null);
+    setDragOverLayerType(null);
+  }, []);
+
+  // Handle layer drag over
+  const handleLayerDragOver = useCallback((e: React.DragEvent, elementId: string, isGroup: boolean) => {
+    if (!isFixedPosition || !draggedLayerElement || draggedLayerElement.id === elementId) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    
+    const dropType = getLayerDropType(e);
+    setDragOverLayerElement({ id: elementId, isGroup });
+    setDragOverLayerType(dropType);
+  }, [isFixedPosition, draggedLayerElement, getLayerDropType]);
+
+  // Handle layer drag leave
+  const handleLayerDragLeave = useCallback((e: React.DragEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setDragOverLayerElement(null);
+      setDragOverLayerType(null);
+    }
+  }, []);
+
+  // Handle layer drop
+  const handleLayerDrop = useCallback((e: React.DragEvent, targetElementId: string, targetIsGroup: boolean) => {
+    if (!isFixedPosition || !draggedLayerElement || draggedLayerElement.id === targetElementId) {
+      handleLayerDragEnd();
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const dropType = dragOverLayerType || getLayerDropType(e);
+    
+    // Check if dragged element is currently in a group (use groupId from drag state or check layout)
+    const isDraggedInGroup = !!draggedLayerElement.groupId;
+    const draggedElement = layout.find(el => el.id === draggedLayerElement.id);
+    
+    if (dropType === 'inside' && targetIsGroup) {
+      // Move element into group
+      handleMoveToGroup(draggedLayerElement.id, targetElementId);
+    } else if (dropType === 'before' || dropType === 'after') {
+      // Reorder elements
+      // Check if both elements are in the same group (reordering within group)
+      const targetElement = layout.find(el => el.id === targetElementId);
+      const draggedGroupId = draggedElement?.group;
+      const targetGroupId = targetElement?.group;
+      
+      if (isDraggedInGroup && draggedGroupId && targetGroupId && draggedGroupId === targetGroupId) {
+        // Reordering within the same group
+        const groupChildren = sortedLayout.filter(el => el.group === draggedGroupId);
+        
+        const fromIndex = groupChildren.findIndex(el => el.id === draggedLayerElement.id);
+        const toIndex = groupChildren.findIndex(el => el.id === targetElementId);
+        
+        if (fromIndex !== -1 && toIndex !== -1) {
+          // Remove dragged element from the list
+          const childrenWithoutDragged = groupChildren.filter(el => el.id !== draggedLayerElement.id);
+          
+          // Find the target's new index after removing the dragged element
+          const adjustedToIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+          
+          // Calculate insert position
+          let insertIndex: number;
+          if (dropType === "before") {
+            insertIndex = adjustedToIndex;
+          } else {
+            insertIndex = adjustedToIndex + 1;
+          }
+          
+          // Clamp insertIndex to valid range
+          insertIndex = Math.max(0, Math.min(insertIndex, childrenWithoutDragged.length));
+          
+          // Insert the dragged element at the new position
+          const reorderedChildren = [...childrenWithoutDragged];
+          reorderedChildren.splice(insertIndex, 0, draggedElement!);
+          
+          // Normalize idx values within the group to be sequential (0, 1, 2, 3, ...)
+          // This ensures proper sorting within the group
+          const elementIdToNewIdx = new Map<string, number>();
+          reorderedChildren.forEach((el, index) => {
+            elementIdToNewIdx.set(el.id, index);
+          });
+          
+          // Update layout with reordered children
+          const newLayout = layout.map(el => {
+            if (el.group === draggedGroupId && elementIdToNewIdx.has(el.id)) {
+              // Update idx to the new position within the group
+              return { ...el, idx: elementIdToNewIdx.get(el.id)! };
+            }
+            return el;
+          });
+          
+          onChange(newLayout);
+          addToHistory(newLayout);
+          handleLayerDragEnd();
+          return;
+        }
+      } else if (isDraggedInGroup) {
+        // Dragging from a group to top-level or different group - ungroup and reorder
+        // Find target element's position in the sorted layout (top-level elements only)
+        const topLevelElements = sortedLayout.filter(el => {
+          const isGroup = el.type === "anchor" && layout.some(child => child.group === el.id);
+          const isGroupChild = !!el.group;
+          return !isGroupChild; // Only top-level elements (groups and standalone)
+        });
+        
+        const targetIndex = topLevelElements.findIndex(el => el.id === targetElementId);
+        if (targetIndex !== -1) {
+          // Calculate new idx based on target position in sorted layout
+          const targetElement = topLevelElements[targetIndex];
+          if (!targetElement) return;
+          const targetIdx = targetElement.idx ?? targetIndex;
+          
+          // Calculate new idx: before = target idx, after = target idx + 1
+          let newIdx: number;
+          if (dropType === "before") {
+            newIdx = targetIdx;
+          } else {
+            // For "after", we need to check if there's a next element
+            const nextElement = topLevelElements[targetIndex + 1];
+            if (nextElement && nextElement.idx !== undefined) {
+              newIdx = nextElement.idx;
+            } else {
+              newIdx = targetIdx + 1;
+            }
+          }
+          
+          // Ungroup and reorder in a single update
+          // Get all top-level elements (including the one we're ungrouping, treated as if already ungrouped)
+          const allTopLevelElements = sortedLayout.filter(el => {
+            const isGroup = el.type === "anchor" && layout.some(child => child.group === el.id);
+            const isGroupChild = !!el.group;
+            // Include the dragged element even though it's currently in a group
+            if (el.id === draggedLayerElement.id) return true;
+            return !isGroupChild;
+          });
+          
+          // Remove the dragged element from its current position
+          const elementsWithoutDragged = allTopLevelElements.filter(el => el.id !== draggedLayerElement.id);
+          
+          // Calculate insert position based on target
+          const targetIndexInAll = allTopLevelElements.findIndex(el => el.id === targetElementId);
+          if (targetIndexInAll === -1) return;
+          
+          let insertIndex: number;
+          if (dropType === "before") {
+            insertIndex = targetIndexInAll;
+          } else {
+            insertIndex = targetIndexInAll + 1;
+          }
+          
+          // Adjust for the element being removed
+          const fromIndexInAll = allTopLevelElements.findIndex(el => el.id === draggedLayerElement.id);
+          const adjustedInsertIndex = fromIndexInAll < targetIndexInAll ? insertIndex - 1 : insertIndex;
+          const finalInsertIndex = Math.max(0, Math.min(adjustedInsertIndex, elementsWithoutDragged.length));
+          
+          // Insert the dragged element at the new position
+          const reorderedElements = [...elementsWithoutDragged];
+          reorderedElements.splice(finalInsertIndex, 0, draggedElement!);
+          
+          // Normalize idx values to be sequential (0, 1, 2, 3, ...)
+          const elementIdToNewIdx = new Map<string, number>();
+          reorderedElements.forEach((el, index) => {
+            elementIdToNewIdx.set(el.id, index);
+          });
+          
+          // Update layout: ungroup the dragged element and normalize all idx values
+          const newLayout = layout.map(el => {
+            // Update top-level elements with normalized idx
+            const isTopLevel = !el.group;
+            if (el.id === draggedLayerElement.id) {
+              // Ungroup and set new idx
+              return { ...el, group: undefined, idx: elementIdToNewIdx.get(el.id) ?? finalInsertIndex };
+            }
+            if (isTopLevel && elementIdToNewIdx.has(el.id)) {
+              return { ...el, idx: elementIdToNewIdx.get(el.id)! };
+            }
+            return el;
+          });
+          
+          onChange(newLayout);
+          addToHistory(newLayout);
+        }
+      } else {
+        // Just reorder - find position in sorted layout
+        const topLevelElements = sortedLayout.filter(el => {
+          const isGroup = el.type === "anchor" && layout.some(child => child.group === el.id);
+          const isGroupChild = !!el.group;
+          return !isGroupChild;
+        });
+        
+        const fromIndex = topLevelElements.findIndex(el => el.id === draggedLayerElement.id);
+        const toIndex = topLevelElements.findIndex(el => el.id === targetElementId);
+        
+        if (fromIndex !== -1 && toIndex !== -1) {
+          // Calculate where the element should be inserted in the sorted array
+          // First, remove the dragged element from the array
+          const elementsWithoutDragged = topLevelElements.filter(el => el.id !== draggedLayerElement.id);
+          
+          // Find the target's new index after removing the dragged element
+          const adjustedToIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+          
+          // Calculate insert position
+          let insertIndex: number;
+          if (dropType === "before") {
+            insertIndex = adjustedToIndex;
+          } else {
+            // For "after", insert after the target
+            insertIndex = adjustedToIndex + 1;
+          }
+          
+          // Clamp insertIndex to valid range
+          insertIndex = Math.max(0, Math.min(insertIndex, elementsWithoutDragged.length));
+          
+          // The new idx should be the insert position (will be normalized in handleReorderElement)
+          // But we need to pass a value that makes sense for the normalization logic
+          // Since handleReorderElement normalizes based on sorted order, we can pass the insertIndex
+          handleReorderElement(draggedLayerElement.id, insertIndex);
+        }
+      }
+    } else if (dropType === 'inside' && !targetIsGroup) {
+      // Move element out of group (ungroup) when dropping inside a non-group element
+      if (isDraggedInGroup) {
+        handleMoveToGroup(draggedLayerElement.id, null);
+      }
+    }
+    
+    handleLayerDragEnd();
+  }, [isFixedPosition, draggedLayerElement, dragOverLayerType, getLayerDropType, layersTree, layout, handleMoveToGroup, handleReorderElement, handleLayerDragEnd, onChange, addToHistory]);
+
+  // Get drop zone props for layer element
+  const getLayerDropZoneProps = useCallback((elementId: string, isGroup: boolean) => {
+    const isDragOver = dragOverLayerElement?.id === elementId;
+    const isDraggedItem = draggedLayerElement?.id === elementId;
+    
+    return {
+      onDragOver: (e: React.DragEvent) => handleLayerDragOver(e, elementId, isGroup),
+      onDragLeave: handleLayerDragLeave,
+      onDrop: (e: React.DragEvent) => handleLayerDrop(e, elementId, isGroup),
+      className: `zd:relative ${isDragOver ? '' : ''} ${isDraggedItem ? 'zd:opacity-50' : ''}`
+    };
+  }, [dragOverLayerElement, draggedLayerElement, handleLayerDragOver, handleLayerDragLeave, handleLayerDrop]);
+
+  // Get drag props for layer element
+  const getLayerDragProps = useCallback((elementId: string, isGroup: boolean, groupId?: string) => {
+    const isDraggedItem = draggedLayerElement?.id === elementId;
+    
+    return {
+      draggable: !isDraggedItem,
+      onDragStart: (e: React.DragEvent) => {
+        e.dataTransfer.setData("text/plain", elementId);
+        e.dataTransfer.effectAllowed = "move";
+        handleLayerDragStart(elementId, isGroup, groupId);
+      },
+      onDragEnd: (e: React.DragEvent) => {
+        handleLayerDragEnd();
+      },
+      className: isDraggedItem ? 'zd:cursor-grabbing' : 'zd:cursor-grab'
+    };
+  }, [draggedLayerElement, handleLayerDragStart, handleLayerDragEnd]);
+
+  // Get drop indicator props for layer element
+  const getLayerDropIndicatorProps = useCallback((elementId: string, type: 'before' | 'after' | 'inside') => {
+    const isActive = dragOverLayerElement?.id === elementId && dragOverLayerType === type;
+    
+    if (type === 'inside') {
+      // For inside drops, show a border around the element
+      return {
+        className: `zd:absolute zd:inset-0 zd:border-2 zd:border-blue-500 zd:rounded-md zd:transition-all zd:duration-200 zd:z-10 ${
+          isActive ? 'zd:opacity-100' : 'zd:opacity-0'
+        }`,
+        style: {
+          display: isActive ? 'block' : 'none',
+          pointerEvents: 'none' as const
+        }
+      };
+    } else {
+      // For before/after drops, show a line indicator
+      const positionClasses = type === 'before' ? 'zd:-top-0.5' : 'zd:-bottom-0.5';
+      return {
+        className: `zd:absolute zd:left-0 zd:right-0 zd:h-0.5 zd:bg-blue-500 zd:rounded-full zd:transition-all zd:duration-200 zd:z-10 ${positionClasses} ${
+          isActive ? 'zd:opacity-100 zd:scale-y-100' : 'zd:opacity-0 zd:scale-y-0'
+        }`,
+        style: {
+          display: isActive ? 'block' : 'none',
+          pointerEvents: 'none' as const
+        }
+      };
+    }
+  }, [dragOverLayerElement, dragOverLayerType]);
 
   return (
     <div className="zd:flex zd:flex-1 zd:h-full zd:relative">
@@ -3024,7 +3379,7 @@ export function PrintTemplateBuilder({
               </div>
             ) : (
               <div className="zd:space-y-1">
-                {layersTree.map(({ element, children, isGroup }) => {
+                {layersTree.map(({ element, children, isGroup }, treeIndex) => {
                   const isSelected = selectedElements.has(element.id);
                   const elementLabel = element.type === "field" 
                     ? (element.value as string || element.code || element.id)
@@ -3036,14 +3391,26 @@ export function PrintTemplateBuilder({
                     ? t("Group")
                     : element.type;
                   
+                  const workspaceItem = layerWorkspaceItems.find(item => item.id === element.id);
+                  
+                  const parentDragProps = isFixedPosition ? getLayerDragProps(element.id, isGroup, element.group) : {};
+                  const parentDropZoneProps = isFixedPosition ? getLayerDropZoneProps(element.id, isGroup) : {};
+                  const { className: parentDragClassName, ...restParentDragProps } = parentDragProps as { className?: string; [key: string]: any };
+                  const { className: parentDropZoneClassName, ...restParentDropZoneProps } = parentDropZoneProps as { className?: string; [key: string]: any };
+                  
                   return (
                     <div key={element.id} className="zd:space-y-0.5">
                       <div
+                        {...(isFixedPosition ? restParentDropZoneProps : {})}
+                        {...(isFixedPosition ? restParentDragProps : {})}
                         className={cn(
-                          "zd:px-2 zd:py-1.5 zd:rounded zd:cursor-pointer zd:flex zd:items-center zd:gap-2 zd:text-sm zd:transition-colors",
+                          "zd:px-2 zd:py-1.5 zd:rounded zd:flex zd:items-center zd:gap-2 zd:text-sm zd:transition-colors zd:relative",
+                          isFixedPosition ? "zd:cursor-move" : "zd:cursor-pointer",
                           isSelected 
                             ? "zd:bg-primary zd:text-primary-foreground" 
-                            : "zd:hover:bg-muted"
+                            : "zd:hover:bg-muted",
+                          parentDragClassName,
+                          parentDropZoneClassName
                         )}
                         onClick={(e) => {
                           if (e.ctrlKey || e.metaKey) {
@@ -3098,6 +3465,23 @@ export function PrintTemplateBuilder({
                           setSelectedElements(new Set([element.id]));
                         }}
                       >
+                        {/* Drop indicators */}
+                        {isFixedPosition && (
+                          <>
+                            <div {...getLayerDropIndicatorProps(element.id, 'before')} />
+                            <div {...getLayerDropIndicatorProps(element.id, 'after')} />
+                            <div {...getLayerDropIndicatorProps(element.id, 'inside')} />
+                          </>
+                        )}
+                        
+                        {/* Drag handle icon (visual only, entire element is draggable) */}
+                        {isFixedPosition && (
+                          <div
+                            className="zd:text-muted-foreground zd:pointer-events-none"
+                          >
+                            <GripVertical className="zd:w-4 zd:h-4" />
+                          </div>
+                        )}
                         {isGroup ? (
                           <LayoutGrid className="zd:w-4 zd:h-4 zd:flex-shrink-0" />
                         ) : (
@@ -3110,9 +3494,15 @@ export function PrintTemplateBuilder({
                           </span>
                         )}
                       </div>
-                      {isGroup && children.length > 0 && (
-                        <div className="zd:pl-6 zd:space-y-0.5">
-                          {children.map(child => {
+                      {isGroup && (
+                        <div 
+                          className={cn(
+                            "zd:pl-6 zd:space-y-0.5",
+                            isFixedPosition && "zd:min-h-[40px] zd:transition-all zd:duration-200"
+                          )}
+                        >
+                          {children.length > 0 ? (
+                            children.map((child: PrintTemplateElement) => {
                             const isChildSelected = selectedElements.has(child.id);
                             const childLabel = child.type === "field" 
                               ? (child.value as string || child.code || child.id)
@@ -3122,15 +3512,23 @@ export function PrintTemplateBuilder({
                               ? (child.referenceField || t("Reference"))
                               : child.type;
                             
+                            const childDragProps = isFixedPosition ? getLayerDragProps(child.id, false, element.id) : {};
+                            const childDropZoneProps = isFixedPosition ? getLayerDropZoneProps(child.id, false) : {};
+                            const { className: dragClassName, ...restDragProps } = childDragProps as { className?: string; [key: string]: any };
+                            const { className: dropZoneClassName, ...restDropZoneProps } = childDropZoneProps as { className?: string; [key: string]: any };
                             return (
                               <div
                                 key={child.id}
+                                {...(isFixedPosition ? restDropZoneProps : {})}
                                 className={cn(
-                                  "zd:px-2 zd:py-1 zd:rounded zd:cursor-pointer zd:flex zd:items-center zd:gap-2 zd:text-xs zd:transition-colors",
+                                  "zd:px-2 zd:py-1 zd:rounded zd:cursor-pointer zd:flex zd:items-center zd:gap-2 zd:text-xs zd:transition-colors zd:relative",
                                   isChildSelected 
                                     ? "zd:bg-primary/80 zd:text-primary-foreground" 
-                                    : "zd:hover:bg-muted/50"
+                                    : "zd:hover:bg-muted/50",
+                                  dragClassName,
+                                  dropZoneClassName
                                 )}
+                                {...(isFixedPosition ? restDragProps : {})}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (e.ctrlKey || e.metaKey) {
@@ -3187,11 +3585,23 @@ export function PrintTemplateBuilder({
                                   setSelectedElements(new Set([child.id]));
                                 }}
                               >
+                                {/* Drop indicators for child elements */}
+                                {isFixedPosition && (
+                                  <>
+                                    <div {...getLayerDropIndicatorProps(child.id, 'before')} />
+                                    <div {...getLayerDropIndicatorProps(child.id, 'after')} />
+                                  </>
+                                )}
                                 <Hash className="zd:w-3 zd:h-3 zd:flex-shrink-0" />
                                 <span className="zd:flex-1 zd:truncate">{childLabel}</span>
                               </div>
                             );
-                          })}
+                            })
+                          ) : (
+                            <div className="zd:px-2 zd:py-4 zd:text-xs zd:text-muted-foreground zd:text-center zd:italic">
+                              {t("Drop elements here to add to group")}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -3260,14 +3670,16 @@ export function PrintTemplateBuilder({
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={generateTemplateFromTabs}
-                    disabled={!doctypeDoc?.tabs || !fields.length || isGenerating}
+                    disabled={!isFixedPosition || !doctypeDoc?.tabs || !fields.length || isGenerating}
                   >
                     <Wand2 className="zd:w-4 zd:h-4 zd:mr-2" />
                     {t("Generate from Doctype Tabs")}
                   </DropdownMenuItem>
-                  {(!doctypeDoc?.tabs || !fields.length) && (
+                  {(!isFixedPosition || !doctypeDoc?.tabs || !fields.length) && (
                     <div className="zd:px-2 zd:py-1.5 zd:text-xs zd:text-muted-foreground">
-                      {!doctypeDoc?.tabs 
+                      {!isFixedPosition
+                        ? t("Generate from tabs is only available for fixed position templates")
+                        : !doctypeDoc?.tabs 
                         ? t("Doctype has no tabs configured")
                         : !fields.length 
                         ? t("No fields available")
@@ -3353,44 +3765,41 @@ export function PrintTemplateBuilder({
             </Button>
           </div>
           
-          {/* Settings (Guided Background) */}
-          {!readonly && onGuidedBackgroundChange && (
+          {/* Settings - open popup() dialog (popit). Hidden when parent provides its own Settings (e.g. form view header). */}
+          {showSettingsInToolbar && !readonly && (onGuidedBackgroundChange || onFormatChange) && (
             <>
               <div className="zd:w-px zd:h-4 zd:bg-border" />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    title={t("Settings")}
-                  >
-                    <Settings className="zd:w-4 zd:h-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>{t("Guided Background")}</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <div className="zd:px-2 zd:py-2">
-                    <FormControl
-                      field={{
-                        type: "File",
-                        name: "guided_background",
-                        doctype: "zodula__Print Template",
-                        accept: "image/*",
-                      }}
-                      fieldKey="guided_background"
-                      value={guidedBackground}
-                      onChange={(fieldName, value) => {
-                        if (onGuidedBackgroundChange) {
-                          onGuidedBackgroundChange(value as string | File | null);
-                        }
-                      }}
-                      docId={templateId}
-                      hideFormControl={true}
-                    />
-                  </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button
+                variant="ghost"
+                size="sm"
+                title={t("Settings")}
+                onClick={() => {
+                  popup(SettingsPanel, { title: t("Settings") }, {
+                    format: format || "A4",
+                    customWidth: format === "Custom" ? (customWidth ?? 210) : undefined,
+                    customHeight: format === "Custom" ? (customHeight ?? (isLetterHead ? 30 : 297)) : undefined,
+                    marginTop: marginTop ?? 10,
+                    marginRight: marginRight ?? 10,
+                    marginBottom: marginBottom ?? 10,
+                    marginLeft: marginLeft ?? 10,
+                    isFixedPosition: !!isFixedPosition,
+                    guidedBackground: guidedBackground ?? null,
+                    letterHeadAlign: letterHeadAlign || "left",
+                    isLetterHead: !!isLetterHead,
+                    onFormatChange,
+                    onCustomSizeChange,
+                    onMarginsChange,
+                    onFixedPositionChange,
+                    onGuidedBackgroundChange,
+                    onLetterHeadAlignChange,
+                    templateId,
+                    organization,
+                    t,
+                  });
+                }}
+              >
+                <Settings className="zd:w-4 zd:h-4" />
+              </Button>
             </>
           )}
           
@@ -3435,7 +3844,157 @@ export function PrintTemplateBuilder({
           )}
         </div>
 
-        {/* Canvas */}
+        {/* Canvas or Preview */}
+        {isFixedPosition ? (
+          // Preview Mode - Fixed Position
+          <div
+            ref={canvasRef}
+            className="zd:flex-1 zd:overflow-auto zd:bg-muted/30 zd:relative zd:p-8"
+            style={{ minHeight: 0 }}
+            onClick={(e) => {
+              // Clear selection when clicking on canvas background (outside paper)
+              if (!readonly && selectedElements.size > 0) {
+                const target = e.target as HTMLElement;
+                // Check if clicking directly on canvas background (not on paper or elements)
+                if (target === e.currentTarget || (canvasRef.current && target === canvasRef.current)) {
+                  setSelectedElements(new Set());
+                }
+              }
+            }}
+          >
+            <div
+              ref={paperRef}
+              key={`paper-preview-${format}-${customWidth}-${customHeight}`}
+              className="zd:relative zd:m-auto zd:bg-background zd:border zd:border-primary"
+              style={{
+                width: `${pageDimensions?.width || 210}mm`,
+                minHeight: `${dynamicPageHeight}mm`,
+                transform: `scale(${zoom / 100})`,
+                transformOrigin: "top center",
+              }}
+              onClick={(e) => {
+                // Clear selection when clicking on paper background (outside elements)
+                if (!readonly && selectedElements.size > 0) {
+                  const target = e.target as HTMLElement;
+                  // Check if clicking directly on paper container (not on an element)
+                  // Element clicks will be handled by their own onClick handlers
+                  if (target === e.currentTarget || target === paperRef.current) {
+                    setSelectedElements(new Set());
+                  }
+                }
+              }}
+            >
+              {/* Guided Background - pinned to top, scale by width only (aspect ratio preserved) */}
+              {guidedBackgroundDisplayUrl && (
+                <div
+                  className="zd:absolute zd:top-0 zd:left-0 zd:right-0 zd:pointer-events-none zd:z-0"
+                  style={{
+                    height: "100%",
+                    backgroundImage: `url(${guidedBackgroundDisplayUrl})`,
+                    backgroundSize: "100% auto",
+                    backgroundPosition: "top left",
+                    backgroundRepeat: "no-repeat",
+                    opacity: 0.3,
+                  }}
+                />
+              )}
+
+              {/* Preview: Render elements by idx, stacked vertically */}
+              <div 
+                className="zd:relative zd:w-full zd:space-y-4"
+                style={{
+                  paddingTop: `${marginTop}mm`,
+                  paddingRight: `${marginRight}mm`,
+                  paddingBottom: `${marginBottom}mm`,
+                  paddingLeft: `${marginLeft}mm`,
+                }}
+                onClick={(e) => {
+                  // Clear selection when clicking on preview container background (outside elements)
+                  if (!readonly && selectedElements.size > 0) {
+                    const target = e.target as HTMLElement;
+                    // Check if clicking directly on the preview container (not on an element)
+                    // Element clicks will be handled by their own onClick handlers
+                    if (target === e.currentTarget) {
+                      setSelectedElements(new Set());
+                    }
+                  }
+                }}
+              >
+                {sortedLayout
+                  .filter(el => {
+                    // Only render top-level elements (groups and standalone, not group children)
+                    const isGroup = el.type === "anchor" && layout.some(child => child.group === el.id);
+                    const isGroupChild = !!el.group;
+                    return !isGroupChild;
+                  })
+                  .map((element) => {
+                    const isGroup = element.type === "anchor" && layout.some(child => child.group === element.id);
+                    const groupChildren = isGroup ? sortedLayout.filter(el => el.group === element.id) : [];
+                    const columns = element.columns || 1;
+                    
+                    if (isGroup) {
+                      // Render group as section with columns
+                      return (
+                        <div
+                          key={element.id}
+                          className={cn(
+                            "zd:border zd:border-border zd:rounded-lg zd:p-4 zd:bg-muted/20",
+                            selectedElements.has(element.id) && "zd:ring-2 zd:ring-blue-500"
+                          )}
+                          onClick={(e) => {
+                            if (!readonly) {
+                              e.stopPropagation();
+                              setSelectedElements(new Set([element.id]));
+                            }
+                          }}
+                        >
+                          <div
+                            className="zd:grid zd:gap-4"
+                            style={{
+                              gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                            }}
+                          >
+                            {groupChildren.map((child) => (
+                              <TemplateElement
+                                key={child.id}
+                                element={child}
+                                index={child.idx ?? 0}
+                                isGroupChild={true}
+                                groupParent={element}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      // Render standalone element
+                      return (
+                        <div
+                          key={element.id}
+                          className={cn(
+                            "zd:flex zd:w-full",
+                            selectedElements.has(element.id) && "zd:ring-2 zd:ring-blue-500 zd:rounded"
+                          )}
+                          onClick={(e) => {
+                            if (!readonly) {
+                              e.stopPropagation();
+                              setSelectedElements(new Set([element.id]));
+                            }
+                          }}
+                        >
+                          <TemplateElement
+                            element={element}
+                            index={element.idx ?? 0}
+                          />
+                        </div>
+                      );
+                    }
+                  })}
+              </div>
+            </div>
+          </div>
+        ) : (
+          // Interactive Canvas Mode - Free Position
         <div
           ref={canvasRef}
           className="zd:flex-1 zd:overflow-auto zd:bg-muted/30 zd:relative zd:p-8"
@@ -3571,40 +4130,62 @@ export function PrintTemplateBuilder({
               }
             }}
           >
-            {/* Guided Background */}
-            {guidedBackgroundUrlRef.current && (
+            {/* Guided Background - pinned to top, scale by width only (aspect ratio preserved) */}
+            {guidedBackgroundDisplayUrl && (
               <div
-                className="zd:absolute zd:inset-0 zd:pointer-events-none zd:z-0"
+                className="zd:absolute zd:top-0 zd:left-0 zd:right-0 zd:pointer-events-none zd:z-0"
                 style={{
-                  backgroundImage: `url(${guidedBackgroundUrlRef.current})`,
-                  backgroundSize: "100% 100%",
+                  height: "100%",
+                  backgroundImage: `url(${guidedBackgroundDisplayUrl})`,
+                  backgroundSize: "100% auto",
                   backgroundPosition: "top left",
                   backgroundRepeat: "no-repeat",
                   opacity: 0.3,
                 }}
               />
             )}
+
+            {/* Content area with margins */}
+            <div
+              className="zd:w-full zd:h-full"
+              style={{
+                paddingTop: `${marginTop}mm`,
+                paddingRight: `${marginRight}mm`,
+                paddingBottom: `${marginBottom}mm`,
+                paddingLeft: `${marginLeft}mm`,
+              }}
+            >
             
             {/* Selection box */}
-            {selectionBox && (
-              <div
-                className="zd:absolute zd:ring-1 zd:ring-blue-500 zd:bg-blue-500/20 zd:pointer-events-none zd:z-[101]"
-                style={{
-                  left: `${Math.min(selectionBox.startX, selectionBox.endX)}px`,
-                  top: `${Math.min(selectionBox.startY, selectionBox.endY)}px`,
-                  width: `${Math.abs(selectionBox.endX - selectionBox.startX)}px`,
-                  height: `${Math.abs(selectionBox.endY - selectionBox.startY)}px`,
-                }}
-              />
-            )}
+            {selectionBox && (() => {
+              const mmToPx = 3.779527559;
+              const marginLeftPx = marginLeft * mmToPx;
+              const marginTopPx = marginTop * mmToPx;
+              return (
+                <div
+                  className="zd:absolute zd:ring-1 zd:ring-blue-500 zd:bg-blue-500/20 zd:pointer-events-none zd:z-[101]"
+                  style={{
+                    left: `${Math.min(selectionBox.startX, selectionBox.endX) + marginLeftPx}px`,
+                    top: `${Math.min(selectionBox.startY, selectionBox.endY) + marginTopPx}px`,
+                    width: `${Math.abs(selectionBox.endX - selectionBox.startX)}px`,
+                    height: `${Math.abs(selectionBox.endY - selectionBox.startY)}px`,
+                  }}
+                />
+              );
+            })()}
 
             {/* Page break dividers */}
-            {pageBreakPositions.map((y, index) => (
+            {pageBreakPositions.map((y, index) => {
+              const mmToPx = 3.779527559;
+              const marginTopPx = marginTop * mmToPx;
+              return (
               <div
                 key={`page-break-${index}`}
                 className="zd:absolute zd:left-0 zd:right-0 zd:pointer-events-none zd:z-[50]"
                 style={{
-                  top: `${y}mm`,
+                  left: `${marginLeft}mm`,
+                  right: `${marginRight}mm`,
+                  top: `${y + marginTop}mm`,
                   height: '2px',
                   background: 'repeating-linear-gradient(to right, #ef4444 0px, #ef4444 10px, transparent 10px, transparent 20px)',
                   borderTop: '1px dashed #ef4444',
@@ -3618,10 +4199,19 @@ export function PrintTemplateBuilder({
                   {t("Page Break")} {index + 2}
                 </div>
               </div>
-            ))}
+              );
+            })}
 
             {layout.length === 0 && (
-              <div className="zd:absolute zd:inset-0 zd:flex zd:items-center zd:justify-center zd:text-muted-foreground zd:text-center zd:p-8">
+              <div 
+                className="zd:absolute zd:flex zd:items-center zd:justify-center zd:text-muted-foreground zd:text-center zd:p-8"
+                style={{
+                  left: `${marginLeft}mm`,
+                  right: `${marginRight}mm`,
+                  top: `${marginTop}mm`,
+                  bottom: `${marginBottom}mm`,
+                }}
+              >
                 <div>
                   <p className="zd:text-lg zd:mb-2">{t("Click tools below to add components")}</p>
                   <p className="zd:text-sm">{t("Drag to move - Drag corners to resize - Drag on empty area to select multiple")}</p>
@@ -3648,9 +4238,11 @@ export function PrintTemplateBuilder({
               .map((element, index) => (
                 <TemplateElement key={element.id} element={element} index={index} />
               ))}
+            </div>
           </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Floating Bottom Toolbar - Tools */}
@@ -3889,6 +4481,20 @@ export function PrintTemplateBuilder({
                         ]}
                       />
                     </div>
+                    <div className="zd:space-y-2">
+                      <div className="zd:flex zd:items-center zd:gap-2">
+                        <Checkbox
+                          checked={element.hideNoValue === true}
+                          onCheckedChange={(checked) => handleUpdateElement(id, { hideNoValue: checked === true })}
+                        />
+                        <label className="zd:text-sm zd:font-medium zd:cursor-pointer" onClick={() => handleUpdateElement(id, { hideNoValue: !element.hideNoValue })}>
+                          {t("Hide if no value")}
+                        </label>
+                      </div>
+                      <p className="zd:text-xs zd:text-muted-foreground">
+                        {t("Hide this element when it has no value")}
+                      </p>
+                    </div>
                   </>
                 )}
 
@@ -3988,6 +4594,20 @@ export function PrintTemplateBuilder({
                           { value: "bottom", label: t("Bottom") },
                         ]}
                       />
+                    </div>
+                    <div className="zd:space-y-2">
+                      <div className="zd:flex zd:items-center zd:gap-2">
+                        <Checkbox
+                          checked={element.hideNoValue === true}
+                          onCheckedChange={(checked) => handleUpdateElement(id, { hideNoValue: checked === true })}
+                        />
+                        <label className="zd:text-sm zd:font-medium zd:cursor-pointer" onClick={() => handleUpdateElement(id, { hideNoValue: !element.hideNoValue })}>
+                          {t("Hide if no value")}
+                        </label>
+                      </div>
+                      <p className="zd:text-xs zd:text-muted-foreground">
+                        {t("Hide this element when it has no value")}
+                      </p>
                     </div>
                   </>
                 )}
@@ -4120,7 +4740,7 @@ export function PrintTemplateBuilder({
                   </div>
                 )}
 
-                {element.transform && (
+                {element.transform && !isFixedPosition && (
                   <div className="zd:space-y-1">
                     <label className="zd:text-sm zd:font-medium">{t("Position & Size")}</label>
                     {isGroupChild && (
@@ -4212,6 +4832,39 @@ export function PrintTemplateBuilder({
                             <div className="zd:text-xs zd:text-muted-foreground zd:mb-2">
                               {t("This is a group containing")} {groupChildren.length} {t("element(s)")}
                             </div>
+                            {isFixedPosition && (
+                              <div className="zd:space-y-2 zd:mb-2">
+                                <label className="zd:text-xs zd:font-medium">{t("Columns")}</label>
+                                <Input
+                                  type="number"
+                                  value={element.columns || 1}
+                                  onChange={(e) => {
+                                    const cols = Math.max(1, Math.min(12, Number(e.target.value) || 1));
+                                    handleUpdateElement(id, { columns: cols });
+                                  }}
+                                  min="1"
+                                  max="12"
+                                  className="zd:w-full"
+                                />
+                                <p className="zd:text-xs zd:text-muted-foreground">
+                                  {t("Number of columns for this section")}
+                                </p>
+                              </div>
+                            )}
+                            <div className="zd:space-y-2 zd:mb-2">
+                              <div className="zd:flex zd:items-center zd:gap-2">
+                                <Checkbox
+                                  checked={element.hideNoValue === true}
+                                  onCheckedChange={(checked) => handleUpdateElement(id, { hideNoValue: checked === true })}
+                                />
+                                <label className="zd:text-sm zd:font-medium zd:cursor-pointer" onClick={() => handleUpdateElement(id, { hideNoValue: !element.hideNoValue })}>
+                                  {t("Hide if no value")}
+                                </label>
+                              </div>
+                              <p className="zd:text-xs zd:text-muted-foreground">
+                                {t("Hide this group when it has no value")}
+                              </p>
+                            </div>
                             <div className="zd:text-xs zd:text-muted-foreground zd:mb-2 zd:font-mono zd:bg-muted/50 zd:p-1 zd:rounded">
                               {t("Group ID")}: {element.id}
                             </div>
@@ -4222,12 +4875,32 @@ export function PrintTemplateBuilder({
                             <div className="zd:text-xs zd:text-muted-foreground zd:mb-2">
                               {t("This element belongs to a group")}
                             </div>
+                            {isFixedPosition && (
+                              <div className="zd:space-y-2 zd:mb-2">
+                                <label className="zd:text-xs zd:font-medium">{t("Move to Group")}</label>
+                                <Select
+                                  value={element.group || ""}
+                                  onChange={(value) => {
+                                    handleMoveToGroup(id, value || null);
+                                  }}
+                                  options={[
+                                    { value: "", label: t("None (Standalone)") },
+                                    ...layout
+                                      .filter(el => el.type === "anchor" && layout.some(child => child.group === el.id))
+                                      .map(g => ({
+                                        value: g.id,
+                                        label: `${t("Group")} (${layout.filter(c => c.group === g.id).length} ${t("items")})`
+                                      }))
+                                  ]}
+                                />
+                              </div>
+                            )}
                             <div className="zd:text-xs zd:text-muted-foreground zd:mb-2 zd:font-mono zd:bg-muted/50 zd:p-1 zd:rounded">
                               {t("Group ID")}: {element.group}
                             </div>
                           </>
                         )}
-                        {(isGroup || belongsToGroup) && (
+                        {(isGroup || belongsToGroup) && !isFixedPosition && (
                           <Button
                             variant="outline"
                             className="zd:w-full"
@@ -4249,7 +4922,8 @@ export function PrintTemplateBuilder({
                   return null;
                 })()}
 
-                {/* Anchor Settings */}
+                {/* Anchor Settings - Only show when not in fixed position mode */}
+                {!isFixedPosition && (
                 <div className="zd:space-y-1 zd:border-t zd:border-border zd:pt-3">
                   <label className="zd:text-sm zd:font-medium">{t("Anchor")}</label>
                   {isGroupChild && (
@@ -4370,6 +5044,7 @@ export function PrintTemplateBuilder({
                     )}
                   </div>
                 </div>
+                )}
               </div>
             );
             })

@@ -3,7 +3,7 @@ import puppeteer from "puppeteer"
 import path from "path"
 import fs from "fs"
 import { getFieldValueFromDoc } from "@/zodula/client/utils"
-import { PAGE_FORMATS, generateTemplateFromTabs, type PrintTemplateElement, type ChildField } from "@/zodula/client/code-utils"
+import { PAGE_FORMATS, generateFixedPositionTemplateFromTabs, type PrintTemplateElement, type ChildField } from "@/zodula/client/code-utils"
 // @ts-ignore - binba may not have type definitions
 import { Template } from "binba"
 
@@ -15,8 +15,27 @@ function pxToMm(px: number): number {
   return (px * 25.4) / 96 // Convert pixels to mm at 96 DPI
 }
 
-function getFieldValue(doc: any, fieldName: string): string {
+async function getFieldValue(doc: any, fieldName: string, sessionContext?: any): Promise<string> {
   if (!doc || !fieldName) return ""
+  
+  // Handle organization fields (fields with "organization." prefix)
+  if (fieldName.startsWith("organization.")) {
+    const orgFieldName = fieldName.substring("organization.".length)
+    if (sessionContext?.organization) {
+      try {
+        const orgDoc = await $zodula.doctype("zodula__Organization").get(sessionContext.organization).bypass(true)
+        if (orgDoc) {
+          const value = orgDoc[orgFieldName]
+          if (value === null || value === undefined) return ""
+          return String(value)
+        }
+      } catch (e) {
+        console.error(`[PDF] Error fetching organization field ${orgFieldName}:`, e)
+      }
+    }
+    return ""
+  }
+  
   const value = doc[fieldName]
   if (value === null || value === undefined) return ""
   return String(value)
@@ -138,7 +157,7 @@ function calculateAnchorPosition(
   const anchorX = anchorPos.x
   const anchorY = anchorPos.y
   const anchorWidth = anchorItem.transform_width || 0
-  const anchorHeight = measuredHeights?.get(anchorItem.id) || anchorItem.transform_height || 0
+  const anchorHeight = measuredHeights?.get(anchorItem.id) ?? anchorItem.transform_height ?? 0
   const offset = anchorConfig.anchorOffset || 0
   const position = anchorConfig.anchorPosition || "top-left"
   
@@ -159,7 +178,7 @@ function calculateAnchorPosition(
     // We need to recalculate as: measuredAnchorHeight + spacing
     if (measuredHeights && offsetY > 0) {
       const originalAnchorHeight = anchorItem.transform_height || 0
-      const measuredAnchorHeight = measuredHeights.get(anchorItem.id) || originalAnchorHeight
+      const measuredAnchorHeight = measuredHeights?.get(anchorItem.id) ?? originalAnchorHeight
       
       // If the offset is greater than the original anchor height, it likely includes spacing
         // This indicates a new-row element (element positioned below the anchor)
@@ -181,7 +200,7 @@ function calculateAnchorPosition(
     // Legacy support for other positions
     switch (position) {
       case "top":
-        const itemHeight = measuredHeights?.get(item.id) || item.transform_height || 0
+        const itemHeight = measuredHeights?.get(item.id) ?? item.transform_height ?? 0
         newX = anchorX
         newY = anchorY - itemHeight - (typeof offset === "number" ? offset : 0)
         break
@@ -250,12 +269,24 @@ function elementToItem(element: PrintTemplateElement, idx: number): any {
     }
     item.label = element.label || ""
     item.label_position = element.labelPosition || "left"
+    // Add hide_no_value if present (defaults to true/1)
+    if (element.hideNoValue !== undefined) {
+      item.hide_no_value = element.hideNoValue ? 1 : 0
+    } else {
+      item.hide_no_value = 1 // Default to true
+    }
   } else if (element.type === "reference") {
     item.reference_doctype = element.referenceDoctype || ""
     item.reference_id_filter = element.referenceIdFilter || ""
     item.reference_field = element.referenceField || ""
     item.label = element.label || ""
     item.label_position = element.labelPosition || "left"
+    // Add hide_no_value if present (defaults to true/1)
+    if (element.hideNoValue !== undefined) {
+      item.hide_no_value = element.hideNoValue ? 1 : 0
+    } else {
+      item.hide_no_value = 1 // Default to true
+    }
   }
   
   // Anchor configuration
@@ -278,6 +309,184 @@ function elementToItem(element: PrintTemplateElement, idx: number): any {
   }
   
   return item
+}
+
+// Check if an item should be hidden based on hide_no_value setting
+async function shouldHideItem(
+  item: any,
+  doc: any,
+  doctype?: string,
+  fieldConfigs?: Map<string, { type: string; reference?: string }>,
+  childFieldConfigs?: Map<string, Map<string, { type: string }>>,
+  baseUrl?: string,
+  sessionContext?: any,
+  allItems?: any[] // Add allItems parameter to check group children
+): Promise<boolean> {
+  // Default to true (1) if not set, as per requirement
+  const hideNoValue = (item as any).hide_no_value === 1 || (item as any).hide_no_value === true || (item as any).hide_no_value === undefined
+  
+  // Check if this is a group (anchor item with children)
+  if (item.type === "anchor" && allItems) {
+    // Find children of this group (items that have group property or anchor to this item)
+    const groupChildren = allItems.filter((child: any) => {
+      // Check if child has group property pointing to this item
+      if ((child as any).group === item.id) {
+        return true;
+      }
+      // Check if child anchors to this item
+      let childAnchorConfig: any = null;
+      if (child.anchor_config) {
+        if (typeof child.anchor_config === "string") {
+          try {
+            childAnchorConfig = JSON.parse(child.anchor_config);
+          } catch (e) {
+            // Ignore
+          }
+        } else if (typeof child.anchor_config === "object") {
+          childAnchorConfig = child.anchor_config;
+        }
+      }
+      if (childAnchorConfig && childAnchorConfig.anchorTo) {
+        if ((item.code && childAnchorConfig.anchorTo === item.code) || childAnchorConfig.anchorTo === item.id) {
+          return true;
+        }
+      }
+      return false;
+    });
+    
+    // If group has children, check if all children are hidden
+    if (groupChildren.length > 0) {
+      const hiddenChildren = await Promise.all(
+        groupChildren.map((child: any) => 
+          shouldHideItem(child, doc, doctype, fieldConfigs, childFieldConfigs, baseUrl, sessionContext, allItems)
+        )
+      );
+      
+      // If all children are hidden, hide the group
+      if (hiddenChildren.every((hidden: boolean) => hidden === true)) {
+        return true; // Hide group when all children are hidden
+      }
+    }
+  }
+  
+  if (!hideNoValue) {
+    return false // Don't hide if hide_no_value is false
+  }
+  
+  if (item.type === "field") {
+    let fieldValue = item.field_name ? await getFieldValue(doc, item.field_name, sessionContext) : ""
+    
+    // Check if this is a Reference Table
+    if (item.fields && typeof item.fields === "string") {
+      try {
+        const childFields = JSON.parse(item.fields)
+        if (Array.isArray(childFields) && childFields.length > 0) {
+          let parentFieldValue = doc[item.field_name]
+          
+          // If parentFieldValue is not an array, try to query it directly
+          // This can happen if the document wasn't loaded with relationships
+          if (!Array.isArray(parentFieldValue)) {
+            // Try to get the field config to find the child doctype
+            const fieldConfig = fieldConfigs?.get(item.field_name || "")
+            if (fieldConfig?.reference) {
+              try {
+                // Query child documents directly
+                const { docs: childDocs } = await $zodula.doctype(fieldConfig.reference as any)
+                  .select()
+                  .where("parentid", "=", doc.id)
+                  .where("parentype", "=", doctype)
+                  .where("parentfield", "=", item.field_name)
+                  .sort("idx", "asc")
+                  .bypass(true)
+                parentFieldValue = childDocs || []
+                console.log(`[PDF] Queried Reference Table ${item.field_name || item.id} directly: found ${childDocs?.length || 0} rows`)
+              } catch (e) {
+                console.error(`[PDF] Error querying Reference Table ${item.field_name}:`, e)
+              }
+            }
+          }
+          
+          console.log(`[PDF] Checking Reference Table ${item.field_name || item.id}: parentFieldValue type=${typeof parentFieldValue}, isArray=${Array.isArray(parentFieldValue)}, value=`, parentFieldValue)
+          const fieldValueArray = Array.isArray(parentFieldValue) ? parentFieldValue : []
+          const hasRows = fieldValueArray.length > 0
+          console.log(`[PDF] Reference Table ${item.field_name || item.id}: hasRows=${hasRows}, arrayLength=${fieldValueArray.length}`)
+          
+          // Parse table config
+          let tableConfig: any = null
+          if (item.table_config && typeof item.table_config === "string") {
+            try {
+              tableConfig = JSON.parse(item.table_config)
+            } catch (e) {
+              // Ignore parse errors
+            }
+          } else if (item.table_config) {
+            tableConfig = item.table_config
+          }
+          
+          // For Reference Tables:
+          // - If table has rows, NEVER hide it (regardless of hide_no_value settings)
+          if (hasRows) {
+            console.log(`[PDF] Reference Table ${item.field_name || item.id} has ${fieldValueArray.length} rows - NOT hiding`)
+            return false // Never hide tables with data
+          }
+          
+          console.log(`[PDF] Reference Table ${item.field_name || item.id} has NO rows - checking hide settings`)
+          
+          // Table has no rows - check if it should be hidden
+          const tableHideNoValue = tableConfig?.hideNoValue
+          // If table-level hideNoValue is explicitly false, don't hide (even if element-level is true)
+          if (tableHideNoValue === false) {
+            return false // Don't hide if table-level hideNoValue is explicitly false
+          }
+          // If table-level hideNoValue is true, hide it
+          if (tableHideNoValue === true) {
+            return true // Hide empty table if table-level hideNoValue is true
+          }
+          // If table-level hideNoValue is undefined, use element-level hide_no_value
+          // (hideNoValue is already checked at the top of the function, defaulting to true)
+          return true // Hide empty table if element-level hide_no_value is true (default)
+        }
+      } catch (e) {
+        // Ignore parse errors - fall through to regular field check
+      }
+    }
+    
+    // For regular fields (not Reference Tables), check if field value is empty
+    const isEmpty = !fieldValue || (typeof fieldValue === "string" && fieldValue.trim() === "")
+    return isEmpty
+  } else if (item.type === "reference") {
+    let refValue = ""
+    if (item.reference_doctype && item.reference_field) {
+      try {
+        let refId = item.reference_id_filter || ""
+        if (refId.includes("{{")) {
+          if (sessionContext) {
+            refId = refId.replace(/\{\{session\.(\w+)\}\}/g, (_: string, key: string) => {
+              return sessionContext[key] || ""
+            })
+          }
+          refId = refId.replace(/\{\{doc\.(\w+)\}\}/g, async (_: string, key: string) => {
+            return await getFieldValue(doc, key, sessionContext) || ""
+          })
+        }
+        
+        if (refId) {
+          const refDoc = await $zodula.doctype(item.reference_doctype as any).get(refId).bypass(true)
+          if (refDoc) {
+            refValue = await getFieldValue(refDoc, item.reference_field, sessionContext)
+          }
+        }
+      } catch (e) {
+        // Error fetching reference - don't hide, let rendering handle it
+        return false
+      }
+    }
+    
+    const isEmpty = !refValue || (typeof refValue === "string" && refValue.trim() === "")
+    return isEmpty
+  }
+  
+  return false
 }
 
 // Calculate actual height for an item (especially for reference tables)
@@ -353,7 +562,8 @@ async function renderTemplateItem(
   finalPositions?: Map<string, { x: number; y: number }>,
   language?: string,
   fieldConfigs?: Map<string, { type: string; reference?: string }>, // Field configs for checking types
-  childFieldConfigs?: Map<string, Map<string, { type: string }>> // Child field configs for Reference Table/Extend (parentFieldName -> childFieldName -> config)
+  childFieldConfigs?: Map<string, Map<string, { type: string }>>, // Child field configs for Reference Table/Extend (parentFieldName -> childFieldName -> config)
+  isFixedPosition: boolean = false // Whether this is a fixed position template
 ): Promise<string> {
   const {
     type,
@@ -397,7 +607,12 @@ async function renderTemplateItem(
   }
   
   // Use measured height if available, otherwise use transform_height
-  const actualHeight = measuredHeights?.get(item.id) || transform_height
+  const actualHeight = measuredHeights?.get(item.id) ?? transform_height
+  
+  // If height is 0, this item should be hidden - return empty string
+  if (actualHeight === 0 && measuredHeights?.has(item.id)) {
+    return ""
+  }
   
   // Debug: Log positions for table elements and groups
   if (item.type === "field" && item.fields) {
@@ -428,19 +643,34 @@ async function renderTemplateItem(
   }
 
   const style: string[] = []
-  style.push(`position: absolute`)
-  style.push(`left: ${pxToMm(actualX)}mm`)
-  style.push(`top: ${pxToMm(actualY)}mm`)
-  style.push(`width: ${pxToMm(transform_width)}mm`)
   
-  const isReferenceTable = type === "field" && fields
-  if (!isReferenceTable) {
-    style.push(`height: ${pxToMm(actualHeight)}mm`)
+  // For fixed position, use relative positioning and flow layout
+  if (isFixedPosition) {
+    style.push(`position: relative`)
+    style.push(`width: 100%`)
+    style.push(`flex: 1`)
+    if (type === "field" && fields) {
+      // Reference table - use min-height
+      style.push(`min-height: ${pxToMm(transform_height)}mm`)
+    } else {
+      style.push(`min-height: ${pxToMm(actualHeight)}mm`)
+    }
   } else {
-    if (measuredHeights?.has(item.id)) {
+    // Non-fixed position: use absolute positioning
+    style.push(`position: absolute`)
+    style.push(`left: ${pxToMm(actualX)}mm`)
+    style.push(`top: ${pxToMm(actualY)}mm`)
+    style.push(`width: ${pxToMm(transform_width)}mm`)
+    
+    const isReferenceTable = type === "field" && fields
+    if (!isReferenceTable) {
       style.push(`height: ${pxToMm(actualHeight)}mm`)
     } else {
-      style.push(`min-height: ${pxToMm(transform_height)}mm`)
+      if (measuredHeights?.has(item.id)) {
+        style.push(`height: ${pxToMm(actualHeight)}mm`)
+      } else {
+        style.push(`min-height: ${pxToMm(transform_height)}mm`)
+      }
     }
   }
 
@@ -506,7 +736,7 @@ async function renderTemplateItem(
     }
 
     case "field": {
-      let fieldValue = field_name ? getFieldValue(doc, field_name) : ""
+      let fieldValue = field_name ? await getFieldValue(doc, field_name, sessionContext) : ""
       
       // Check if this is an Image Preview field (parent field)
       const fieldConfig = fieldConfigs?.get(field_name || "")
@@ -570,7 +800,11 @@ async function renderTemplateItem(
             // Ensure parentFieldValue is an array
             const fieldValueArray = Array.isArray(parentFieldValue) ? parentFieldValue : []
             const hasRows = fieldValueArray.length > 0
-            const hideNoValue = tableConfig?.hideNoValue === true
+            // Check both element-level hide_no_value and table-level hideNoValue
+            // Empty array [] should be treated as "no value"
+            const elementHideNoValue = (item as any).hide_no_value === 1 || (item as any).hide_no_value === true
+            const tableHideNoValue = tableConfig?.hideNoValue === true
+            const hideNoValue = elementHideNoValue || tableHideNoValue
               
               // Get column configuration
               const columns = tableConfig?.columns || childFields.map((f: string, idx: number) => ({ field: f, order: idx }))
@@ -579,7 +813,7 @@ async function renderTemplateItem(
               const showBorder = tableConfig?.showBorder !== false
               const rowHeight = tableConfig?.rowHeight || 20
             
-            // If hideNoValue is true and there are no rows, don't render the table
+            // If hideNoValue is true and there are no rows (empty array), don't render the table
             if (hideNoValue && !hasRows) {
               fieldValue = ""
             } else {
@@ -621,18 +855,20 @@ async function renderTemplateItem(
               const rows = (hasRows 
                 ? await Promise.all(fieldValueArray.map(async (childDoc: any, rowIndex: number) => {
                 const cells = await Promise.all(sortedColumns.map(async (col: any) => {
-                  const childValue = getFieldValue(childDoc, col.field)
+                  const childValue = await getFieldValue(childDoc, col.field, sessionContext)
                   const cellStyles: string[] = []
                   
-                  // Calculate column width
+                  // Calculate column width as percentage
                   if (col.width) {
-                    cellStyles.push(`width: ${pxToMm(col.width)}mm`)
+                    // Use specified percentage
+                    cellStyles.push(`width: ${col.width}%`)
                   } else if (columnsWithoutWidth > 0) {
-                    const remainingWidth = elementWidthPx - totalSpecifiedWidth
-                    const autoWidth = remainingWidth / columnsWithoutWidth
-                    cellStyles.push(`width: ${pxToMm(autoWidth)}mm`)
+                    // Distribute remaining percentage equally among unspecified columns
+                    const remainingPercentage = 100 - totalSpecifiedWidth
+                    cellStyles.push(`width: ${remainingPercentage / columnsWithoutWidth}%`)
                   } else {
-                    cellStyles.push(`width: ${elementWidthMm / sortedColumns.length}mm`)
+                    // All columns have width, distribute equally
+                    cellStyles.push(`width: ${100 / sortedColumns.length}%`)
                   }
                   
                   // Modern border styling
@@ -646,7 +882,7 @@ async function renderTemplateItem(
                   }
                   
                   cellStyles.push(`min-height: ${pxToMm(rowHeight)}mm`)
-                  cellStyles.push(`padding: 3px 4px`) // Narrow but slightly more modern padding
+                  cellStyles.push(`padding: 2px`)
                   cellStyles.push(`overflow: hidden`)
                   cellStyles.push(`text-overflow: ellipsis`)
                   cellStyles.push(`vertical-align: middle`)
@@ -706,14 +942,17 @@ async function renderTemplateItem(
                 const headerCells = sortedColumns.map((col: any) => {
                   const headerStyles: string[] = []
                   
+                  // Calculate column width as percentage
                   if (col.width) {
-                    headerStyles.push(`width: ${pxToMm(col.width)}mm`)
+                    // Use specified percentage
+                    headerStyles.push(`width: ${col.width}%`)
                   } else if (columnsWithoutWidth > 0) {
-                    const remainingWidth = elementWidthPx - totalSpecifiedWidth
-                    const autoWidth = remainingWidth / columnsWithoutWidth
-                    headerStyles.push(`width: ${pxToMm(autoWidth)}mm`)
+                    // Distribute remaining percentage equally among unspecified columns
+                    const remainingPercentage = 100 - totalSpecifiedWidth
+                    headerStyles.push(`width: ${remainingPercentage / columnsWithoutWidth}%`)
                   } else {
-                    headerStyles.push(`width: ${elementWidthMm / sortedColumns.length}mm`)
+                    // All columns have width, distribute equally
+                    headerStyles.push(`width: ${100 / sortedColumns.length}%`)
                   }
                   
                   // Modern header border styling
@@ -722,7 +961,7 @@ async function renderTemplateItem(
                     headerStyles.push(`border-bottom: 2px solid ${borderColor}`) // Thicker bottom border for header separation
                   }
                   
-                  headerStyles.push(`padding: 3px 4px`) // Narrow but slightly more modern padding
+                  headerStyles.push(`padding: 2px`)
                   headerStyles.push(`font-weight: ${style_font_weight || "600"}`) // Use element font weight or default to 600 (semi-bold)
                   headerStyles.push(`background-color: ${headerBgColor}`)
                   headerStyles.push(`overflow: hidden`)
@@ -776,6 +1015,24 @@ async function renderTemplateItem(
       
       const inlineTextStyle = `${style_font_size ? `font-size: ${style_font_size}px;` : ""}${style_font_weight ? `font-weight: ${style_font_weight};` : ""}${style_font_style ? `font-style: ${style_font_style};` : ""}${style_text_decoration ? `text-decoration: ${style_text_decoration};` : ""}`
       
+      // Check hide_no_value setting after all field processing is complete
+      // Default to true (1) if not set, as per requirement
+      const hideNoValue = (item as any).hide_no_value === 1 || (item as any).hide_no_value === true || (item as any).hide_no_value === undefined
+      
+      if (hideNoValue) {
+        // Check if fieldValue is empty or just whitespace
+        const isEmpty = !fieldValue || (typeof fieldValue === "string" && fieldValue.trim() === "")
+        // Also check if it's an empty HTML table (only header row, no data rows)
+        const isEmptyTable = typeof fieldValue === "string" && 
+          fieldValue.includes("<table") && 
+          (!fieldValue.includes("<tbody>") || (fieldValue.match(/<tr>/g)?.length || 0) <= 1)
+        
+        if (isEmpty || isEmptyTable) {
+          // Return empty content if hide_no_value is true and field has no value
+          return ""
+        }
+      }
+      
       if (labelText && label_position === "top") {
         content = `<div style="display: flex; flex-direction: column; gap: 2px; width: 100%; height: 100%; ${containerAlignStyle}"><span style="font-size: 0.9em; opacity: 0.7; display: block; width: 100%; ${labelAlignStyle}${inlineTextStyle}">${labelText}</span><span style="display: block; width: 100%; ${contentAlignStyle}${inlineTextStyle}">${fieldValue}</span></div>`
       } else if (labelText && label_position === "bottom") {
@@ -819,19 +1076,39 @@ async function renderTemplateItem(
             refId = refId.replace(/\{\{session\.(\w+)\}\}/g, (_: string, key: string) => {
               return sessionContext?.[key] || ""
             })
-            refId = refId.replace(/\{\{doc\.(\w+)\}\}/g, (_: string, key: string) => {
-              return getFieldValue(doc, key) || ""
-            })
+            // Resolve doc template variables
+            const docMatches = refId.match(/\{\{doc\.(\w+)\}\}/g)
+            if (docMatches) {
+              for (const match of docMatches) {
+                const key = match.replace(/\{\{doc\.(\w+)\}\}/, "$1")
+                const value = await getFieldValue(doc, key, sessionContext) || ""
+                refId = refId.replace(match, value)
+              }
+            }
           }
           
           if (refId) {
             const refDoc = await $zodula.doctype(reference_doctype as any).get(refId).bypass(true)
             if (refDoc) {
-              refValue = getFieldValue(refDoc, reference_field)
+              refValue = await getFieldValue(refDoc, reference_field, sessionContext)
             }
           }
         } catch (e) {
           refValue = `Error: ${e}`
+        }
+      }
+      
+      // Check hide_no_value setting after all reference processing is complete
+      // Default to true (1) if not set, as per requirement
+      const hideNoValue = (item as any).hide_no_value === 1 || (item as any).hide_no_value === true || (item as any).hide_no_value === undefined
+      
+      if (hideNoValue) {
+        // Check if refValue is empty or just whitespace
+        const isEmpty = !refValue || (typeof refValue === "string" && refValue.trim() === "")
+        
+        if (isEmpty) {
+          // Return empty content if hide_no_value is true and reference has no value
+          return ""
         }
       }
       
@@ -923,6 +1200,7 @@ export default $action(async (ctx) => {
   let pageFormat = "A4"
   let pageDims: { width: number; height: number } = PAGE_FORMATS.A4 || { width: 210, height: 297 }
   let pageTitle = ids.length === 1 ? ids[0] : "Document"
+  let isFixedPosition = false // Default to false, will be set if template is loaded
 
   if (print_template) {
     // Use provided print template
@@ -930,6 +1208,10 @@ export default $action(async (ctx) => {
     if (!template) {
       return ctx.json({ error: "Print template not found" }, 404)
     }
+
+    // Check if template is fixed position
+    isFixedPosition = template.is_fixed_position === 1 || template.is_fixed_position === true
+    const itemsFieldName = isFixedPosition ? "fixed_position_items" : "items"
 
     // Fetch template items - try multiple approaches
     // Approach 1: Direct query with sort
@@ -949,11 +1231,11 @@ export default $action(async (ctx) => {
       try {
         const templateWithItems = await $zodula.doctype("zodula__Print Template")
           .get(print_template)
-          .fields(["*", "items"] as any)
+          .fields(["*", itemsFieldName] as any)
           .bypass(true)
         
-        if (templateWithItems && (templateWithItems as any).items) {
-          items = (templateWithItems as any).items || []
+        if (templateWithItems && (templateWithItems as any)[itemsFieldName]) {
+          items = (templateWithItems as any)[itemsFieldName] || []
           items.sort((a: any, b: any) => (a.idx || 0) - (b.idx || 0))
         }
       } catch (e) {
@@ -995,7 +1277,8 @@ export default $action(async (ctx) => {
       print_template ||
       "Document"
   } else {
-    // Generate default template from doctype tabs
+    // Generate default template from doctype tabs (default is fixed position)
+    isFixedPosition = true
     if (!doctype) {
       return ctx.json({ error: "Doctype is required when print_template is not provided" }, 400)
     }
@@ -1071,9 +1354,9 @@ export default $action(async (ctx) => {
       }
     }
 
-    // Generate template elements
+    // Generate template elements (default is fixed position)
     const doctypeLabel = doctypeDoc.label || doctype
-    const elements = await generateTemplateFromTabs({
+    const elements = await generateFixedPositionTemplateFromTabs({
       tabs,
       fields,
       pageDimensions: PAGE_FORMATS.A4 || { width: 210, height: 297 },
@@ -1091,11 +1374,30 @@ export default $action(async (ctx) => {
     pageTitle = ids.length === 1 ? ids[0] : doctypeLabel || "Document"
   }
 
-  // Fetch documents
+  // Fetch documents with all fields including relationships
   const documents: any[] = []
   for (const id of ids) {
-    const doc = await $zodula.doctype(doctype as any).get(id).bypass(true)
+    // Try to get document with all fields including relationships
+    let doc: any = null
+    try {
+      doc = await $zodula.doctype(doctype as any).get(id).fields(["*"] as any).bypass(true)
+    } catch (e) {
+      // Fallback to regular get if fields() doesn't work
+      doc = await $zodula.doctype(doctype as any).get(id).bypass(true)
+    }
     if (doc) {
+      // Debug: Log document structure to see what fields are available
+      console.log(`[PDF] Document ${id} fields:`, Object.keys(doc))
+      // Check for Reference Table fields
+      if (items.length > 0) {
+        items.forEach((item: any) => {
+          if (item.type === "field" && item.fields) {
+            const fieldName = item.field_name
+            const fieldValue = doc[fieldName]
+            console.log(`[PDF] Document field ${fieldName}: type=${typeof fieldValue}, isArray=${Array.isArray(fieldValue)}, value=`, fieldValue)
+          }
+        })
+      }
       documents.push(doc)
     }
   }
@@ -1206,9 +1508,26 @@ export default $action(async (ctx) => {
     // Render letter head items if any
     let letterHeadHtml = ""
     if (letterHeadItems.length > 0) {
-      const letterHeadPromises = letterHeadItems.map((item) => renderTemplateItem(item, doc, baseUrl, sessionContext, letterHeadItems, undefined, undefined, language, fieldConfigsMap, childFieldConfigsMap))
+      const letterHeadPromises = letterHeadItems.map((item) => renderTemplateItem(item, doc, baseUrl, sessionContext, letterHeadItems, undefined, undefined, language, fieldConfigsMap, childFieldConfigsMap, false))
       const letterHeadResults = await Promise.all(letterHeadPromises)
       letterHeadHtml = letterHeadResults.join("")
+      
+      // Apply Letter Head alignment if specified
+      if (letterHead && letterHead.align) {
+        const align = letterHead.align
+        let alignStyle = ""
+        if (align === "left") {
+          alignStyle = "text-align: left;"
+        } else if (align === "middle" || align === "center") {
+          alignStyle = "text-align: center;"
+        } else if (align === "right") {
+          alignStyle = "text-align: right;"
+        }
+        
+        if (alignStyle) {
+          letterHeadHtml = `<div style="${alignStyle}">${letterHeadHtml}</div>`
+        }
+      }
     }
 
     // NEW APPROACH: Chain-based rendering - process elements in dependency order
@@ -1351,14 +1670,21 @@ export default $action(async (ctx) => {
 </html>`
       
       // Render all items with initial calculated positions
+      // First, check which items should be hidden and set their height to 0
       const initialMeasuredHeights = new Map<string, number>()
-      orderedItems.forEach((item) => {
-        const calculatedHeight = calculateItemHeight(item, doc)
-        initialMeasuredHeights.set(item.id, calculatedHeight)
-      })
+      for (const item of orderedItems) {
+        const shouldHide = await shouldHideItem(item, doc, doctype as string, fieldConfigsMap, childFieldConfigsMap, baseUrl, sessionContext, orderedItems)
+        if (shouldHide) {
+          // Set height to 0 for hidden items
+          initialMeasuredHeights.set(item.id, 0)
+        } else {
+          const calculatedHeight = calculateItemHeight(item, doc)
+          initialMeasuredHeights.set(item.id, calculatedHeight)
+        }
+      }
       
       const initialItemPromises = orderedItems.map((item) => 
-        renderTemplateItem(item, doc, baseUrl, sessionContext, orderedItems, initialMeasuredHeights, undefined, language, fieldConfigsMap, childFieldConfigsMap)
+        renderTemplateItem(item, doc, baseUrl, sessionContext, orderedItems, initialMeasuredHeights, undefined, language, fieldConfigsMap, childFieldConfigsMap, isFixedPosition)
       )
       const initialItemResults = await Promise.all(initialItemPromises)
       const initialItemsHtml = initialItemResults.join("")
@@ -1442,6 +1768,22 @@ export default $action(async (ctx) => {
       
       for (const item of orderedItems) {
         try {
+          // Check if item should be hidden - if so, set height to 0
+          const shouldHide = await shouldHideItem(item, doc, doctype as string, fieldConfigsMap, childFieldConfigsMap, baseUrl, sessionContext, orderedItems)
+          if (shouldHide) {
+            // Debug: Log why item is being hidden
+            if (item.type === "field" && item.fields) {
+              const parentFieldValue = doc[item.field_name]
+              const fieldValueArray = Array.isArray(parentFieldValue) ? parentFieldValue : []
+              console.log(`[PDF] Hiding Reference Table ${item.field_name || item.id}: hasRows=${fieldValueArray.length > 0}, arrayLength=${fieldValueArray.length}`)
+            } else {
+              console.log(`[PDF] Hiding ${item.type} ${item.field_name || item.id}`)
+            }
+            measuredHeights.set(item.id, 0)
+            measuredCount++
+            continue // Skip measuring for hidden items
+          }
+          
           const selector = `[data-item-id="${item.id}"]`
           const element = await page.$(selector)
           if (element) {
@@ -1615,15 +1957,24 @@ export default $action(async (ctx) => {
           const groupPos = tempPositions.get(groupId) || calculateAnchorPosition(groupItem, orderedItems, new Set(), measuredHeights)
           
           // Calculate bounding box of all children (using their updated absolute positions)
+          // Exclude hidden children (height 0) from the calculation
           let minX = Infinity
           let minY = Infinity
           let maxX = -Infinity
           let maxY = -Infinity
+          let hasVisibleChildren = false
           
           children.forEach(child => {
+            // Get child's height - if it's 0, skip this child (it's hidden)
+            const childHeight = measuredHeights.get(child.id) ?? child.transform_height ?? 30
+            if (childHeight === 0) {
+              return // Skip hidden children
+            }
+            
+            hasVisibleChildren = true
+            
             // Get child's absolute position (using updated positions)
             const childPos = tempPositions.get(child.id) || calculateAnchorPosition(child, orderedItems, new Set(), measuredHeights)
-            const childHeight = measuredHeights.get(child.id) || child.transform_height || 30
             const childWidth = child.transform_width || 200
             
             const childMinX = childPos.x
@@ -1638,11 +1989,13 @@ export default $action(async (ctx) => {
           })
           
           // Calculate group height and width
-          const groupWidth = maxX - minX
-          const groupHeight = maxY - minY
+          // If all children are hidden, set group height to 0
+          const groupWidth = hasVisibleChildren ? (maxX - minX) : 0
+          const groupHeight = hasVisibleChildren ? (maxY - minY) : 0
           
           // Update group's measured height if it changed
-          const currentHeight = measuredHeights.get(groupId) || groupItem.transform_height || 30
+          // Use ?? instead of || to properly handle 0 values
+          const currentHeight = measuredHeights.get(groupId) ?? groupItem.transform_height ?? 30
           
           if (Math.abs(groupHeight - currentHeight) > 0.1) {
             console.log(`[PDF] Iteration ${iterations}: Updating group ${groupId} height from ${currentHeight} to ${groupHeight}`)
@@ -1768,17 +2121,26 @@ export default $action(async (ctx) => {
             
             let minY = Infinity
             let maxY = -Infinity
+            let hasVisibleChildren = false
             
             children.forEach(child => {
+              const childHeight = measuredHeights.get(child.id) ?? child.transform_height ?? 30
+              // Skip hidden children (height 0)
+              if (childHeight === 0) {
+                return
+              }
+              
+              hasVisibleChildren = true
               const childPos = finalPositions.get(child.id)!
-              const childHeight = measuredHeights.get(child.id) || child.transform_height || 30
               
               minY = Math.min(minY, childPos.y)
               maxY = Math.max(maxY, childPos.y + childHeight)
             })
             
-            const groupHeight = maxY - minY
-            const currentHeight = measuredHeights.get(groupId) || groupItem.transform_height || 30
+            // If all children are hidden, set group height to 0
+            const groupHeight = hasVisibleChildren ? (maxY - minY) : 0
+            // Use ?? instead of || to properly handle 0 values
+            const currentHeight = measuredHeights.get(groupId) ?? groupItem.transform_height ?? 30
             
             if (Math.abs(groupHeight - currentHeight) > 0.1) {
               console.log(`[PDF] Position iteration ${posIterations}: Updating group ${groupId} height from ${currentHeight.toFixed(1)} to ${groupHeight.toFixed(1)}`)
@@ -1832,7 +2194,7 @@ export default $action(async (ctx) => {
       })
       
       const finalItemPromises = orderedItems.map((item) => 
-        renderTemplateItem(item, doc, baseUrl, sessionContext, orderedItems, measuredHeights, finalPositions, language, fieldConfigsMap, childFieldConfigsMap)
+        renderTemplateItem(item, doc, baseUrl, sessionContext, orderedItems, measuredHeights, finalPositions, language, fieldConfigsMap, childFieldConfigsMap, isFixedPosition)
       )
       const finalItemResults = await Promise.all(finalItemPromises)
       const finalItemsHtml = finalItemResults.join("")
@@ -1891,7 +2253,7 @@ export default $action(async (ctx) => {
         fallbackMeasuredHeights.set(item.id, item.transform_height || 30)
       })
       const fallbackItemPromises = items.map((item) => 
-        renderTemplateItem(item, doc, baseUrl, sessionContext, items, fallbackMeasuredHeights, undefined, language, fieldConfigsMap, childFieldConfigsMap)
+        renderTemplateItem(item, doc, baseUrl, sessionContext, items, fallbackMeasuredHeights, undefined, language, fieldConfigsMap, childFieldConfigsMap, isFixedPosition)
       )
       const fallbackItemResults = await Promise.all(fallbackItemPromises)
       const fallbackItemsHtml = fallbackItemResults.join("")

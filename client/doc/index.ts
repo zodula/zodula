@@ -62,7 +62,11 @@ export class ZodulaDoc {
     }
 
     update_doc = async <DN extends Zodula.DoctypeName = Zodula.DoctypeName>(doctype: DN, id: string, input: Zodula.UpdateDoctype<DN>) => {
-        console.log("input", input);
+        for(const key in input) {
+            if(input[key as keyof Zodula.UpdateDoctype<DN>] === null) {
+                (input as any)[key] = "";
+            }
+        }
         const response = await this.api.put(`/api/resources/${doctype}${id ? `/${id}` : ""}`, input, {
             headers: {
                 "Content-Type": "multipart/form-data"

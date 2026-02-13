@@ -658,6 +658,9 @@ export function DocFormView({
               );
               if (fetchedValue !== undefined && fetchedValue !== null) {
                 dependentUpdates[dependentField.fieldName] = fetchedValue;
+              } else {
+                // Set to null if the referenced field has no value
+                dependentUpdates[dependentField.fieldName] = null;
               }
             }
           } catch (error) {
@@ -696,6 +699,8 @@ export function DocFormView({
                 
                 if (!receivingFieldConfig) {
                   console.warn(`[Image Preview] Field config not found for receiving field: ${dependentField.fieldName}`);
+                  // Set to null if field config not found
+                  dependentUpdates[dependentField.fieldName] = null;
                   continue;
                 }
                 
@@ -719,8 +724,16 @@ export function DocFormView({
                 } else if (fetchedValue !== undefined && fetchedValue !== null) {
                   // Regular field update (for non-Image Preview fields)
                   dependentUpdates[dependentField.fieldName] = fetchedValue;
+                } else {
+                  // Set to null if the referenced field has no value
+                  dependentUpdates[dependentField.fieldName] = null;
                 }
               }
+            } else {
+              // If cachedDoc?.data doesn't exist, set all dependent fields to null
+              dependentFields.forEach((df) => {
+                dependentUpdates[df.fieldName] = null;
+              });
             }
           } catch (error) {
             console.warn(
@@ -1053,22 +1066,7 @@ export function DocFormView({
   const handlePrint = async () => {
     if (!id && doctypeDoc?.is_single !== 1) return;
 
-    try {
-      const result = await popup(
-        PrintTemplateDialog,
-        {
-          title: "Select Print Template",
-          description: `Choose a print template for ${doctypeDoc?.label} document with id ${id}`,
-        },
-        {
-          doctype: doctype as Zodula.DoctypeName,
-          docIds: [id || doctype],
-          org: org || ""
-        }
-      );
-    } catch (error) {
-      console.error("Error opening print dialog:", error);
-    }
+    push(`/desk/${org}/print?doctype=${doctype}&ids=["${id}"]`);
   };
 
   const handleSubmit = async () => {
@@ -1128,7 +1126,7 @@ export function DocFormView({
     return normalized;
   }, [formFields]);
 
-  // Helper function to get changed fields and standard fields
+  // Helper function to get all field values for update/save
   const getUpdatePayload = useCallback(() => {
     // Always get the latest form data directly from the store
     // This ensures we have the most current values even after ID changes
@@ -1139,57 +1137,30 @@ export function DocFormView({
       return normalizeReferenceTableFields(latestFormData);
     }
 
-    const standardFieldNames = Object.keys(ClientFieldHelper.standardFields());
-    const changedFields: Record<string, any> = {};
-
-    // Include all standard fields
-    standardFieldNames.forEach((fieldName) => {
-      if (latestFormData[fieldName] !== undefined) {
-        changedFields[fieldName] = latestFormData[fieldName];
-      }
-    });
-
-    // Get all field names from both doc and latestFormData
+    // For edit mode, return all field values from form data
+    // Include all fields that exist in either doc or latestFormData
     const allFieldNames = new Set([
       ...Object.keys(latestFormData),
       ...Object.keys(doc as any)
     ]);
 
-    // Include only changed non-standard fields
-    allFieldNames.forEach((fieldName) => {
-      if (standardFieldNames.includes(fieldName)) {
-        return; // Skip standard fields (already handled above)
-      }
+    const allFields: Record<string, any> = {};
 
-      const oldValue = (doc as any)[fieldName];
-      const newValue = latestFormData[fieldName];
+    // Include all fields from latestFormData (prefer form data values)
+    allFieldNames.forEach((fieldName) => {
+      const formValue = latestFormData[fieldName];
+      const docValue = (doc as any)[fieldName];
       
-      // Special handling for Reference Table fields:
-      // Always include reference table fields if they exist in either doc or form data
-      // This ensures reference table fields are included in the payload at render time
-      const field = formFields[fieldName];
-      if (field?.type === "Reference Table") {
-        // Prefer form data value if it exists (user may have modified it)
-        if (newValue !== undefined) {
-          changedFields[fieldName] = newValue;
-        } 
-        // If form data doesn't have it but doc does, include it from doc
-        // This ensures reference table fields from doc are included at render time
-        else if (oldValue !== undefined && oldValue !== null) {
-          changedFields[fieldName] = oldValue;
-        }
-        // Otherwise, skip (both are undefined/null)
-        return;
-      }
-      
-      // For non-Reference Table fields, check if value has changed
-      if (!valuesAreEqual(oldValue, newValue)) {
-        changedFields[fieldName] = newValue;
+      // Use form value if it exists, otherwise use doc value
+      if (formValue !== undefined) {
+        allFields[fieldName] = formValue;
+      } else if (docValue !== undefined) {
+        allFields[fieldName] = docValue;
       }
     });
 
     // Normalize Reference Table fields before returning
-    const normalized = normalizeReferenceTableFields(changedFields);
+    const normalized = normalizeReferenceTableFields(allFields);
     return normalized;
   }, [getFormData, doc, normalizeReferenceTableFields, formFields])
 

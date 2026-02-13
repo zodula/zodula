@@ -10,8 +10,14 @@ import { Button } from "@/zodula/ui/components/ui/button";
 import { Input } from "@/zodula/ui/components/ui/input";
 import { Select } from "@/zodula/ui/components/ui/select";
 import { FormControl } from "@/zodula/ui/components/ui/form-control";
+import { Checkbox } from "@/zodula/ui/components/ui/checkbox";
 import { zodula } from "@/zodula/client";
-import { Save, ArrowLeft } from "lucide-react";
+import { Save, ArrowLeft, Settings } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/zodula/ui/components/ui/popover";
 import { NavbarLayout } from "@/zodula/ui/layout/navbar-layout";
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
 import { BASE_URL } from "@/zodula/client/utils";
@@ -47,24 +53,30 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
     doctype?: string;
     is_default?: 0 | 1;
     disabled?: 0 | 1;
-    format?: "A4" | "A3" | "A5" | "Letter" | "Legal" | "Tabloid" | "Custom";
+    format?: "A4" | "A3" | "A5" | "Letter" | "Legal" | "Tabloid" | "Custom" | "210x30mm" | "30x30mm";
     custom_width?: number;
     custom_height?: number;
     margin_top?: number;
     margin_right?: number;
     margin_bottom?: number;
     margin_left?: number;
+    align?: "left" | "middle" | "right";
+    is_fixed_position?: 0 | 1;
+    default_lang?: string;
+    default_letter_head?: string;
   }>({
     name: "",
     doctype: "",
     is_default: 0,
-    format: "A4",
+    format: isPrintTemplate ? "A4" : "210x30mm",
     custom_width: 210,
-    custom_height: 297,
+    custom_height: isPrintTemplate ? 297 : 30,
     margin_top: 10,
     margin_right: 10,
     margin_bottom: 10,
     margin_left: 10,
+    align: "left",
+    is_fixed_position: 0,
   });
   
   const [layout, setLayout] = useState<PrintTemplateElement[]>([]);
@@ -74,6 +86,9 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
   const initialFormDataRef = useRef(formData);
   const initialLayoutRef = useRef<PrintTemplateElement[]>([]);
   const initialGuidedBackgroundRef = useRef<string | File | null>(null);
+
+  // Store the URL id before save so we can replace the URL with the generated id after create
+  const urlIdBeforeSaveRef = useRef<string | undefined>(undefined);
   
   // Get doctypes for selection (only for Print Template)
   const { docs: doctypes } = useDocList({
@@ -110,24 +125,28 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
       const newFormData: any = {
         name: doc.name || "",
         is_default: doc.is_default || 0,
-        format: (doc.format as any) || "A4",
+        format: (doc.format as any) || (isPrintTemplate ? "A4" : "210x30mm"),
         custom_width: doc.custom_width || 210,
-        custom_height: doc.custom_height || 297,
-        margin_top: doc.margin_top || 10,
-        margin_right: doc.margin_right || 10,
-        margin_bottom: doc.margin_bottom || 10,
-        margin_left: doc.margin_left || 10,
+        custom_height: doc.custom_height || (isPrintTemplate ? 297 : 30),
+        margin_top: doc.margin_top != null ? doc.margin_top : 10,
+        margin_right: doc.margin_right != null ? doc.margin_right : 10,
+        margin_bottom: doc.margin_bottom != null ? doc.margin_bottom : 10,
+        margin_left: doc.margin_left != null ? doc.margin_left : 10,
       };
       
       if (isPrintTemplate) {
         newFormData.doctype = (doc as any).doctype || "";
+        newFormData.is_fixed_position = (doc as any).is_fixed_position || 0;
+        newFormData.default_lang = (doc as any).default_lang ?? "";
+        newFormData.default_letter_head = (doc as any).default_letter_head ?? "";
       } else {
         newFormData.disabled = (doc as any).disabled || 0;
+        newFormData.align = (doc as any).align || "left";
       }
       
       // Load guided background (for both Print Template and Letter Head)
       if (doc.guided_background && docId) {
-        const bgUrl = `${BASE_URL}/files/${doctype}/${docId}/guided_background/${doc.guided_background}`;
+        const bgUrl = `${BASE_URL}/files/${(doc as any)?.organization ?? org}/${doctype}/${docId}/guided_background/${doc.guided_background}`;
         setGuidedBackground(bgUrl);
         initialGuidedBackgroundRef.current = bgUrl;
       } else {
@@ -138,10 +157,13 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
       setFormData(newFormData);
       initialFormDataRef.current = { ...newFormData };
       
-      // Load items
-      if (doc.items && Array.isArray(doc.items) && doc.items.length > 0) {
-        const items = doc.items.sort((a: any, b: any) => (a.idx || 0) - (b.idx || 0));
-        const elements = items.map((item: any) => isPrintTemplate ? itemToElement(item) : letterHeadItemToElement(item));
+      // Load items based on is_fixed_position
+      // Default to 'items' for backward compatibility if is_fixed_position is not set
+      const itemsField = newFormData.is_fixed_position === 1 ? 'fixed_position_items' : 'items';
+      const items = (doc as any)[itemsField];
+      if (items && Array.isArray(items) && items.length > 0) {
+        const sortedItems = items.sort((a: any, b: any) => (a.idx || 0) - (b.idx || 0));
+        const elements = sortedItems.map((item: any) => isPrintTemplate ? itemToElement(item) : letterHeadItemToElement(item));
         
         // Fix group references: map group codes to group database ids
         // Create a mapping from code to database id for group elements (type: "anchor")
@@ -186,9 +208,9 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
       const defaultFormData: any = {
         name: "",
         is_default: 0,
-        format: "A4",
+        format: isPrintTemplate ? "A4" : "210x30mm",
         custom_width: 210,
-        custom_height: 297,
+        custom_height: isPrintTemplate ? 297 : 30,
         margin_top: 10,
         margin_right: 10,
         margin_bottom: 10,
@@ -196,6 +218,11 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
       };
       if (isPrintTemplate) {
         defaultFormData.doctype = "";
+        defaultFormData.is_fixed_position = 0;
+        defaultFormData.default_lang = "";
+        defaultFormData.default_letter_head = "";
+      } else {
+        defaultFormData.align = "left";
       }
       setFormData(defaultFormData);
       initialFormDataRef.current = { ...defaultFormData };
@@ -205,6 +232,57 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
       initialGuidedBackgroundRef.current = null;
     }
   }, [doc, docId, isPrintTemplate, doctype]);
+
+  // Track previous is_fixed_position to detect changes
+  const prevIsFixedPositionRef = useRef<number | undefined>(undefined);
+  
+  // Handle switching between fixed and non-fixed position modes
+  useEffect(() => {
+    if (docId && doc && prevIsFixedPositionRef.current !== undefined && prevIsFixedPositionRef.current !== formData.is_fixed_position) {
+      // Only reload when is_fixed_position actually changes (not on initial load)
+      const itemsField = formData.is_fixed_position === 1 ? 'fixed_position_items' : 'items';
+      const items = (doc as any)[itemsField];
+      
+      if (items && Array.isArray(items) && items.length > 0) {
+        const sortedItems = items.sort((a: any, b: any) => (a.idx || 0) - (b.idx || 0));
+        const elements = sortedItems.map((item: any) => isPrintTemplate ? itemToElement(item) : letterHeadItemToElement(item));
+        
+        // Fix group references: map group codes to group database ids
+        const groupCodeToId = new Map<string, string>();
+        elements.forEach((el) => {
+          if (el.type === "anchor" && el.code) {
+            groupCodeToId.set(el.code, el.id);
+            groupCodeToId.set(el.id, el.id);
+          }
+        });
+        
+        // Update children's group references from code to database id
+        elements.forEach((el) => {
+          if (el.group) {
+            const groupId = groupCodeToId.get(el.group);
+            if (groupId) {
+              el.group = groupId;
+            } else {
+              const groupElement = elements.find((g) => 
+                g.type === "anchor" && g.id === el.group
+              );
+              if (groupElement) {
+                el.group = groupElement.id;
+              }
+            }
+          }
+        });
+        
+        setLayout(elements);
+        initialLayoutRef.current = JSON.parse(JSON.stringify(elements));
+      } else {
+        setLayout([]);
+        initialLayoutRef.current = [];
+      }
+    }
+    // Update the ref after the effect runs
+    prevIsFixedPositionRef.current = formData.is_fixed_position;
+  }, [formData.is_fixed_position, docId, doc, isPrintTemplate]);
 
   // Check if form has changes
   const hasChanges = useMemo(() => {
@@ -237,8 +315,19 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
     setIsSaving(true);
     try {
       if (docId) {
+        urlIdBeforeSaveRef.current = docId;
         // Update existing doc - include items in payload so parent fields auto-populate
         const payload: any = { ...formData };
+        if (isPrintTemplate) {
+          payload.is_fixed_position = formData.is_fixed_position ?? 0;
+          if (formData.default_lang !== undefined) payload.default_lang = formData.default_lang || null;
+          if (formData.default_letter_head !== undefined) payload.default_letter_head = formData.default_letter_head || null;
+        }
+
+        // For Letter Head, include align field
+        if (!isPrintTemplate && formData.align) {
+          payload.align = formData.align;
+        }
         
         // Handle guided background if it's a File (new upload) - for both Print Template and Letter Head
         if (guidedBackground instanceof File) {
@@ -257,7 +346,9 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
         // Convert layout elements to item payloads and include in main payload
         // Parent fields (parentid, parenttype, parentfield) will be auto-populated by the server
         // Convert group references from id to code before saving
-        payload.items = layout.map((element, idx) => {
+        // Use the appropriate items field based on is_fixed_position
+        const itemsField = payload.is_fixed_position === 1 ? 'fixed_position_items' : 'items';
+        payload[itemsField] = layout.map((element, idx) => {
           // If element has a group reference, convert it from id to code
           const elementToSave = { ...element };
           if (elementToSave.group && groupIdToCode.has(elementToSave.group)) {
@@ -269,13 +360,34 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
             : elementToLetterHeadItemPayload(elementToSave, docId, idx);
         });
         
-        await zodula.doc.update_doc(doctype, docId, payload);
+        // Clear the other items field to avoid confusion
+        const otherItemsField = payload.is_fixed_position === 1 ? 'items' : 'fixed_position_items';
+        payload[otherItemsField] = [];
+        
+        const updated = await zodula.doc.update_doc(doctype, docId, payload);
+        if (updated?.id && updated.id !== docId) {
+          // Server returned a new id (e.g. generated) – replace URL so we use the new id on next save
+          if (onSave) onSave();
+          replace(`/desk/${org}/doctypes/${doctype}/form/${updated.id}`);
+        }else{
+          if (onSave) onSave();
+          await reload();
+        }
 
-        await reload();
-        if (onSave) onSave();
       } else {
-        // Create new doc
+        // Create new doc - store current URL id so we can replace with generated id after save
+        urlIdBeforeSaveRef.current = docId ?? undefined;
         const payload: any = { ...formData };
+        if (isPrintTemplate) {
+          payload.is_fixed_position = formData.is_fixed_position ?? 0;
+          if (formData.default_lang !== undefined) payload.default_lang = formData.default_lang || null;
+          if (formData.default_letter_head !== undefined) payload.default_letter_head = formData.default_letter_head || null;
+        }
+
+        // For Letter Head, include align field
+        if (!isPrintTemplate && formData.align) {
+          payload.align = formData.align;
+        }
         
         // Handle guided background if it's a File (new upload) - for both Print Template and Letter Head
         if (guidedBackground instanceof File) {
@@ -293,8 +405,10 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
         
         // Include items in payload for new doc creation - parent fields will be auto-populated
         // Convert group references from id to code before saving
+        // Use the appropriate items field based on is_fixed_position
         if (layout.length > 0) {
-          payload.items = layout.map((element, idx) => {
+          const itemsField = payload.is_fixed_position === 1 ? 'fixed_position_items' : 'items';
+          payload[itemsField] = layout.map((element, idx) => {
             // If element has a group reference, convert it from id to code
             const elementToSave = { ...element };
             if (elementToSave.group && groupIdToCode.has(elementToSave.group)) {
@@ -360,6 +474,191 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
             <h1 className="zd:text-xl zd:font-semibold">{title}</h1>
           </div>
           <div className="zd:flex zd:items-center zd:gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" title={t("Options")} className="zd:p-2">
+                  <Settings className="zd:w-4 zd:h-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="zd:w-80 zd:max-h-[85vh] zd:overflow-y-auto" align="end">
+                <div className="zd:space-y-4" onClick={(e) => e.stopPropagation()}>
+                  <div className="zd:space-y-2">
+                    <label className="zd:text-sm zd:font-medium">{t("Format")}</label>
+                    <Select
+                      value={formData.format || "A4"}
+                      onChange={(value) => setFormData({ ...formData, format: value as any })}
+                      options={
+                        isPrintTemplate
+                          ? [
+                              { value: "A4", label: "A4" },
+                              { value: "A3", label: "A3" },
+                              { value: "A5", label: "A5" },
+                              { value: "Letter", label: "Letter" },
+                              { value: "Legal", label: "Legal" },
+                              { value: "Tabloid", label: "Tabloid" },
+                              { value: "Custom", label: "Custom" },
+                            ]
+                          : [
+                              { value: "210x30mm", label: "210x30mm" },
+                              { value: "30x30mm", label: "30x30mm" },
+                              { value: "Custom", label: "Custom" },
+                            ]
+                      }
+                      className="zd:w-full"
+                    />
+                  </div>
+                  {formData.format === "Custom" && (
+                    <div className="zd:grid zd:grid-cols-2 zd:gap-2">
+                      <div className="zd:space-y-1">
+                        <label className="zd:text-sm zd:font-medium">{t("Width (mm)")}</label>
+                        <Input
+                          type="number"
+                          value={formData.custom_width || 210}
+                          onChange={(e) => setFormData({ ...formData, custom_width: Number(e.target.value) })}
+                          className="zd:w-full"
+                        />
+                      </div>
+                      <div className="zd:space-y-1">
+                        <label className="zd:text-sm zd:font-medium">{t("Height (mm)")}</label>
+                        <Input
+                          type="number"
+                          value={formData.custom_height || (isPrintTemplate ? 297 : 30)}
+                          onChange={(e) => setFormData({ ...formData, custom_height: Number(e.target.value) })}
+                          className="zd:w-full"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <div className="zd:space-y-2">
+                    <label className="zd:text-sm zd:font-medium">{t("Margins (mm)")}</label>
+                    <div className="zd:grid zd:grid-cols-4 zd:gap-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={formData.margin_top ?? 10}
+                        onChange={(e) => setFormData({ ...formData, margin_top: Number(e.target.value) })}
+                        className="zd:w-full"
+                        placeholder={t("Top")}
+                        title={t("Top")}
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        value={formData.margin_right ?? 10}
+                        onChange={(e) => setFormData({ ...formData, margin_right: Number(e.target.value) })}
+                        className="zd:w-full"
+                        placeholder={t("Right")}
+                        title={t("Right")}
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        value={formData.margin_bottom ?? 10}
+                        onChange={(e) => setFormData({ ...formData, margin_bottom: Number(e.target.value) })}
+                        className="zd:w-full"
+                        placeholder={t("Bottom")}
+                        title={t("Bottom")}
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        value={formData.margin_left ?? 10}
+                        onChange={(e) => setFormData({ ...formData, margin_left: Number(e.target.value) })}
+                        className="zd:w-full"
+                        placeholder={t("Left")}
+                        title={t("Left")}
+                      />
+                    </div>
+                  </div>
+                  {isPrintTemplate && (
+                    <div className="zd:flex zd:items-center zd:space-x-2">
+                      <Checkbox
+                        checked={formData.is_fixed_position === 1}
+                        onCheckedChange={(checked: boolean) => setFormData({ ...formData, is_fixed_position: checked === true ? 1 : 0 })}
+                      />
+                      <label className="zd:text-sm zd:font-medium">{t("Use fixed position (arrange by index)")}</label>
+                    </div>
+                  )}
+                  {isPrintTemplate && (
+                    <div className="zd:space-y-2 zd:pt-2 zd:border-t zd:border-border">
+                      <label className="zd:text-sm zd:font-medium">{t("Defaults")}</label>
+                      <div className="zd:flex zd:items-center zd:space-x-2 zd:mb-2">
+                        <Checkbox
+                          checked={formData.is_default === 1}
+                          onCheckedChange={(checked: boolean) => setFormData({ ...formData, is_default: checked === true ? 1 : 0 })}
+                        />
+                        <label className="zd:text-sm">{t("Set as default template for this doctype")}</label>
+                      </div>
+                      <div className="zd:space-y-1">
+                        <label className="zd:text-xs zd:text-muted-foreground">{t("Default Language")}</label>
+                        <FormControl
+                          field={{
+                            type: "Reference",
+                            name: "default_lang",
+                            label: t("Default Language"),
+                            reference: "zodula__Language",
+                            description: "Default language to use when printing with this template",
+                          }}
+                          fieldKey="default_lang"
+                          value={formData.default_lang ?? ""}
+                          onChange={(_, value) => setFormData({ ...formData, default_lang: value ?? "" })}
+                          hideFormControl={true}
+                        />
+                      </div>
+                      <div className="zd:space-y-1">
+                        <label className="zd:text-xs zd:text-muted-foreground">{t("Default Letter Head")}</label>
+                        <FormControl
+                          field={{
+                            type: "Reference",
+                            name: "default_letter_head",
+                            label: t("Default Letter Head"),
+                            reference: "zodula__Letter Head",
+                            description: "Default letter head to use when printing with this template",
+                          }}
+                          fieldKey="default_letter_head"
+                          value={formData.default_letter_head ?? ""}
+                          onChange={(_, value) => setFormData({ ...formData, default_letter_head: value ?? "" })}
+                          hideFormControl={true}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {!isPrintTemplate && (
+                    <div className="zd:space-y-2">
+                      <label className="zd:text-sm zd:font-medium">{t("Alignment")}</label>
+                      <Select
+                        value={formData.align || "left"}
+                        onChange={(value) => setFormData({ ...formData, align: value as "left" | "middle" | "right" })}
+                        options={[
+                          { value: "left", label: t("Left") },
+                          { value: "middle", label: t("Middle") },
+                          { value: "right", label: t("Right") },
+                        ]}
+                        className="zd:w-full"
+                      />
+                    </div>
+                  )}
+                  <div className="zd:space-y-2 zd:pt-2 zd:border-t zd:border-border">
+                    <label className="zd:text-sm zd:font-medium">{t("Guided Background")}</label>
+                    <FormControl
+                      field={{
+                        type: "File",
+                        name: "guided_background",
+                        label: t("Guided Background"),
+                        doctype,
+                        accept: "image/*",
+                      }}
+                      fieldKey="guided_background"
+                      value={guidedBackground ?? ""}
+                      onChange={(_fieldName, value) => setGuidedBackground((value as string | File | null) ?? null)}
+                      docId={docId}
+                      formData={{ organization: org }}
+                      hideFormControl={true}
+                    />
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
             <Button onClick={handleSave} disabled={isSaving || !hasChanges}>
               <Save className="zd:w-4 zd:h-4 zd:mr-2" />
               {t("Save")}
@@ -367,7 +666,7 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
           </div>
         </div>
 
-        {/* Form Fields */}
+        {/* Form Fields - Name and Doctype only */}
         <div className="zd:bg-background zd:border-b zd:border-muted zd:px-4 zd:py-3 zd:flex zd:items-center zd:gap-4 zd:flex-wrap">
           <div className="zd:flex zd:items-center zd:gap-2">
             <label className="zd:text-sm zd:font-medium zd:w-24">{t("Name")}:</label>
@@ -378,7 +677,6 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
               placeholder={t(isPrintTemplate ? "Template Name" : "Letter Head Name")}
             />
           </div>
-          
           {isPrintTemplate && doctypeField && (
             <div className="zd:flex zd:items-center zd:gap-2">
               <label className="zd:text-sm zd:font-medium zd:w-24">{t("Doctype")}:</label>
@@ -395,46 +693,6 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
               </div>
             </div>
           )}
-          
-          <div className="zd:flex zd:items-center zd:gap-2">
-            <label className="zd:text-sm zd:font-medium zd:w-24">{t("Format")}:</label>
-            <Select
-              value={formData.format || "A4"}
-              onChange={(value) => setFormData({ ...formData, format: value as any })}
-              options={[
-                { value: "A4", label: "A4" },
-                { value: "A3", label: "A3" },
-                { value: "A5", label: "A5" },
-                { value: "Letter", label: "Letter" },
-                { value: "Legal", label: "Legal" },
-                { value: "Tabloid", label: "Tabloid" },
-                { value: "Custom", label: "Custom" },
-              ]}
-              className="zd:w-32"
-            />
-          </div>
-          {formData.format === "Custom" && (
-            <>
-              <div className="zd:flex zd:items-center zd:gap-2">
-                <label className="zd:text-sm zd:font-medium">{t("Width (mm)")}:</label>
-                <Input
-                  type="number"
-                  value={formData.custom_width || 210}
-                  onChange={(e) => setFormData({ ...formData, custom_width: Number(e.target.value) })}
-                  className="zd:w-24"
-                />
-              </div>
-              <div className="zd:flex zd:items-center zd:gap-2">
-                <label className="zd:text-sm zd:font-medium">{t("Height (mm)")}:</label>
-                <Input
-                  type="number"
-                  value={formData.custom_height || 297}
-                  onChange={(e) => setFormData({ ...formData, custom_height: Number(e.target.value) })}
-                  className="zd:w-24"
-                />
-              </div>
-            </>
-          )}
         </div>
 
         {/* Builder */}
@@ -449,11 +707,20 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
                 format={formData.format}
                 customWidth={formData.format === "Custom" ? formData.custom_width : undefined}
                 customHeight={formData.format === "Custom" ? formData.custom_height : undefined}
+                marginTop={formData.margin_top}
+                marginRight={formData.margin_right}
+                marginBottom={formData.margin_bottom}
+                marginLeft={formData.margin_left}
                 guidedBackground={guidedBackground || undefined}
-                onGuidedBackgroundChange={(background) => {
-                  setGuidedBackground(background);
-                }}
+                onGuidedBackgroundChange={(background) => setGuidedBackground(background)}
+                onFormatChange={(format) => setFormData({ ...formData, format })}
+                onCustomSizeChange={(width, height) => setFormData({ ...formData, custom_width: width, custom_height: height })}
+                onMarginsChange={(margins) => setFormData({ ...formData, margin_top: margins.top, margin_right: margins.right, margin_bottom: margins.bottom, margin_left: margins.left })}
+                onFixedPositionChange={(value) => setFormData({ ...formData, is_fixed_position: value ? 1 : 0 })}
                 templateId={docId}
+                organization={org}
+                isFixedPosition={formData.is_fixed_position === 1}
+                showSettingsInToolbar={false}
               />
             </div>
           ) : (
@@ -473,11 +740,21 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
               format={formData.format}
               customWidth={formData.format === "Custom" ? formData.custom_width : undefined}
               customHeight={formData.format === "Custom" ? formData.custom_height : undefined}
+              marginTop={formData.margin_top}
+              marginRight={formData.margin_right}
+              marginBottom={formData.margin_bottom}
+              marginLeft={formData.margin_left}
               guidedBackground={guidedBackground || undefined}
-              onGuidedBackgroundChange={(background) => {
-                setGuidedBackground(background);
-              }}
+              onGuidedBackgroundChange={(background) => setGuidedBackground(background)}
+              onFormatChange={(format) => setFormData({ ...formData, format })}
+              onCustomSizeChange={(width, height) => setFormData({ ...formData, custom_width: width, custom_height: height })}
+              onMarginsChange={(margins) => setFormData({ ...formData, margin_top: margins.top, margin_right: margins.right, margin_bottom: margins.bottom, margin_left: margins.left })}
               templateId={docId}
+              organization={org}
+              isLetterHead={true}
+              letterHeadAlign={(formData.align as "left" | "middle" | "right") || "left"}
+              onLetterHeadAlignChange={(align) => setFormData({ ...formData, align })}
+              showSettingsInToolbar={false}
             />
           </div>
         )}
