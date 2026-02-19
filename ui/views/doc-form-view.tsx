@@ -1063,12 +1063,6 @@ export function DocFormView({
     });
   };
 
-  const handlePrint = async () => {
-    if (!id && doctypeDoc?.is_single !== 1) return;
-
-    push(`/desk/${org}/print?doctype=${doctype}&ids=["${id}"]`);
-  };
-
   const handleSubmit = async () => {
     try {
       const con = await confirm({
@@ -1629,7 +1623,7 @@ export function DocFormView({
             <div className="zd:flex zd:items-center zd:gap-2">
               {mode === "edit" && (
                 <>
-                  <Button variant="outline" onClick={handlePrint}>
+                  <Button variant="outline" href={`/desk/${org}/print?doctype=${doctype}&ids=["${id}"]`}>
                     <Printer className="zd:w-4 zd:h-4" />
                   </Button>
                   <DropdownMenu>

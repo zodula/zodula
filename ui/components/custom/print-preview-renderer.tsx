@@ -134,27 +134,16 @@ function ReferenceTableRenderer({
   useEffect(() => {
     async function loadReferenceTableData() {
       setIsLoading(true);
-      console.log(`[PrintPreview] Loading Reference Table for field: ${fieldName}`);
-      console.log(`[PrintPreview] Doc:`, doc);
-      console.log(`[PrintPreview] Doc ID:`, doc?.id);
-      console.log(`[PrintPreview] Doc doctype (from prop):`, doctype);
-      console.log(`[PrintPreview] Doc doctype (from doc):`, (doc as any)?.doctype);
 
       let parentFieldValue = doc?.[fieldName];
-      console.log(`[PrintPreview] Initial parentFieldValue for ${fieldName}:`, parentFieldValue);
-      console.log(`[PrintPreview] Is array:`, Array.isArray(parentFieldValue));
-      console.log(`[PrintPreview] Type:`, typeof parentFieldValue);
 
       // If parentFieldValue is not an array, try to query it directly
       // This can happen if the document wasn't loaded with relationships
       if (!Array.isArray(parentFieldValue)) {
-        console.log(`[PrintPreview] parentFieldValue is not an array, attempting to query...`);
         // Try to get the field config to find the child doctype
         const fieldConfig = fieldConfigs.get(fieldName);
-        console.log(`[PrintPreview] Field config for ${fieldName}:`, fieldConfig);
 
         if (fieldConfig?.reference) {
-          console.log(`[PrintPreview] Found reference doctype: ${fieldConfig.reference}`);
           try {
             // Query child documents directly
             const filters: any[] = [
@@ -162,7 +151,6 @@ function ReferenceTableRenderer({
               ["parentype", "=", doctype],
               ["parentfield", "=", fieldName],
             ];
-            console.log(`[PrintPreview] Querying with filters:`, filters);
 
             const result = await zodula?.doc?.select_docs(fieldConfig.reference as Zodula.DoctypeName, {
               limit: 1000,
@@ -173,45 +161,13 @@ function ReferenceTableRenderer({
 
             const childDocs = result?.docs || [];
             parentFieldValue = childDocs;
-            console.log(`[PrintPreview] Queried Reference Table ${fieldName} directly: found ${childDocs.length} rows`);
-            console.log(`[PrintPreview] Query result:`, result);
-            console.log(`[PrintPreview] Filters used:`, JSON.stringify(filters));
-            if (childDocs.length > 0) {
-              console.log(`[PrintPreview] Sample child doc:`, childDocs[0]);
-              console.log(`[PrintPreview] Sample child doc parentid:`, childDocs[0]?.parentid);
-              console.log(`[PrintPreview] Sample child doc parentype:`, childDocs[0]?.parentype);
-              console.log(`[PrintPreview] Sample child doc parentfield:`, childDocs[0]?.parentfield);
-            } else {
-              // Try a broader query to see if any records exist
-              const allChildDocs = await zodula?.doc?.select_docs(fieldConfig.reference as Zodula.DoctypeName, {
-                limit: 10,
-                filters: [["parentid", "=", doc.id]] as any,
-                sort: "idx",
-                order: "asc",
-              });
-              console.log(`[PrintPreview] Broader query (only parentid): found ${allChildDocs?.docs?.length || 0} rows`);
-              if (allChildDocs?.docs && allChildDocs.docs.length > 0) {
-                console.log(`[PrintPreview] Sample from broader query:`, allChildDocs.docs[0]);
-                console.log(`[PrintPreview] Expected parentype: ${doctype}, actual: ${allChildDocs.docs[0]?.parentype}`);
-                console.log(`[PrintPreview] Expected parentfield: ${fieldName}, actual: ${allChildDocs.docs[0]?.parentfield}`);
-              }
-            }
-          } catch (e) {
-            console.error(`[PrintPreview] Error querying Reference Table ${fieldName}:`, e);
-            console.error(`[PrintPreview] Error details:`, e);
+          } catch {
+            // Query failed; keep parentFieldValue as non-array so we end up with []
           }
-        } else {
-          console.warn(`[PrintPreview] No field config or reference found for ${fieldName}`);
         }
-      } else {
-        console.log(`[PrintPreview] parentFieldValue is already an array with ${parentFieldValue.length} items`);
       }
 
       const array = Array.isArray(parentFieldValue) ? parentFieldValue : [];
-      console.log(`[PrintPreview] Final array length: ${array.length}`);
-      if (array.length > 0) {
-        console.log(`[PrintPreview] Sample row:`, array[0]);
-      }
       setFieldValueArray(array);
       setIsLoading(false);
     }
@@ -219,7 +175,6 @@ function ReferenceTableRenderer({
     if (doc && fieldName && doctype) {
       loadReferenceTableData();
     } else {
-      console.warn(`[PrintPreview] Missing doc, fieldName, or doctype:`, { doc: !!doc, fieldName, doctype });
       setIsLoading(false);
     }
   }, [doc, doctype, fieldName, fieldConfigs]);
@@ -257,8 +212,9 @@ function ReferenceTableRenderer({
     width: `${elementWidthMm}mm`,
     borderCollapse: "collapse",
     tableLayout: "fixed",
-    display: "table", // Explicitly set table display
-    margin: "0", // Remove any margins
+    display: "table",
+    margin: "0",
+    backgroundColor: "transparent",
   };
 
   if (showBorder) {
@@ -284,7 +240,7 @@ function ReferenceTableRenderer({
           ? String(rawFontSize)
           : `${Number(rawFontSize) || 12}px`;
 
-  // Base cell style: tight line-height and top align; font-size and row height from template
+  // Base cell style: transparent background, tight line-height, font from template
   const cellStyle: React.CSSProperties = {
     boxSizing: "border-box",
     padding: "0 4px",
@@ -303,6 +259,7 @@ function ReferenceTableRenderer({
     textDecoration: element.style?.textDecoration ?? style.textDecoration,
     color: element.style?.color ?? style.color ?? "#000",
     textAlign: style.textAlign,
+    backgroundColor: "transparent",
   };
 
   if (showBorder) {
@@ -317,6 +274,7 @@ function ReferenceTableRenderer({
     minHeight: `${rowHeight}px`,
     height: `${rowHeight}px`,
     maxHeight: `${rowHeight}px`,
+    backgroundColor: "transparent",
   };
 
   // Helper to get column width as percentage
@@ -1162,8 +1120,8 @@ export function PrintPreviewRenderer({
                   templateItems = itemsFromRelationship;
                   templateItems.sort((a: any, b: any) => (a.idx || 0) - (b.idx || 0));
                 }
-              } catch (e) {
-                console.error("[PrintPreview] Relationship access error:", e);
+              } catch {
+                // Relationship not available; templateItems stays []
               }
             }
 
@@ -1180,14 +1138,12 @@ export function PrintPreviewRenderer({
                   order: "asc",
                 }) || { docs: [] };
                 templateItems = result.docs || [];
-              } catch (e) {
-                console.error("[PrintPreview] Direct query error:", e);
+              } catch {
+                // Direct query failed; templateItems stays []
               }
             }
 
             // Use only the correct field (items or fixed_position_items). If empty, render empty - no fallback.
-            console.log(`[PrintPreview] Template ${printTemplateId}: isFixedPosition=${isFixedPosition}, itemsField=${itemsFieldName}, found ${templateItems.length} items`);
-
             if (templateItems.length === 0) {
               // Correct field is empty: render empty (apply template format/margins but no elements)
               setElements([]);
@@ -1202,7 +1158,6 @@ export function PrintPreviewRenderer({
                 css: printTemplate.css || "",
                 isFixedPosition,
               });
-              console.log(`[PrintPreview] Template ${printTemplateId} has no items in ${itemsFieldName}, rendering empty`);
             } else {
               const convertedElements = templateItems.map((item: any) => itemToElement(item));
               setElements(convertedElements);
@@ -1217,7 +1172,6 @@ export function PrintPreviewRenderer({
                 css: printTemplate.css || "",
                 isFixedPosition,
               });
-              console.log(`[PrintPreview] Successfully loaded template ${printTemplateId} with ${convertedElements.length} elements`);
             }
           } else {
             // printTemplateId was provided but template not found - use default
@@ -1325,8 +1279,8 @@ export function PrintPreviewRenderer({
           const convertedLetterHeadElements = letterHeadItems.map((item: any) => itemToElement(item));
           setLetterHeadElements(convertedLetterHeadElements);
         }
-      } catch (error) {
-        console.error("Error loading template:", error);
+      } catch {
+        // Template load failed; loading state cleared in finally
       } finally {
         setLoading(false);
       }
@@ -1462,6 +1416,12 @@ export function PrintPreviewRenderer({
           border-collapse: collapse !important;
           table-layout: fixed !important;
           box-sizing: border-box !important;
+          background-color: transparent !important;
+        }
+        .print-preview-container table thead,
+        .print-preview-container table tbody,
+        .print-preview-container table tr {
+          background-color: transparent !important;
         }
         .print-preview-container table thead {
           display: table-header-group !important;
@@ -1482,6 +1442,7 @@ export function PrintPreviewRenderer({
           text-overflow: ellipsis;
           vertical-align: top;
           line-height: 1;
+          background-color: transparent !important;
         }
         /* Table with showBorder: false - no borders (tableConfig from template) */
         .print-preview-container table.print-preview-table-no-border,
@@ -1492,6 +1453,7 @@ export function PrintPreviewRenderer({
         .print-preview-container table thead th {
           font-weight: 600 !important;
           color: #1f2937 !important;
+          background-color: transparent !important;
         }
         /* Ensure groups and all elements have proper box-sizing */
         .print-preview-container [data-item-id] {

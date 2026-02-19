@@ -75,7 +75,6 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
         const doctype = loader.from("doctype").get(this.doctypeName)
         const user = await zodula.session.user()
         let old = await zodula.doctype(this.doctypeName).get(this.id).bypass(true).unsafe()
-        console.log("deleting", this.id, this.doctypeName);
         const organization = old?.organization || "System Panel"
         if(!old?.organization) {
             old.organization = organization

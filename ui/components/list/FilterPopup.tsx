@@ -119,8 +119,28 @@ export function FilterPopup({
     return plugins.find((plugin) => plugin.types.includes(field.type as any));
   };
 
-  // Get supported operators for a field (supports dot notation)
+  // Count-only operators for reference table count filters (e.g. ["items", ">", 0])
+  const COUNT_OPERATORS = useMemo(
+    () =>
+      OPERATORS.filter((op) =>
+        ["=", "!=", ">", ">=", "<", "<="].includes(op.value)
+      ),
+    []
+  );
+
+  // Check if field is a reference table used as count (no dot)
+  const isReferenceTableCountField = (fieldName: string) =>
+    !!fieldName &&
+    !fieldName.includes(".") &&
+    fields.some(
+      (f) => f.name === fieldName && f.type === "Reference Table"
+    );
+
+  // Get supported operators for a field (supports dot notation and reference table count)
   const getSupportedOperators = (fieldName: string) => {
+    if (isReferenceTableCountField(fieldName)) {
+      return COUNT_OPERATORS;
+    }
     const plugin = getFieldPlugin(fieldName);
     if (plugin?.supportOperators) {
       return OPERATORS.filter((op) => plugin.supportOperators!.includes(op.value));
@@ -141,13 +161,20 @@ export function FilterPopup({
         }
         
         if (field.type === "Reference Table" && field.reference) {
-          // Add the reference table field itself as a group header
+          const parentFieldName = field.name || "";
+          if (parentFieldName) {
+            // Add reference table as field key for count filters (e.g. ["items", ">", 0])
+            options.push({
+              value: parentFieldName,
+              label: `${t(field.label || parentFieldName)} (count)`,
+              subtitle: parentFieldName,
+            });
+          }
           const childFields = referenceTableChildFields.get(field.name || "");
           if (childFields && childFields.length > 0) {
             // Add nested fields
             for (const childField of childFields) {
               const childFieldName = childField.name || "";
-              const parentFieldName = field.name || "";
               if (childFieldName && parentFieldName) {
                 options.push({
                   value: `${parentFieldName}.${childFieldName}`,
@@ -338,6 +365,21 @@ export function FilterPopup({
 
                 {getValueInputType(row.operator) !== "hidden" &&
                   (() => {
+                    // Reference table count: use simple number input
+                    if (isReferenceTableCountField(row.field)) {
+                      return (
+                        <Input
+                          type="number"
+                          min={0}
+                          placeholder="0"
+                          value={row.value}
+                          onChange={(e) =>
+                            updateFilterRow(row.id, { value: e.target.value })
+                          }
+                          className="zd:flex-1"
+                        />
+                      );
+                    }
                     const { parentField, childField } = parseFieldPath(row.field);
                     let field: Zodula.Field | undefined;
                     

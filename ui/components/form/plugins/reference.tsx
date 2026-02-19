@@ -87,8 +87,12 @@ const ReferenceInput = (props: {
         if (pathParts.length >= 3) {
           const possibleIndex = parseInt(pathParts[1] || "0", 10);
           if (!isNaN(possibleIndex)) {
-            // It's a Reference Table field
-            const childOverrides = childTableFieldPropertyOverrides?.[childFieldName]?.[possibleIndex]?.[fieldName];
+            // It's a Reference Table field: check row-specific override, then "all rows" (-1)
+            const childOverrides =
+              childTableFieldPropertyOverrides?.[childFieldName]?.[possibleIndex]?.[fieldName]
+              ?? childTableFieldPropertyOverrides?.[childFieldName]?.[-1]?.[fieldName]
+              // Reference-table passes overrides as childExtendFieldPropertyOverrides with shape { [fieldName]: { filters } }
+              ?? childExtendFieldPropertyOverrides?.[fieldName];
             if (childOverrides?.filters) {
               try {
                 return typeof childOverrides.filters === 'string'
@@ -461,7 +465,7 @@ const ReferenceInput = (props: {
   useEffect(() => {
     if (!isFocused) return;
     search(props.value || "");
-  }, [props.value, isFocused, doctype]);
+  }, [props.value, isFocused, doctype, filters]);
 
   const actions = useMemo(() => {
     let _actions: SelectAction[] = [];

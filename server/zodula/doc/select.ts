@@ -88,6 +88,24 @@ export class ZodulaDoctypeSelector<
   }
 
   /**
+   * Check if a field name (no dot) is a Reference Table field and return its child metadata.
+   * Used for count filters like ["sales_invoice_items", ">", 0].
+   */
+  private getReferenceTableChildByFieldName(
+    fieldName: string,
+    doctype: DoctypeMetadata
+  ): DoctypeChild | null {
+    if (!fieldName || fieldName.includes(".")) {
+      return null;
+    }
+    const child = doctype.children.find(
+      (c) =>
+        c.parentFieldName === fieldName && c.type === "Reference Table"
+    );
+    return child ?? null;
+  }
+
+  /**
    * Parse field path to detect reference table fields (e.g., "items.unit")
    * Returns { parentField, childField, isReferenceTable } or null if not a reference table field
    */
@@ -189,56 +207,77 @@ export class ZodulaDoctypeSelector<
       const fieldPath = String(field);
       let condition = "";
 
-      // Check if this is a reference table field
-      const parsed = this.parseReferenceTableField(fieldPath, doctype);
-      let fieldReference = fieldPath;
-
-      if (parsed && joinAliases) {
-        // Use joined table alias for reference table fields
-        const { parentField, childField, child } = parsed;
-        const aliasKey = `${parentField}_${child.childDoctype}`;
-        const alias = joinAliases.get(aliasKey);
-
-        if (alias) {
-          fieldReference = `"${alias}"."${childField}"`;
-        } else {
-          // Fallback to original field path if alias not found
-          fieldReference = `"${fieldPath}"`;
+      // Reference table count filter: ["sales_invoice_items", ">", 0] => count of child rows
+      const refTableChild = this.getReferenceTableChildByFieldName(
+        fieldPath,
+        doctype
+      );
+      if (refTableChild && !fieldPath.includes(".")) {
+        const countSubquery = `(SELECT COUNT(*) FROM "${refTableChild.childDoctype}" WHERE "${refTableChild.childDoctype}"."parentid" = "${doctype.name}"."id" AND "${refTableChild.childDoctype}"."parentype" = "${doctype.name}" AND "${refTableChild.childDoctype}"."parentfield" = "${fieldPath}")`;
+        switch (operator) {
+          case "=":
+          case "!=":
+          case ">":
+          case ">=":
+          case "<":
+          case "<=":
+            condition = `${countSubquery} ${operator} ${Number(value)}`;
+            break;
         }
-      } else {
-        // Regular field from main table
-        fieldReference = `"${doctype.name}"."${fieldPath}"`;
       }
 
-      switch (operator) {
-        case "=":
-        case "!=":
-        case ">":
-        case ">=":
-        case "<":
-        case "<=":
-        case "LIKE":
-        case "NOT LIKE":
-          condition = `${fieldReference} ${operator} '${value}'`;
-          break;
-        case "IN":
-          const arrValue1 = ("(" +
-            (value as string[])?.map((v) => `'${v}'`).join(",") +
-            ")") as any;
-          condition = `${fieldReference} IN ${arrValue1}`;
-          break;
-        case "NOT IN":
-          const arrValue2 = ("(" +
-            (value as string[])?.map((v) => `'${v}'`).join(",") +
-            ")") as any;
-          condition = `${fieldReference} NOT IN ${arrValue2}`;
-          break;
-        case "IS NULL":
-          condition = `${fieldReference} IS ${value === 1 || value === "1" ? "" : "NOT "}NULL`;
-          break;
-        case "IS NOT NULL":
-          condition = `${fieldReference} IS ${value === 1 || value === "1" ? "NOT " : ""}NULL`;
-          break;
+      if (!condition) {
+        // Check if this is a reference table dotted path (e.g. "items.unit")
+        const parsed = this.parseReferenceTableField(fieldPath, doctype);
+        let fieldReference = fieldPath;
+
+        if (parsed && joinAliases) {
+          // Use joined table alias for reference table fields
+          const { parentField, childField, child } = parsed;
+          const aliasKey = `${parentField}_${child.childDoctype}`;
+          const alias = joinAliases.get(aliasKey);
+
+          if (alias) {
+            fieldReference = `"${alias}"."${childField}"`;
+          } else {
+            // Fallback to original field path if alias not found
+            fieldReference = `"${fieldPath}"`;
+          }
+        } else {
+          // Regular field from main table
+          fieldReference = `"${doctype.name}"."${fieldPath}"`;
+        }
+
+        switch (operator) {
+          case "=":
+          case "!=":
+          case ">":
+          case ">=":
+          case "<":
+          case "<=":
+          case "LIKE":
+          case "NOT LIKE":
+            condition = `${fieldReference} ${operator} '${value}'`;
+            break;
+          case "IN":
+            const arrValue1 = ("(" +
+              (value as string[])?.map((v) => `'${v}'`).join(",") +
+              ")") as any;
+            condition = `${fieldReference} IN ${arrValue1}`;
+            break;
+          case "NOT IN":
+            const arrValue2 = ("(" +
+              (value as string[])?.map((v) => `'${v}'`).join(",") +
+              ")") as any;
+            condition = `${fieldReference} NOT IN ${arrValue2}`;
+            break;
+          case "IS NULL":
+            condition = `${fieldReference} IS ${value === 1 || value === "1" ? "" : "NOT "}NULL`;
+            break;
+          case "IS NOT NULL":
+            condition = `${fieldReference} IS ${value === 1 || value === "1" ? "NOT " : ""}NULL`;
+            break;
+        }
       }
 
       if (condition) {

@@ -7,8 +7,10 @@ import ErrorView from "@/zodula/ui/views/error-view";
 import { Select } from "@/zodula/ui/components/ui/select";
 import { Button } from "@/zodula/ui/components/ui/button";
 import { Checkbox } from "@/zodula/ui/components/ui/checkbox";
-import { usePDF, Resolution } from "react-to-pdf";
 import { PrintPreviewRenderer } from "@/zodula/ui/components/custom/print-preview-renderer";
+
+const MM_TO_PX = 3.77952755906;
+const PDF_SCALE = 3; // medium resolution
 
 export default function PrintPage() {
   const { params, search, back } = useRouter();
@@ -143,28 +145,15 @@ export default function PrintPage() {
     };
   }, [template]);
 
-  const { toPDF, targetRef } = usePDF({
-    filename: `${ids[0] || "document"}.pdf`,
-    method: "open",
-    resolution: Resolution.MEDIUM,
-    page: pdfPageOptions,
-    overrides: {
-      canvas: {
-        backgroundColor: "#ffffff",
-        useCORS: true,
-        // Strip guided background and any remote images from clone so html2canvas produces
-        // a canvas jsPDF can encode (avoids "addImage does not support files of type 'UNKNOWN'")
-        onclone: (_document: Document, clonedElement: HTMLElement) => {
-          clonedElement.querySelectorAll(".guided-background-preview").forEach((el) => {
-            (el as HTMLElement).style.backgroundImage = "none";
-          });
-        },
-      },
-    },
-  });
+  const targetRef = useRef<HTMLDivElement>(null);
 
-  const handlePrint = useCallback(() => {
-    if (!targetRef.current) return;
+  // 1x1 transparent PNG – replace img src in clone so canvas is not tainted
+  const TRANSPARENT_PIXEL =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+  const handlePrint = useCallback(async () => {
+    const target = targetRef.current;
+    if (!target) return;
     setIsGeneratingPdf(true);
     const el = document.documentElement;
     const body = document.body;
@@ -172,27 +161,94 @@ export default function PrintPage() {
     const savedBodyBg = body.style.getPropertyValue("background-color");
     el.style.setProperty("background-color", "#ffffff", "important");
     body.style.setProperty("background-color", "#ffffff", "important");
-    targetRef.current.classList.add("pdf-export-isolate");
+    target.classList.add("pdf-export-isolate");
     const cleanup = () => {
       el.style.removeProperty("background-color");
       body.style.removeProperty("background-color");
       if (savedRootBg) el.style.setProperty("background-color", savedRootBg);
       if (savedBodyBg) body.style.setProperty("background-color", savedBodyBg);
-      targetRef.current?.classList.remove("pdf-export-isolate");
+      target.classList.remove("pdf-export-isolate");
       setIsGeneratingPdf(false);
     };
-    requestAnimationFrame(() => {
-      requestAnimationFrame(async () => {
-        try {
-          await toPDF();
-        } catch (err) {
-          console.error("[Print] PDF generation failed:", err);
-        } finally {
-          cleanup();
-        }
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const { jsPDF } = await import("jspdf");
+      const canvas = await html2canvas(target, {
+        scale: PDF_SCALE,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        allowTaint: false,
+        onclone: (_doc: Document, clone: HTMLElement) => {
+          clone.querySelectorAll(".guided-background-preview").forEach((node) => {
+            (node as HTMLElement).style.backgroundImage = "none";
+          });
+          clone.querySelectorAll("img").forEach((img) => {
+            (img as HTMLImageElement).src = TRANSPARENT_PIXEL;
+          });
+          clone.querySelectorAll("[style*='background-image']").forEach((node) => {
+            (node as HTMLElement).style.backgroundImage = "none";
+          });
+          // Force transparent background on all table cells so PDF matches preview (no grey header/rows)
+          clone.querySelectorAll("table, table thead, table tbody, table tr, table th, table td").forEach((el) => {
+            (el as HTMLElement).style.setProperty("background-color", "transparent", "important");
+          });
+        },
       });
-    });
-  }, [toPDF, targetRef]);
+      const format = pdfPageOptions.format;
+      const orientation = pdfPageOptions.orientation || "portrait";
+      const margin = typeof pdfPageOptions.margin === "number" ? pdfPageOptions.margin : 0;
+      const pdf = new jsPDF({
+        format: Array.isArray(format) ? format : (format as string),
+        orientation,
+        unit: "mm",
+      });
+      const pageW = (pdf as any).internal?.pageSize?.getWidth?.() ?? (pdf as any).getPageWidth?.() ?? 210;
+      const pageH = (pdf as any).internal?.pageSize?.getHeight?.() ?? (pdf as any).getPageHeight?.() ?? 297;
+      const marginLeft = margin;
+      const marginTop = margin;
+      const availableW = pageW - marginLeft * 2;
+      const availableH = pageH - marginTop * 2;
+      const origW = canvas.width / PDF_SCALE;
+      const origH = canvas.height / PDF_SCALE;
+      const fitW = availableW * MM_TO_PX * PDF_SCALE;
+      const fitH = availableH * MM_TO_PX * PDF_SCALE;
+      const horizontalFit = origW > fitW / PDF_SCALE ? (fitW / PDF_SCALE) / origW : 1;
+      const pageAvailableH = availableH * MM_TO_PX * PDF_SCALE * horizontalFit;
+      const numPages = Math.ceil((canvas.height / PDF_SCALE) / (pageAvailableH / PDF_SCALE)) || 1;
+      for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+        if (pageNum > 1) pdf.addPage(Array.isArray(format) ? (format as [number, number]) : (format as string), orientation);
+        const offsetY = (pageNum - 1) * (pageAvailableH / PDF_SCALE);
+        const sliceH = Math.min(canvas.height / PDF_SCALE - offsetY, pageAvailableH / PDF_SCALE);
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = Math.ceil(sliceH * PDF_SCALE);
+        const ctx = pageCanvas.getContext("2d")!;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+        ctx.drawImage(
+          canvas,
+          0, offsetY * PDF_SCALE, canvas.width, sliceH * PDF_SCALE,
+          0, 0, canvas.width, sliceH * PDF_SCALE
+        );
+        const imgData = pageCanvas.toDataURL("image/jpeg", 1.0);
+        const wMm = pageCanvas.width / (PDF_SCALE * MM_TO_PX * horizontalFit);
+        const hMm = pageCanvas.height / (PDF_SCALE * MM_TO_PX * horizontalFit);
+        pdf.addImage({
+          imageData: imgData,
+          format: "JPEG",
+          x: marginLeft,
+          y: marginTop,
+          width: wMm,
+          height: hMm,
+        });
+      }
+      window.open(pdf.output("bloburl"), "_blank");
+    } catch (err) {
+      console.error("[Print] PDF generation failed:", err);
+    } finally {
+      cleanup();
+    }
+  }, [pdfPageOptions]);
 
   const { docs: languages } = useDocList({
     doctype: "zodula__Language",
@@ -414,6 +470,9 @@ export default function PrintPage() {
             .pdf-export-isolate table {
               border-collapse: collapse !important;
               width: 100% !important;
+              table-layout: fixed !important;
+              box-sizing: border-box !important;
+              background-color: transparent !important;
             }
             .pdf-export-isolate table th,
             .pdf-export-isolate table td {
@@ -422,17 +481,23 @@ export default function PrintPage() {
               text-align: left !important;
               vertical-align: top !important;
               line-height: 1 !important;
+              background-color: transparent !important;
+              overflow: hidden !important;
+              text-overflow: ellipsis !important;
             }
             .pdf-export-isolate table thead th {
-              background-color: #f3f4f6 !important;
               font-weight: 600 !important;
               color: #1f2937 !important;
+              border-bottom: 2px solid #e5e7eb !important;
             }
-            .pdf-export-isolate table tbody tr:nth-child(even) td {
-              background-color: #fafafa !important;
+            /* No background, match preview – no striped rows or header fill */
+            .pdf-export-isolate table.print-preview-table-no-border,
+            .pdf-export-isolate table.print-preview-table-no-border th,
+            .pdf-export-isolate table.print-preview-table-no-border td {
+              border: none !important;
             }
-            .pdf-export-isolate table tbody tr:nth-child(odd) td {
-              background-color: #ffffff !important;
+            .pdf-export-isolate table.print-preview-table-no-border thead th {
+              border-bottom: none !important;
             }
             .pdf-export-isolate .page-break,
             .pdf-export-isolate .page-break-before,
@@ -484,9 +549,9 @@ export default function PrintPage() {
               <ErrorView message={error || docsError || t("Failed to load documents")} status={400} />
             </div>
           ) : doctype && ids.length > 0 && fetchedDocs.length > 0 ? (
-            <div className="zd:bg-muted zd:p-2">
+            <div className="zd:p-2">
               <PrintPreviewRenderer
-                targetRef={targetRef}
+                targetRef={targetRef as React.RefObject<HTMLDivElement>}
                 key={refreshKey}
                 doctype={doctype}
                 docIds={ids}

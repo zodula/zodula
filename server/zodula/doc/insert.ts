@@ -526,9 +526,9 @@ export class ZodulaDoctypeInsert<
           .insert(formattedPayload)
           .bypass(this.options.bypass);
         (result as any)[key] = insertedPayload;
-      } catch (error) {
+      } catch (error: any) {
         throw new ErrorWithCode(
-          `Error inserting ${this.doctypeName}/${result.id}/${key}: ${error}`,
+          `Error inserting ${this.doctypeName}/${result.id}/${key}: ${error?.message || error}`,
           {
             status: 500,
           }
@@ -574,9 +574,9 @@ export class ZodulaDoctypeInsert<
             .bypass(this.options.bypass);
           (result as any)[key].push(insertedPayload);
         }
-      } catch (error) {
+      } catch (error: any) {
         throw new ErrorWithCode(
-          `Error inserting ${this.doctypeName}/${result.id}/${key}: ${error}`,
+          `Error inserting ${this.doctypeName}/${result.id}/${key}: ${error?.message || error}`,
           {
             status: 500,
           }
