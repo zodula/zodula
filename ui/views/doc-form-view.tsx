@@ -42,6 +42,7 @@ import { useUIScriptStore } from "../zui";
 import { useUIScript } from "../hooks/use-ui-script";
 import { useDocStore } from "../hooks/use-doc-store";
 import { PrintTemplateDialog } from "../components/dialogs/print-template-dialog";
+import { MultiSelectDoctypeDialog } from "../components/dialogs/multi-select-doctype-dialog";
 import { useUserName } from "../hooks/use-user-name";
 import ErrorView from "./error-view";
 import { useParams } from "react-router";
@@ -218,63 +219,9 @@ export function DocFormView({
     }>;
   }>>([]);
 
-  // Create parent FormContext for child forms
-  const parentFormContext = useMemo(() => {
-    if (!doc) return null;
-    return {
-      doctype,
-      doc: doc as any,
-      isCreate: mode === "create",
-      isEdit: mode === "edit",
-      getValue: <K extends string | number | symbol>(fieldName: K) => (doc as any)[fieldName],
-      setValue: <K extends string | number | symbol>(fieldName: K, value: any) => {
-        // This is read-only in render context
-      },
-      addBadge: (fieldName: keyof any | string, config: { variant?: "default" | "secondary" | "destructive" | "outline" | "success" | "warning" | "draft" | "submitted" | "cancelled" | "pending" | "approved" | "rejected" | "muted" | "info" | null; size?: "sm" | "md" | "lg" | "default"; getValue?: (doc: Partial<any>) => any }) => {
-        badgeConfigs.current[String(fieldName)] = config;
-      },
-      addSecondaryButton: (label: string, onClick: () => void | Promise<void>, options?: {
-        variant?: "outline" | "ghost" | "solid" | "subtle" | "success";
-        icon?: React.ComponentType<any>;
-        disabled?: boolean;
-        items?: Array<{
-          label: string;
-          icon?: React.ComponentType<any>;
-          onClick: () => void | Promise<void>;
-          disabled?: boolean;
-        }>;
-      }) => {
-        secondaryButtons.current.push({
-          label,
-          onClick,
-          ...options
-        });
-      },
-      navigate: (path: string, options?: { state?: any }) => {
-        if (options?.state) {
-          push(path, { state: options.state });
-        } else {
-          push(path);
-        }
-      },
-      org: org || undefined
-    };
-  }, [doctype, doc, mode, org, push]);
-
-  // Execute form scripts for on_render event
-  useEffect(() => {
-    if (!doc || !parentFormContext) return;
-    
-    // Reset secondary buttons on each render
-    secondaryButtons.current = [];
-    
-    const store = useUIScriptStore.getState();
-    const executeRenderScripts = async () => {
-      await store.executeScripts(doctype, 'on_render', parentFormContext);
-    };
-    
-    executeRenderScripts();
-  }, [doctype, doc, mode, parentFormContext]);
+  // Refs for form get/set so on_render script context can update form when e.g. "Add Delivery Orders" is clicked
+  const formSetValueRef = useRef<(fieldName: string, value: any) => void>(() => {});
+  const formGetFormDataRef = useRef<() => Record<string, any>>(() => ({}));
 
   // ===== FIELDS =====
   // Fetch all fields with persistent caching, then filter client-side
@@ -440,7 +387,7 @@ export function DocFormView({
           statusBasedReadonly = true;
         }
         // Condition 2: doc_status == 0 && field.config.only_once == 1
-        else if (docStatus === 0 && onlyOnce === 1) {
+        else if (docStatus === 0 && onlyOnce === 1 && mode === "edit") {
           statusBasedReadonly = true;
         }
         // Condition 3: doc_status !== 1 && doc_status !== 0
@@ -487,6 +434,36 @@ export function DocFormView({
     return processedFields;
   }, [fields, doctypeDoc, t, fieldPermissions, isOwn, roles, user, fieldPropertyOverrides, doc]);
 
+  // Child doctype fields for Reference Table fetch_from enrichment (keyed by child doctype id)
+  const refTableRefs = useMemo(
+    () =>
+      Object.values(formFields)
+        .filter((f: any) => f?.type === "Reference Table" && f.reference)
+        .map((f: any) => f.reference as string)
+        .filter((r): r is string => !!r),
+    [formFields]
+  );
+  const { docs: childFieldDocs } = useDocList(
+    {
+      doctype: "zodula__Field" as Zodula.DoctypeName,
+      limit: -1,
+      filters: refTableRefs.length > 0 ? (["doctype", "in", refTableRefs] as any) : [],
+      sort: "idx",
+      order: "asc",
+    },
+    [refTableRefs.join(",")]
+  );
+  const childFieldsByDoctype = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    for (const f of childFieldDocs || []) {
+      const d = (f as any).doctype;
+      if (!d) continue;
+      if (!map[d]) map[d] = [];
+      map[d].push(f);
+    }
+    return map;
+  }, [childFieldDocs]);
+
   // Compute formId based on mode and document ID
   const formId = useMemo(() => {
     if (mode === "create") {
@@ -508,9 +485,157 @@ export function DocFormView({
     fields: formFields,
   });
 
+  formSetValueRef.current = setValue;
+  formGetFormDataRef.current = getFormData;
 
   // ===== SCRIPT & FETCH HELPERS =====
   const { fetchDoc, getDoc } = useDocStore();
+
+  const getNestedValue = useCallback((obj: any, path: string): any => {
+    if (!obj || !path) return undefined;
+
+    const keys = path.split(".");
+    let current = obj;
+
+    for (const key of keys) {
+      if (current === null || current === undefined) {
+        return undefined;
+      }
+      current = current[key];
+    }
+
+    return current;
+  }, []);
+
+  // Enrich reference table rows with fetch_from from linked docs (e.g. setValue("items", [{ delivery_order: id }]) -> fill shipping_address, etc.)
+  const enrichReferenceTableRows = useCallback(
+    async (tableFieldName: string, rows: any[]): Promise<any[]> => {
+      if (!Array.isArray(rows) || rows.length === 0) return rows;
+      const tableField = formFields[tableFieldName] as any;
+      if (!tableField || tableField?.type !== "Reference Table" || !tableField.reference) return rows;
+      const childFields = childFieldsByDoctype[tableField.reference];
+      if (!childFields?.length) return rows;
+      const dependentFields: Array<{ fieldName: string; sourceFieldName: string; fetchPath: string }> = [];
+      for (const f of childFields) {
+        const fetchFrom = (f as any).fetch_from;
+        if (fetchFrom && typeof fetchFrom === "string" && fetchFrom.includes(".")) {
+          const [sourceFieldName, ...rest] = fetchFrom.split(".");
+          const fetchPath = rest.join(".");
+          if (sourceFieldName && fetchPath)
+            dependentFields.push({ fieldName: (f as any).name, sourceFieldName, fetchPath });
+        }
+      }
+      const firstDependent = dependentFields[0];
+      if (!firstDependent) return rows;
+      const sourceFieldName = firstDependent.sourceFieldName;
+      const sourceFieldConfig = childFields.find((f: any) => f.name === sourceFieldName);
+      const refDoctype = sourceFieldConfig?.reference as Zodula.DoctypeName | undefined;
+      if (!refDoctype) return rows;
+      const fetchFields = [...new Set(dependentFields.map((d) => d.fetchPath.split(".")[0]).filter((x): x is string => !!x))];
+      const enriched = await Promise.all(
+        rows.map(async (row) => {
+          const refId = row?.[sourceFieldName];
+          if (!refId) return { ...row };
+          try {
+            await fetchDoc(refDoctype, refId, fetchFields);
+            const cached = getDoc(refDoctype, refId);
+            const fetchedDoc = cached?.data;
+            if (!fetchedDoc) return { ...row };
+            const next = { ...row };
+            for (const d of dependentFields) {
+              const v = getNestedValue(fetchedDoc, d.fetchPath);
+              if (v !== undefined) next[d.fieldName] = v;
+            }
+            return next;
+          } catch {
+            return { ...row };
+          }
+        })
+      );
+      return enriched;
+    },
+    [formFields, childFieldsByDoctype, fetchDoc, getDoc, getNestedValue]
+  );
+
+  // Create parent FormContext for child forms and on_render scripts (with live getValue/setValue via refs)
+  const parentFormContext = useMemo(() => {
+    if (!doc) return null;
+    const setValueWithEnrich = async (fieldName: string, value: any) => {
+      const tableField = formFields[fieldName] as any;
+      if (tableField?.type === "Reference Table" && Array.isArray(value)) {
+        const enriched = await enrichReferenceTableRows(fieldName, value);
+        formSetValueRef.current?.(fieldName, enriched);
+      } else {
+        formSetValueRef.current?.(fieldName, value);
+      }
+    };
+    return {
+      doctype,
+      doc: doc as any,
+      isCreate: mode === "create",
+      isEdit: mode === "edit",
+      getValue: <K extends string | number | symbol>(fieldName: K) => formGetFormDataRef.current?.()?.[fieldName as string],
+      setValue: <K extends string | number | symbol>(fieldName: K, value: any) => setValueWithEnrich(fieldName as string, value) as any,
+      set_child_table_value: async (fieldName: string, rows: any[]) => {
+        const enriched = await enrichReferenceTableRows(fieldName, rows);
+        formSetValueRef.current?.(fieldName, enriched);
+      },
+      set_child_extend_value: (fieldName: string, data: Record<string, any>) => {
+        formSetValueRef.current?.(fieldName, data);
+      },
+      addBadge: (fieldName: keyof any | string, config: { variant?: "default" | "secondary" | "destructive" | "outline" | "success" | "warning" | "draft" | "submitted" | "cancelled" | "pending" | "approved" | "rejected" | "muted" | "info" | null; size?: "sm" | "md" | "lg" | "default"; getValue?: (doc: Partial<any>) => any }) => {
+        badgeConfigs.current[String(fieldName)] = config;
+      },
+      addSecondaryButton: (label: string, onClick: () => void | Promise<void>, options?: {
+        variant?: "outline" | "ghost" | "solid" | "subtle" | "success";
+        icon?: React.ComponentType<any>;
+        disabled?: boolean;
+        items?: Array<{
+          label: string;
+          icon?: React.ComponentType<any>;
+          onClick: () => void | Promise<void>;
+          disabled?: boolean;
+        }>;
+      }) => {
+        secondaryButtons.current.push({
+          label,
+          onClick,
+          ...options
+        });
+      },
+      navigate: (path: string, options?: { state?: any }) => {
+        if (options?.state) {
+          push(path, { state: options.state });
+        } else {
+          push(path);
+        }
+      },
+      org: org || undefined,
+      showDialog: async (component: any, dialogProps: any) => popup(component, dialogProps),
+      open_multi_select_dialog: async (
+        doctypeName: Zodula.DoctypeName,
+        options?: {
+          title?: string;
+          defaultFilters?: any[];
+          limit?: number;
+          width?: number | string;
+          list_view_fields?: string[];
+        }
+      ) => {
+        const result = await popup(
+          MultiSelectDoctypeDialog,
+          { title: options?.title ?? "Select", width: options?.width },
+          {
+            doctype: doctypeName,
+            defaultFilters: options?.defaultFilters ?? [],
+            limit: options?.limit ?? 500,
+            list_view_fields: options?.list_view_fields,
+          }
+        );
+        return result ?? null;
+      },
+    };
+  }, [doctype, doc, mode, org, push, formFields, enrichReferenceTableRows]);
 
   const { execute } = useUIScript(doctype, {
     formData,
@@ -530,21 +655,16 @@ export function DocFormView({
     showToast: (message, type = "info") => toast[type](message),
   });
 
-  const getNestedValue = useCallback((obj: any, path: string): any => {
-    if (!obj || !path) return undefined;
-
-    const keys = path.split(".");
-    let current = obj;
-
-    for (const key of keys) {
-      if (current === null || current === undefined) {
-        return undefined;
-      }
-      current = current[key];
-    }
-
-    return current;
-  }, []);
+  // Execute form scripts for on_render event (after parentFormContext is defined)
+  useEffect(() => {
+    if (!doc || !parentFormContext) return;
+    secondaryButtons.current = [];
+    const store = useUIScriptStore.getState();
+    const executeRenderScripts = async () => {
+      await store.executeScripts(doctype, "on_render", parentFormContext);
+    };
+    executeRenderScripts();
+  }, [doctype, doc, mode, parentFormContext]);
 
   // Handler for nested field changes (e.g., "tax_and_charges.rate")
   const handleNestedFieldChange = useCallback(
@@ -644,116 +764,187 @@ export function DocFormView({
 
       const dependentUpdates: Record<string, any> = {};
 
-      // Handle fetch_from logic before running scripts
-      if (dependentFields.length > 0 && value) {
-        const sourceField = formFields[fieldName as string];
+      // Helper: find dependents of a source field (fields whose fetch_from starts with sourceFieldName.)
+      const getDependentsOf = (sourceFieldName: string) => {
+        const deps: Array<{ fieldName: string; fetchPath: string }> = [];
+        Object.entries(formFields).forEach(([key, field]) => {
+          if (
+            field.fetch_from &&
+            field.fetch_from.startsWith(sourceFieldName + ".")
+          ) {
+            const fetchPath = field.fetch_from.substring(
+              sourceFieldName.length + 1
+            );
+            deps.push({ fieldName: key, fetchPath });
+          }
+        });
+        return deps;
+      };
+
+      // Helper: compute updates for one source field (reference or extend)
+      const computeFetchUpdatesForSource = async (
+        sourceFieldName: string,
+        sourceValue: any,
+        mergedData: Record<string, any>
+      ): Promise<Record<string, any>> => {
+        const updates: Record<string, any> = {};
+        const deps = getDependentsOf(sourceFieldName);
+        if (deps.length === 0) return updates;
+
+        const sourceField = formFields[sourceFieldName as string];
+        if (!sourceValue) {
+          deps.forEach((d) => {
+            updates[d.fieldName] = null;
+          });
+          return updates;
+        }
 
         if (sourceField?.type === "Extend") {
           try {
-            const extendData = value;
-            for (const dependentField of dependentFields) {
-              const fetchedValue = getNestedValue(
-                extendData,
-                dependentField.fetchPath
-              );
-              if (fetchedValue !== undefined && fetchedValue !== null) {
-                dependentUpdates[dependentField.fieldName] = fetchedValue;
-              } else {
-                // Set to null if the referenced field has no value
-                dependentUpdates[dependentField.fieldName] = null;
-              }
+            for (const d of deps) {
+              const v = getNestedValue(sourceValue, d.fetchPath);
+              updates[d.fieldName] =
+                v !== undefined && v !== null ? v : null;
             }
-          } catch (error) {
-            console.warn(
-              `Failed to fetch data from Extend field ${String(fieldName)}:`,
-              error
-            );
-            dependentFields.forEach((df) => {
-              dependentUpdates[df.fieldName] = null;
+          } catch {
+            deps.forEach((d) => {
+              updates[d.fieldName] = null;
             });
           }
-        } else if (sourceField?.reference) {
+          return updates;
+        }
+
+        if (sourceField?.reference) {
           try {
-            const rootFields = dependentFields
-              .map((df) => df.fetchPath.split(".")[0])
+            const rootFields = deps
+              .map((d) => d.fetchPath.split(".")[0])
               .filter((v): v is string => !!v);
             const fetchFields = [...new Set(rootFields)];
-
             await fetchDoc(
               sourceField.reference as Zodula.DoctypeName,
-              value,
+              sourceValue,
               fetchFields
             );
-
             const cachedDoc = getDoc(
               sourceField.reference as Zodula.DoctypeName,
-              value
+              sourceValue
             );
-
-            if (cachedDoc?.data) {
-              const fetchedDoc = cachedDoc.data;
-              for (const dependentField of dependentFields) {
-                // Get the field config for the field that will RECEIVE the value (the field in the current form)
-                // This is NOT the field in the referenced doctype - it's the field in THIS form that has fetch_from
-                const receivingFieldConfig = formFields[dependentField.fieldName];
-                
-                if (!receivingFieldConfig) {
-                  console.warn(`[Image Preview] Field config not found for receiving field: ${dependentField.fieldName}`);
-                  // Set to null if field config not found
-                  dependentUpdates[dependentField.fieldName] = null;
-                  continue;
-                }
-                
-                const fetchedValue = getNestedValue(
-                  fetchedDoc,
-                  dependentField.fetchPath
-                );
-                
-                // IMPORTANT: Check the type of the RECEIVING field (the one in the current form that will get the value)
-                // NOT the type of the field in the referenced doctype
-                const isImagePreviewField = receivingFieldConfig.type === "Image Preview";
-                
-                if (isImagePreviewField && fetchedValue !== undefined && fetchedValue !== null && fetchedValue !== "") {
-                  // Construct file path: /files/<parent_organization>/<referenced_doctype>/<referenced_id>/<field_name>/<field_value>
-                  // fetchPath might be nested like "customer.logo" or just "logo"
-                  const fetchPathParts = dependentField.fetchPath.split('.');
-                  const parentFieldName = fetchPathParts[fetchPathParts.length - 1];
-                  const organization = currentData?.organization || "System Panel";
-                  const filePath = `/files/${organization}/${sourceField.reference}/${value}/${parentFieldName}/${fetchedValue}`;
-                  dependentUpdates[dependentField.fieldName] = filePath;
-                } else if (fetchedValue !== undefined && fetchedValue !== null) {
-                  // Regular field update (for non-Image Preview fields)
-                  dependentUpdates[dependentField.fieldName] = fetchedValue;
-                } else {
-                  // Set to null if the referenced field has no value
-                  dependentUpdates[dependentField.fieldName] = null;
-                }
-              }
-            } else {
-              // If cachedDoc?.data doesn't exist, set all dependent fields to null
-              dependentFields.forEach((df) => {
-                dependentUpdates[df.fieldName] = null;
+            if (!cachedDoc?.data) {
+              deps.forEach((d) => {
+                updates[d.fieldName] = null;
               });
+              return updates;
+            }
+            const fetchedDoc = cachedDoc.data;
+            for (const d of deps) {
+              const receivingFieldConfig = formFields[d.fieldName];
+              if (!receivingFieldConfig) {
+                updates[d.fieldName] = null;
+                continue;
+              }
+              const fetchedValue = getNestedValue(fetchedDoc, d.fetchPath);
+              const isImagePreviewField =
+                receivingFieldConfig.type === "Image Preview";
+              if (
+                isImagePreviewField &&
+                fetchedValue !== undefined &&
+                fetchedValue !== null &&
+                fetchedValue !== ""
+              ) {
+                const fetchPathParts = d.fetchPath.split(".");
+                const parentFieldName =
+                  fetchPathParts[fetchPathParts.length - 1];
+                const organization =
+                  mergedData?.organization || "System Panel";
+                updates[d.fieldName] = `/files/${organization}/${sourceField.reference}/${sourceValue}/${parentFieldName}/${fetchedValue}`;
+              } else if (
+                fetchedValue !== undefined &&
+                fetchedValue !== null
+              ) {
+                updates[d.fieldName] = fetchedValue;
+              } else {
+                updates[d.fieldName] = null;
+              }
             }
           } catch (error) {
             console.warn(
-              `Failed to fetch data for field ${String(fieldName)}:`,
+              `Failed to fetch data for field ${String(sourceFieldName)}:`,
               error
             );
-            dependentFields.forEach((df) => {
-              dependentUpdates[df.fieldName] = null;
+            deps.forEach((d) => {
+              updates[d.fieldName] = null;
             });
           }
         }
+        return updates;
+      };
 
-        if (Object.keys(dependentUpdates).length > 0) {
-          setValues(dependentUpdates);
+      // Handle fetch_from logic before running scripts (with nested/chained fetch support)
+      if (dependentFields.length > 0 && value) {
+        let accumulatedUpdates: Record<string, any> = {};
+        let mergedData: Record<string, any> = {
+          ...currentData,
+          [fieldName as string]: value,
+        };
+
+        // First round: dependents of the changed field
+        const firstRound = await computeFetchUpdatesForSource(
+          fieldName as string,
+          value,
+          mergedData
+        );
+        accumulatedUpdates = { ...firstRound };
+        mergedData = { ...mergedData, ...accumulatedUpdates };
+
+        // Subsequent rounds: any field we just filled may itself be a source for other fetch_from
+        let sourcesToProcess = Object.keys(firstRound);
+        const maxRounds = 10; // prevent infinite chains
+        for (let round = 0; round < maxRounds && sourcesToProcess.length > 0; round++) {
+          const nextRound: Record<string, any> = {};
+          for (const sourceKey of sourcesToProcess) {
+            const sourceVal = mergedData[sourceKey];
+            const updates = await computeFetchUpdatesForSource(
+              sourceKey,
+              sourceVal,
+              mergedData
+            );
+            Object.assign(nextRound, updates);
+          }
+          if (Object.keys(nextRound).length === 0) break;
+          accumulatedUpdates = { ...accumulatedUpdates, ...nextRound };
+          mergedData = { ...mergedData, ...nextRound };
+          sourcesToProcess = Object.keys(nextRound);
+        }
+
+        if (Object.keys(accumulatedUpdates).length > 0) {
+          setValues(accumulatedUpdates);
         }
       } else if (dependentFields.length > 0 && !value) {
+        // Clear direct dependents, then recursively clear any nested dependents
+        const clearDependents = (sourceFieldName: string) => {
+          const deps = getDependentsOf(sourceFieldName);
+          const updates: Record<string, any> = {};
+          deps.forEach((d) => {
+            updates[d.fieldName] = null;
+          });
+          return updates;
+        };
         dependentFields.forEach((df) => {
           dependentUpdates[df.fieldName] = null;
         });
-        setValues(dependentUpdates);
+        let accumulatedNulls = { ...dependentUpdates };
+        let sourcesToProcess = Object.keys(accumulatedNulls);
+        const maxRounds = 10;
+        for (let round = 0; round < maxRounds && sourcesToProcess.length > 0; round++) {
+          const nextRound: Record<string, any> = {};
+          for (const sourceKey of sourcesToProcess) {
+            Object.assign(nextRound, clearDependents(sourceKey));
+          }
+          if (Object.keys(nextRound).length === 0) break;
+          accumulatedNulls = { ...accumulatedNulls, ...nextRound };
+          sourcesToProcess = Object.keys(nextRound);
+        }
+        setValues(accumulatedNulls);
       }
 
       // Build updated form data snapshot for scripts
@@ -1579,7 +1770,7 @@ export function DocFormView({
         title={
           <div className="zd:flex zd:gap-2 zd:items-center">
             {mode === "create"
-              ? "New Document"
+              ? `${t("New")} ${t(doctypeLabel)}`
               : isSingle
                 ? doctypeLabel
                 : doc?.id || "New Doc"}

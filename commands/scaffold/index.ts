@@ -66,6 +66,8 @@ export default new Command("scaffold")
         await scaffoldExtend();
         break;
     }
+
+    process.exit(0);
   });
 
 async function scaffoldApp() {

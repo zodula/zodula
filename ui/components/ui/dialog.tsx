@@ -37,14 +37,18 @@ function Dialog({ open = false, onClose, children, className = "" }: DialogProps
 interface DialogContentProps {
   children: React.ReactNode
   className?: string
+  style?: React.CSSProperties
 }
 
-function DialogContent({ children, className = "" }: DialogContentProps) {
+function DialogContent({ children, className = "", style }: DialogContentProps) {
   return (
-    <div className={cn(
-      "relative bg-background rounded shadow-lg border border-border",
-      className
-    )}>
+    <div
+      className={cn(
+        "relative bg-background rounded shadow-lg border border-border",
+        className
+      )}
+      style={style}
+    >
       {children}
     </div>
   )

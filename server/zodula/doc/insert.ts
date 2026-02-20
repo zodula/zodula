@@ -43,6 +43,14 @@ export class ZodulaDoctypeInsert<
     return this;
   }
 
+  private async validateIdUniqueness(db: Bunely, doctype: DoctypeMetadata, prepared: Zodula.SelectDoctype<TN>) {
+    const id = prepared.id
+    const exists = await db.get(`SELECT id FROM "${doctype.name}" WHERE id = ?`, [id])
+    if (exists) {
+      throw new ErrorWithCode(`ID ${id} already exists`, { status: 400 })
+    }
+  }
+
   private async _insert() {
     try {
       const db = Database("main");
@@ -103,6 +111,9 @@ export class ZodulaDoctypeInsert<
           }
         );
       }
+
+      // validate id uniqueness
+      await this.validateIdUniqueness(db, doctype, prepared);
 
       // Execute the insert process
       return await this.executeInsert(db, doctype, prepared);
@@ -411,6 +422,11 @@ export class ZodulaDoctypeInsert<
       doc: prepared,
       input: this.input,
     });
+    await loader.from("doctype").trigger(this.doctypeName, "before_save", {
+      old: undefined as any,
+      doc: prepared,
+      input: this.input,
+    });
   }
 
   private async executeAfterTriggers(result: Zodula.SelectDoctype<TN>) {
@@ -420,6 +436,11 @@ export class ZodulaDoctypeInsert<
       input: this.input,
     });
     await loader.from("doctype").trigger(this.doctypeName, "after_insert", {
+      old: undefined as any,
+      doc: result,
+      input: this.input,
+    });
+    await loader.from("doctype").trigger(this.doctypeName, "after_save", {
       old: undefined as any,
       doc: result,
       input: this.input,

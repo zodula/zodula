@@ -14,7 +14,7 @@ export const SelectPlugin = new FormPlugin({
                 label: t(option),
                 value: option,
             })) || [];
-        }, [props.fieldOptions.options]);
+        }, [props.fieldOptions.options, t]);
 
         return (
             <Select

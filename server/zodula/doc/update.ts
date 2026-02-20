@@ -425,6 +425,15 @@ export class ZodulaDoctypeUpdate<
     return newId;
   }
 
+  private async validateIdUniqueness(db: Bunely, doctype: DoctypeMetadata, prepared: Zodula.SelectDoctype<TN>) {
+    const id = prepared.id
+    const exists = await db.all(`SELECT id FROM "${doctype.name}" WHERE id = ?`, [id])
+    if (exists.length > 1) {
+      // more than one because we have changed the id
+      throw new ErrorWithCode(`ID ${id} already exists`, { status: 400 })
+    }
+  }
+
   private async executeUpdate(
     db: any,
     doctype: DoctypeMetadata,
@@ -445,6 +454,8 @@ export class ZodulaDoctypeUpdate<
     const relationshipData = this.extractRelationshipData(doctype, prepared);
     // !doctype.config.is_child_doctype && console.log("relationshipData", JSON.stringify(relationshipData, null, 2), "id", prepared.id);
     // Update main document
+    // validate id uniqueness
+    await this.validateIdUniqueness(db, doctype, prepared);
     const result = await this.updateMainDocument(db, doctype, prepared);
 
     // Update relationships
@@ -590,7 +601,7 @@ export class ZodulaDoctypeUpdate<
       );
 
     const query = `UPDATE "${doctype?.name}" SET ${setClause} WHERE id = ?`;
-    await db.run(query, [...values, this.oldId]);
+    await db.run(query, [...values, this.newId]);
     await db.run(`UPDATE "${this.doctypeName}" SET id = ? WHERE id = ?`, [this.newId, this.oldId]);
 
     const returned = await zodula.doctype(this.doctypeName).get(this.newId).bypass(true).fields(this.options.fields as any[]);

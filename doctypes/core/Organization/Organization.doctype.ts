@@ -2,13 +2,15 @@ export default $doctype<"zodula__Organization">({
     name: {
         type: "Text",
         label: "Name",
-        required: 1
+        required: 1,
+        only_once: 1
     },
     abbr: {
         type: "Text",
         label: "Abbreviation",
         required: 1,
-        unique: 1
+        unique: 1,
+        only_once: 1
     },
     tax_id: {
         type: "Text",

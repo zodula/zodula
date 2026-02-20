@@ -301,12 +301,21 @@ function CustomDialog({
 }) {
   const { Component, options, initialData } = dialog.data
   const showCloseButton = options?.showCloseButton ?? true
+  const w = options?.width
+  const hasWidth = w != null
+  const widthStyle = hasWidth ? { width: typeof w === "number" ? `${w}px` : w } : undefined
 
   return (
     <Dialog open={dialog.isOpen} onClose={() => onClose()}>
       <div className="zd:fixed zd:inset-0 zd:bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" aria-hidden="true" />
       <div className="zd:fixed zd:inset-0 zd:flex zd:items-center zd:justify-center zd:p-4">
-        <DialogContent className="zd:rounded zd:bg-background zd:shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 zd:max-w-4xl zd:max-h-[90vh] zd:w-fit zd:flex zd:flex-col">
+        <DialogContent
+          className={cn(
+            "zd:rounded zd:bg-background zd:shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 zd:max-h-[90vh] zd:flex zd:flex-col",
+            !hasWidth && "zd:max-w-4xl zd:w-fit"
+          )}
+          style={widthStyle ?? undefined}
+        >
           {(options?.title || options?.description) && (
             <div className="zd:flex-shrink-0 zd:p-6 zd:pb-4">
               {options?.title && (
@@ -475,6 +484,8 @@ function popup<T = any, I = any>(
     title?: string
     description?: string
     showCloseButton?: boolean
+    /** Dialog width: number (px) or CSS value (e.g. "80vw", "600px") */
+    width?: number | string
   },
   initialData?: I
 ): Promise<T | null> {

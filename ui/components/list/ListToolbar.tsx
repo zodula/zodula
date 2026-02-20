@@ -31,6 +31,8 @@ interface ListToolbarProps {
     // Additional props for FilterPopup
     allFields?: Zodula.Field[];
     doctype?: Zodula.DoctypeName;
+    /** When true, filters apply on every change (no Apply button) */
+    filterApplyImmediately?: boolean;
 }
 
 export function ListToolbar({
@@ -55,7 +57,8 @@ export function ListToolbar({
     hasCustomColumns = false,
     // Additional props for FilterPopup
     allFields = [],
-    doctype
+    doctype,
+    filterApplyImmediately = false,
 }: ListToolbarProps) {
     const { t } = useTranslation()
     return (
@@ -88,6 +91,7 @@ export function ListToolbar({
                         onFilterPopupOpenChange?.(e);
                     }}
                     doctype={doctype}
+                    applyImmediately={filterApplyImmediately}
                 />
 
                 {hasActiveFilter && (

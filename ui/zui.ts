@@ -190,40 +190,6 @@ export const useUIScriptStore = create<UIScriptStore>((set, get) => ({
 }));
 
 // ============================================================================
-// Form Object (Frappe-style)
-// ============================================================================
-
-export interface Form<DN extends Zodula.DoctypeName = Zodula.DoctypeName> {
-  doc: Partial<Zodula.SelectDoctype<DN>>;
-  doctype: DN;
-  is_new: () => boolean;
-  is_dirty: () => boolean;
-  get_value: <K extends keyof Zodula.SelectDoctype<DN>>(fieldname: K) => Zodula.SelectDoctype<DN>[K] | undefined;
-  set_value: <K extends keyof Zodula.SelectDoctype<DN>>(fieldname: K, value: Zodula.SelectDoctype<DN>[K]) => void;
-  set_df_property: (fieldname: string, property: string, value: any) => void;
-  set_df_child_extend_property: (childField: string, fieldName: string, property: string, value: any) => void;
-  set_df_child_table_property: (childField: string, idx: number | null, fieldName: string, property: string, value: any) => void;
-  parent: () => FormContext<any> | null;
-  get_doc: () => Partial<Zodula.SelectDoctype<DN>>;
-  refresh: () => void;
-  add_fetch: (source_field: string, target_field: string, fetch_path: string) => void;
-  msgprint: (message: string, type?: 'error' | 'warning' | 'info') => void;
-  // Reference table helpers
-  get_reference_table_value: (field: string, childField: string, idx: number) => any;
-  set_reference_table_value: (field: string, childField: string, idx: number, value: any) => void;
-  // Extend helpers
-  get_extend_value: (field: string, childField: string) => any;
-  set_extend_value: (field: string, childField: string, value: any) => void;
-  // Field change specific
-  docfield?: {
-    fieldname: string;
-    value: any;
-    old_value: any;
-  };
-  idx?: number; // Row index for reference table fields
-}
-
-// ============================================================================
 // Event Type Definitions
 // ============================================================================
 
@@ -403,15 +369,28 @@ function mapEventType(eventType: string): UIScriptEventType {
   return mapping[eventType] || (eventType as UIScriptEventType);
 }
 
-// Create Form object from context
+// Create Form object from context (merged Form + FormContext)
 function createFormObject<DN extends Zodula.DoctypeName>(
   context: UIScriptContext<DN>
 ): Form<DN> {
   const doc = (context.getValues?.() || context.formData || {}) as Partial<Zodula.SelectDoctype<DN>>;
-  
+  const parent = (context as any).parentContext as FormContext<any> | undefined;
+
   return {
     doc,
     doctype: context.doctype,
+    isCreate: context.isCreate ?? false,
+    isEdit: !!context.isEdit,
+    getValue: context.getValue?.bind(context) as any,
+    setValue: context.setValue?.bind(context) as any,
+    set_child_table_value: (context as any).set_child_table_value ?? parent?.set_child_table_value,
+    set_child_extend_value: (context as any).set_child_extend_value ?? parent?.set_child_extend_value,
+    addBadge: (context as any).addBadge ?? parent?.addBadge,
+    addSecondaryButton: (context as any).addSecondaryButton ?? parent?.addSecondaryButton,
+    navigate: (context as any).navigate ?? parent?.navigate,
+    org: (context as any).org ?? parent?.org,
+    showDialog: (context as any).showDialog ?? parent?.showDialog,
+    open_multi_select_dialog: (context as any).open_multi_select_dialog ?? parent?.open_multi_select_dialog,
     is_new: () => context.isCreate || false,
     is_dirty: () => {
       // Simple dirty check - can be enhanced
@@ -541,7 +520,11 @@ export interface FormContext<DN extends Zodula.DoctypeName = Zodula.DoctypeName>
   isCreate: boolean;
   isEdit: boolean;
   getValue: <K extends keyof Zodula.SelectDoctype<DN>>(fieldName: K) => Zodula.SelectDoctype<DN>[K] | undefined;
-  setValue: <K extends keyof Zodula.SelectDoctype<DN>>(fieldName: K, value: Zodula.SelectDoctype<DN>[K]) => void;
+  setValue: <K extends keyof Zodula.SelectDoctype<DN>>(fieldName: K, value: Zodula.SelectDoctype<DN>[K]) => void | Promise<void>;
+  /** Set reference table rows and fill fetch_from from linked docs. Prefer over setValue for child tables. */
+  set_child_table_value?: (fieldName: string, rows: any[]) => Promise<void>;
+  /** Set extend field value (object of child field values). */
+  set_child_extend_value?: (fieldName: string, data: Record<string, any>) => void;
   addBadge: (
     fieldName: keyof Zodula.SelectDoctype<DN> | string, 
     config: { 
@@ -567,7 +550,40 @@ export interface FormContext<DN extends Zodula.DoctypeName = Zodula.DoctypeName>
   ) => void;
   navigate: (path: string, options?: { state?: any }) => void;
   org?: string;
+  showDialog?: (component: any, dialogProps: any) => Promise<any>;
+  open_multi_select_dialog?: (
+    doctype: Zodula.DoctypeName,
+    options?: {
+      title?: string;
+      defaultFilters?: any[];
+      limit?: number;
+      width?: number | string;
+      list_view_fields?: string[];
+    }
+  ) => Promise<string[] | null>;
+  // Form (Frappe-style) API – same object can be used as context or frm
+  get_value: <K extends keyof Zodula.SelectDoctype<DN>>(fieldname: K) => Zodula.SelectDoctype<DN>[K] | undefined;
+  set_value: <K extends keyof Zodula.SelectDoctype<DN>>(fieldname: K, value: Zodula.SelectDoctype<DN>[K]) => void;
+  set_df_property: (fieldname: string, property: string, value: any) => void;
+  set_df_child_extend_property: (childField: string, fieldName: string, property: string, value: any) => void;
+  set_df_child_table_property: (childField: string, idx: number | null, fieldName: string, property: string, value: any) => void;
+  parent: () => FormContext<any> | null;
+  get_doc: () => Partial<Zodula.SelectDoctype<DN>>;
+  refresh: () => void;
+  add_fetch: (source_field: string, target_field: string, fetch_path: string) => void;
+  msgprint: (message: string, type?: "error" | "warning" | "info") => void;
+  get_reference_table_value?: (field: string, childField: string, idx: number) => any;
+  set_reference_table_value?: (field: string, childField: string, idx: number, value: any) => void;
+  get_extend_value?: (field: string, childField: string) => any;
+  set_extend_value?: (field: string, childField: string, value: any) => void;
+  docfield?: { fieldname: string; value: any; old_value: any };
+  idx: number | undefined;
+  is_new: () => boolean;
+  is_dirty: () => boolean;
 }
+
+/** Merged with FormContext: use FormContext<DN> for both context and frm. Form is an alias. */
+export type Form<DN extends Zodula.DoctypeName = Zodula.DoctypeName> = FormContext<DN>;
 
 // ============================================================================
 // ZUI Class - Type-Safe API

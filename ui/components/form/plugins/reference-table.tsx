@@ -1,7 +1,9 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FormPlugin } from "../plugin";
-import { Pencil, PlusIcon, GripVertical, X } from "lucide-react";
+import { Pencil, PlusIcon, GripVertical, X, ArrowUpDown } from "lucide-react";
 import { Button } from "../../ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover";
+import { Select } from "../../ui/select";
 import { FormControl } from "../../ui/form-control";
 import { Form } from "../form";
 import { useDocList } from "../../../hooks/use-doc-list";
@@ -903,6 +905,31 @@ export const ReferenceTablePlugin = new FormPlugin({
             field.name !== 'idx' // Hide idx field as it's handled separately
         );
 
+        const [sortField, setSortField] = useState<string | null>(null);
+        const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+        const [sortOpen, setSortOpen] = useState(false);
+
+        const handleApplySort = () => {
+            if (!sortField || tableData.length === 0) return;
+            const cmp = (a: any, b: any) => {
+                const va = a?.[sortField];
+                const vb = b?.[sortField];
+                const empty = (v: any) => v === undefined || v === null || v === "";
+                if (empty(va) && empty(vb)) return 0;
+                if (empty(va)) return sortOrder === "asc" ? 1 : -1;
+                if (empty(vb)) return sortOrder === "asc" ? -1 : 1;
+                if (typeof va === "number" && typeof vb === "number") return sortOrder === "asc" ? va - vb : vb - va;
+                const sa = String(va);
+                const sb = String(vb);
+                const r = sa.localeCompare(sb, undefined, { numeric: true });
+                return sortOrder === "asc" ? r : -r;
+            };
+            const sorted = [...tableData].sort(cmp);
+            const withIdx = sorted.map((row, i) => ({ ...row, idx: i }));
+            props.onChange?.(withIdx);
+            setSortOpen(false);
+        };
+
         // Create id field for navigation
         // const idField = useMemo(() => ({
         //     name: 'id',
@@ -1046,11 +1073,49 @@ export const ReferenceTablePlugin = new FormPlugin({
                                 {t("Add Row")}
                             </Button>
                         )}
+                        {tableData.length > 0 && (
+                            <Popover open={sortOpen} onOpenChange={setSortOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button variant="subtle" size="sm">
+                                        <ArrowUpDown className="zd:w-4 zd:h-4 zd:mr-1" />
+                                        {t("Sort")}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="zd:w-64 zd:p-3 zd:space-y-3" align="start">
+                                    <div className="zd:space-y-2">
+                                        <label className="zd:text-sm zd:font-medium">{t("Sort by")}</label>
+                                        <Select
+                                            displayMode="label"
+                                            options={[
+                                                { value: "", label: t("Select field") },
+                                                ...displayFields.map((f) => ({ value: f.name, label: t(f.label || f.name) })),
+                                            ]}
+                                            value={sortField ?? ""}
+                                            onChange={(v) => setSortField(v || null)}
+                                            className="zd:w-full"
+                                        />
+                                    </div>
+                                    <div className="zd:space-y-2">
+                                        <label className="zd:text-sm zd:font-medium">{t("Order")}</label>
+                                        <Select
+                                            displayMode="label"
+                                            options={[
+                                                { value: "asc", label: t("Ascending") },
+                                                { value: "desc", label: t("Descending") },
+                                            ]}
+                                            value={sortOrder}
+                                            onChange={(v) => setSortOrder((v as "asc" | "desc") || "asc")}
+                                            className="zd:w-full"
+                                        />
+                                    </div>
+                                    <Button size="sm" className="zd:w-full" onClick={handleApplySort} disabled={!sortField}>
+                                        {t("Apply")}
+                                    </Button>
+                                </PopoverContent>
+                            </Popover>
+                        )}
                     </div>
                     <div className="zd:flex zd:items-center zd:gap-2">
-                        {/* <span className="zd:text-sm zd:text-muted-foreground">
-                        {tableData.length} {tableData.length === 1 ? 'row' : 'rows'}
-                    </span> */}
                     </div>
                 </div>
             </div>
