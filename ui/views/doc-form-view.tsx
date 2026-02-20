@@ -72,6 +72,8 @@ interface DocFormViewProps {
   resetForm?: boolean;
 }
 
+let checked = false;
+
 // Helper function to compare values (handles different types)
 // Moved outside component to prevent recreation on every render
 function valuesAreEqual(val1: any, val2: any): boolean {
@@ -115,7 +117,6 @@ export function DocFormView({
   cbUrl,
   fromField,
   fromDoc,
-  resetForm,
   mode = "edit",
 }: DocFormViewProps) {
   // ===== ROUTER & STATE =====
@@ -311,30 +312,17 @@ export function DocFormView({
   }, []);
 
   // Function to set child Reference Table field property (used by UI scripts)
-  // If idx is null, apply to all rows
+  // If idx is null, apply to all rows. Updates are immutable so React re-renders with new filters.
   const setChildTableProperty = useCallback((childField: string, idx: number | null, fieldName: string, property: string, value: any) => {
     setChildTableFieldPropertyOverrides((prev) => {
-      const newOverrides = { ...prev };
-      if (!newOverrides[childField]) {
-        newOverrides[childField] = {};
-      }
-      
       const targetIdx = idx === null ? -1 : idx;
-      const childFieldOverrides = newOverrides[childField];
-      
-      if (!childFieldOverrides) {
-        return newOverrides;
-      }
-      
-      if (!childFieldOverrides[targetIdx]) {
-        childFieldOverrides[targetIdx] = {};
-      }
-      if (!childFieldOverrides[targetIdx]![fieldName]) {
-        childFieldOverrides[targetIdx]![fieldName] = {};
-      }
-      childFieldOverrides[targetIdx]![fieldName]![property] = value;
-      
-      return newOverrides;
+      const prevChild = prev[childField] ?? {};
+      const prevIdx = prevChild[targetIdx] ?? {};
+      const prevField = prevIdx[fieldName] ?? {};
+      const newField = { ...prevField, [property]: value };
+      const newIdx = { ...prevIdx, [fieldName]: newField };
+      const newChild = { ...prevChild, [targetIdx]: newIdx };
+      return { ...prev, [childField]: newChild };
     });
   }, []);
 
@@ -1051,7 +1039,7 @@ export function DocFormView({
     await new Promise(resolve => setTimeout(resolve, 0));
     
     // Step 3: Apply default values, saved values, and prefill after reset
-    if (mode === "create" && fields && doctypeDoc) {
+    if (mode === "create" && fields?.length > 0 && doctypeDoc) {
       const defaultValues: Record<string, any> = {};
 
       // If prefill exists, clear saved values first (reset before prefill)
@@ -1531,13 +1519,24 @@ export function DocFormView({
   // ===== COMPUTED VALUES =====
   const doctypeLabel = doctypeDoc?.label || doctype;
   const isSystemGenerated = doctypeDoc?.is_system_generated === 1;
-
   useEffect(() => {
-    if(location.state?.resetForm) {
+    if(!doctypeDoc) return;
+    if(fields?.length <= 0) return;
+    if(!mode) return;
+    if (checked) return;
+    checked = true; 
+    const navEntry = performance.getEntriesByType("navigation")[0] as any
+    let type = "reload"
+    if (navEntry?.type === "reload") {
+      type = "reload";
+    } else {
+      type = "navigate";
+    }
+    if(location.state?.resetForm || type === "reload") {
       handleResetForm();
       replace(pathname, { state: { ...location.state, resetForm: false } });
     }
-  }, [location.state]);
+  }, [location.state, doctype, mode, doctypeDoc, fields, handleResetForm]);
 
   // Always reset form when in create mode
   const createModeResetRef = useRef<string | null>(null);

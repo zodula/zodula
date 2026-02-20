@@ -670,7 +670,7 @@ const Select = ({
                     <div
                       key={option.value}
                       className={cn(
-                        "zd:px-3 zd:py-2 zd:text-sm zd:cursor-pointer zd:transition-colors",
+                        "zd:min-h-10 zd:px-3 zd:py-2 zd:text-sm zd:cursor-pointer zd:transition-colors",
                         "zd:hover:bg-muted zd:focus:bg-muted zd:focus:outline-none",
                         option.disabled
                           ? "zd:opacity-50 zd:cursor-not-allowed zd:hover:bg-transparent"

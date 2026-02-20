@@ -1,4 +1,4 @@
-import { format as dateFormat, formatDistanceToNow, isValid, parse } from "date-fns"
+import { format as dateFormat, formatDistanceToNow, isValid, parse, addDays as dateFnsAddDays, subDays } from "date-fns"
 import { ClientFieldHelper } from "./field"
 
 export let BASE_URL = "http://localhost:3000"
@@ -30,6 +30,18 @@ export function formatTimeAgo(dateString: string) {
     if (!date) return '-';
 
     return formatDistanceToNow(date);
+}
+
+/** Add days to a date. Returns a Date. */
+export function addDays(date: Date | string, days: number): Date {
+    const d = typeof date === "string" ? new Date(date) : date;
+    return dateFnsAddDays(d, days);
+}
+
+/** Subtract days from a date. Returns a Date. */
+export function minusDays(date: Date | string, days: number): Date {
+    const d = typeof date === "string" ? new Date(date) : date;
+    return subDays(d, days);
 }
 
 export function parseDate(
@@ -106,6 +118,10 @@ export function getDefaultValue(field: Zodula.Field) {
             const month = String(now.getUTCMonth() + 1).padStart(2, '0');
             const year = now.getUTCFullYear();
             return `${year}-${month}-${day}`;
+        }
+
+        if(field?.type === "Check") {
+            return parseInt(field.default);
         }
     }
 

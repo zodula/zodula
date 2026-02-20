@@ -7,7 +7,7 @@ import { loader } from "./loader"
 
 import { extendAction } from "./serve/extend/action";
 import { extendFile } from "./serve/extend/file";
-import { on } from "./loader/plugins/extend";
+import { on, property } from "./loader/plugins/extend";
 import { extendPublic } from "./serve/extend/public";
 import extendRealtime from "./serve/extend/realtime";
 import { doMigrate } from "../commands/migrate";
@@ -18,7 +18,6 @@ import { OrgTier } from "./serve/extend/org-tier";
 
 async function startServer() {
     await startup()
-    await doMigrate("main")
     const server = new BXO()
     .onError((error) => {
         console.error(error)
@@ -48,9 +47,12 @@ async function startServer() {
     for (const _extend of _extends) {
         await _extend.handler({
             bxo: server,
-            on: on
+            on: on,
+            property: property
         })
     }
+
+    await doMigrate("main")
 
     server.start()
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FormPlugin } from "../plugin";
-import { Pencil, PlusIcon, GripVertical, X, ArrowUpDown } from "lucide-react";
+import { Pencil, PlusIcon, GripVertical, X, ArrowUpDown, Info } from "lucide-react";
+import { Tooltip } from "../../ui/tooltip";
 import { Button } from "../../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover";
 import { Select } from "../../ui/select";
@@ -81,6 +82,10 @@ const InlineFieldEditor = ({ field, value, onChange, formData, docId, readonly, 
             : childTableFieldPropertyOverrides[childFieldName]?.[-1]) // Check for "all rows" override
         : undefined;
     
+    // Apply readonly from row override (e.g. set_df_child_table_property(..., "price_list", "readonly", 1))
+    const overrideReadonly = rowOverrides?.[field.name]?.readonly;
+    const effectiveReadonly = fieldReadonly || overrideReadonly === 1 || overrideReadonly === "1";
+    
     // Convert row overrides to the format expected by FormControl (childExtendFieldPropertyOverrides)
     // Structure: { fieldName: { property: value } }
     const extendOverrides = rowOverrides ? Object.keys(rowOverrides).reduce((acc, fieldName) => {
@@ -104,9 +109,10 @@ const InlineFieldEditor = ({ field, value, onChange, formData, docId, readonly, 
             hideFormControl={true}
             formData={formData}
             required={field.required === 1}
-            readonly={fieldReadonly}
+            readonly={effectiveReadonly}
             fieldPath={fieldPath}
             childExtendFieldPropertyOverrides={extendOverrides}
+            childTableFieldPropertyOverrides={childTableFieldPropertyOverrides}
         />
     );
 };
@@ -955,9 +961,16 @@ export const ReferenceTablePlugin = new FormPlugin({
                             </th> */}
                                 {displayFields.map((field) => (
                                     <th key={field.name} className="zd:px-2 zd:py-2 zd:font-medium zd:text-left">
-                                        <span className="zd:flex zd:items-center">
+                                        <span className="zd:flex zd:items-center zd:gap-1">
                                             {t(field.label || field.name)}
-                                            {field.required === 1 && <span className="zd:text-red-500 zd:ml-1 no-print">*</span>}
+                                            {field.required === 1 && <span className="zd:text-red-500 zd:ml-0.5 no-print">*</span>}
+                                            {field.description && (
+                                                <Tooltip content={field.description} side="top" align="start">
+                                                    <span className="zd:inline-flex zd:items-center zd:text-muted-foreground zd:cursor-help no-print">
+                                                        <Info className="zd:h-3.5 zd:w-3.5" />
+                                                    </span>
+                                                </Tooltip>
+                                            )}
                                         </span>
                                     </th>
                                 ))}

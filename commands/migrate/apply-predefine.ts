@@ -136,6 +136,8 @@ async function upsertFieldsBatch(
       in_quick_entry: fieldSchema.in_quick_entry ? 1 : 0 || null,
       perm_level: fieldSchema.perm_level || "0",
       only_once: fieldSchema.only_once ? 1 : 0 || null,
+      no_translate: fieldSchema.no_translate ? 1 : 0 || null,
+      organization_abbr: "SYS",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Field">>;
 
@@ -239,6 +241,7 @@ async function upsertRelativesBatch(
       idx: relativeIdx++,
       vector: "[]",
       organization: "System Panel",
+      organization_abbr: "SYS",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype Relative">>;
 
@@ -335,6 +338,7 @@ async function upsertChildrenBatch(
       idx: childIdx++,
       vector: "[]",
       organization: "System Panel",
+      organization_abbr: "SYS",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype Children">>;
 
@@ -435,6 +439,7 @@ async function upsertApp(
       idx,
       vector: "[]",
       organization: "System Panel",
+      organization_abbr: "SYS",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__App">>;
 
@@ -569,6 +574,7 @@ async function upsertDoctype(
       additional_connections: doctype.config.additional_connections || null,
       insert_tier_required: doctype.config.insert_tier_required as "0" | "1" | "2" | "3" | "4" | "5" | null,
       organization: "System Panel",
+      organization_abbr: "SYS",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype">>;
 

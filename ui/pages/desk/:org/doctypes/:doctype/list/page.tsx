@@ -195,7 +195,7 @@ export default function DoctypeListPage() {
             doctype,
             selected: Array.from(selected)
         }) || {}
-        const { app: selectedApp, app_field: selectedAppField, fields: selectedFields } = result
+        const { app: selectedApp, app_field: selectedAppField, fields: selectedFields } = result as { app: string, app_field: string, fields: string[] }
         if (selectedFields && (selectedApp || selectedAppField)) {
             await zodula.action("zodula.fixtures.exports", {
                 data: {

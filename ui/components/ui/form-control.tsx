@@ -1,6 +1,8 @@
 import * as React from "react";
+import { Info } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { plugins } from "../form/plugins";
+import { Tooltip } from "./tooltip";
 
 export interface FormControlProps {
   label?: string;
@@ -120,11 +122,6 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
                 onNestedFieldChange={onNestedFieldChange}
                 doctype={doctype}
               />
-              {!!field.description && showDescription && (
-                <p className="zd:text-muted-foreground zd:mt-1">
-                  {field.description}
-                </p>
-              )}
             </div>
           );
         })()
@@ -145,13 +142,20 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
         ref={ref}
       >
         {label && (
-          <div className="zd:flex zd:items-center zd:mb-2 zd:text-sm">
+          <div className="zd:flex zd:items-center zd:gap-1.5 zd:mb-2 zd:text-sm">
             <label className="zd:text-muted-foreground zd:flex zd:items-center">
               {label}
               {!!required && (
                 <span className="zd:text-red-500 zd:ml-1 no-print">*</span>
               )}
             </label>
+            {!!field?.description && showDescription && (
+              <Tooltip content={field.description} side="top" align="center">
+                <span className="zd:inline-flex zd:items-center zd:text-muted-foreground zd:cursor-help no-print">
+                  <Info className="zd:h-3.5 zd:w-3.5" />
+                </span>
+              </Tooltip>
+            )}
           </div>
         )}
 

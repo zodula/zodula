@@ -35,6 +35,7 @@ export * from "./components/ui/tabs";
 export * from "./components/ui/textarea";
 export * from "./components/ui/popit";
 export * from "./components/ui/popover";
+export * from "./components/ui/tooltip";
 export * from "./components/ui/flex";
 export * from "./components/custom/breadcrumb";
 

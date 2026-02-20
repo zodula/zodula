@@ -10,6 +10,7 @@ const DEBUG = process.env.DEBUG === "true"
 interface handlerProps {
     bxo: BXO
     on: <DN extends Zodula.DoctypeName>(doctypeName: DN, event: DoctypeEvent, callback: DoctypeEventCallbackByName<DN>) => void
+    property: <DN extends Zodula.DoctypeName, FN extends keyof Zodula.SelectDoctype<DN>, PN extends keyof Zodula.Field<Zodula.FieldType, 0 | 1>>(doctypeName: DN, fieldname: FN, propertyName: PN, value: Zodula.Field[PN]) => void
 }
 
 export interface ExtendMetadata {
@@ -28,6 +29,10 @@ export const on = <DN extends Zodula.DoctypeName>(doctypeName: DN, event: Doctyp
         event,
         callback
     }
+}
+
+export const property = <DN extends Zodula.DoctypeName, FN extends keyof Zodula.SelectDoctype<DN>, PN extends keyof Zodula.Field<Zodula.FieldType, 0 | 1>>(doctypeName: DN, fieldname: FN, propertyName: PN, value: Zodula.Field[PN]) => {
+    loader.from("doctype").setProperty(doctypeName, fieldname as any, propertyName as any, value as any);
 }
 
 export class ExtendLoader implements BasePlugin<ExtendMetadata> {

@@ -575,6 +575,17 @@ export class DoctypeLoader implements DoctypePlugin {
         return doctype;
     }
 
+    setProperty<DN extends Zodula.DoctypeName, FN extends keyof Zodula.SelectDoctype<DN>, PN extends keyof Zodula.Field<Zodula.FieldType, 0 | 1>>(doctypeName: DN, fieldname: FN, propertyName: PN, value: Zodula.Field[PN]) {
+        for (const doctype of this.doctypes) {
+            if (doctype.name === doctypeName) {
+                if(!doctype.schema.fields[fieldname as keyof typeof doctype.schema.fields]) {
+                    doctype.schema.fields[fieldname as keyof typeof doctype.schema.fields] = {} as any;
+                }
+                (doctype.schema.fields[fieldname as keyof typeof doctype.schema.fields] as any)[propertyName] = value as never;
+            }
+        }
+    }
+
     getAllChildren(): DoctypeChild[] {
         return this.doctypes.flatMap((doctype) => doctype.children || []);
     }

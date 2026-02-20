@@ -152,6 +152,10 @@ export default $doctype({
     only_once: {
         type: "Check",
         label: "Only Once"
+    },
+    no_translate: {
+        type: "Check",
+        label: "No Translate"
     }
 
 }, {
