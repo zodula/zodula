@@ -27,6 +27,7 @@ function Dialog({ open = false, onClose, children, className = "" }: DialogProps
       className={cn("zd:fixed zd:inset-0 zd:z-50", className)}
       role="dialog"
       aria-modal="true"
+      data-state={open ? "open" : "closed"}
     >
       {children}
     </div>
@@ -38,9 +39,10 @@ interface DialogContentProps {
   children: React.ReactNode
   className?: string
   style?: React.CSSProperties
+  "data-state"?: "open" | "closed"
 }
 
-function DialogContent({ children, className = "", style }: DialogContentProps) {
+function DialogContent({ children, className = "", style, "data-state": dataState }: DialogContentProps) {
   return (
     <div
       className={cn(
@@ -48,6 +50,7 @@ function DialogContent({ children, className = "", style }: DialogContentProps) 
         className
       )}
       style={style}
+      {...(dataState != null ? { "data-state": dataState } : {})}
     >
       {children}
     </div>

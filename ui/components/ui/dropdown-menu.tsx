@@ -45,7 +45,7 @@ const DropdownMenuSubContent = React.forwardRef<
   <DropdownMenuPrimitive.SubContent
     ref={ref}
     className={cn(
-      "zd:z-50 zd:min-w-[8rem] zd:overflow-hidden zd:rounded-md zd:border zd:bg-popover zd:text-popover-foreground zd:shadow-lg zd:data-[state=open]:zd:animate-in zd:data-[state=closed]:zd:animate-out zd:data-[state=closed]:zd:fade-out-0 zd:data-[state=open]:zd:fade-in-0 zd:data-[state=closed]:zd:zoom-out-95 zd:data-[state=open]:zd:zoom-in-95 zd:data-[side=bottom]:zd:slide-in-from-top-2 zd:data-[side=left]:zd:slide-in-from-right-2 zd:data-[side=right]:zd:slide-in-from-left-2 zd:data-[side=top]:zd:slide-in-from-bottom-2",
+      "zd:z-50 zd:min-w-[8rem] zd:overflow-hidden zd:rounded-md zd:border zd:bg-popover zd:text-popover-foreground zd:shadow-lg zd:data-[state=open]:animate-in zd:data-[state=closed]:animate-out zd:data-[state=closed]:fade-out-0 zd:data-[state=open]:fade-in-0 zd:data-[state=closed]:zoom-out-95 zd:data-[state=open]:zoom-in-95 zd:data-[side=bottom]:slide-in-from-top-2 zd:data-[side=left]:slide-in-from-right-2 zd:data-[side=right]:slide-in-from-left-2 zd:data-[side=top]:slide-in-from-bottom-2 zd:origin-(--radix-dropdown-menu-sub-content-transform-origin) zd:outline-hidden",
       className
     )}
     {...props}
@@ -63,7 +63,7 @@ const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        "zd:z-50 zd:min-w-[8rem] zd:overflow-hidden zd:rounded-md zd:border zd:bg-popover zd:text-popover-foreground zd:shadow-md zd:data-[state=open]:zd:animate-in zd:data-[state=closed]:zd:animate-out zd:data-[state=closed]:zd:fade-out-0 zd:data-[state=open]:zd:fade-in-0 zd:data-[state=closed]:zd:zoom-out-95 zd:data-[state=open]:zd:zoom-in-95 zd:data-[side=bottom]:zd:slide-in-from-top-2 zd:data-[side=left]:zd:slide-in-from-right-2 zd:data-[side=right]:zd:slide-in-from-left-2 zd:data-[side=top]:zd:slide-in-from-bottom-2",
+        "zd:z-50 zd:min-w-[8rem] zd:overflow-hidden zd:rounded-md zd:border zd:bg-popover zd:text-popover-foreground zd:shadow-md zd:data-[state=open]:animate-in zd:data-[state=closed]:animate-out zd:data-[state=closed]:fade-out-0 zd:data-[state=open]:fade-in-0 zd:data-[state=closed]:zoom-out-95 zd:data-[state=open]:zoom-in-95 zd:data-[side=bottom]:slide-in-from-top-2 zd:data-[side=left]:slide-in-from-right-2 zd:data-[side=right]:slide-in-from-left-2 zd:data-[side=top]:slide-in-from-bottom-2 zd:origin-(--radix-dropdown-menu-content-transform-origin) zd:outline-hidden",
         className
       )}
       {...props}

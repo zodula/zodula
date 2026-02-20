@@ -1081,8 +1081,9 @@ export const ReferenceTablePlugin = new FormPlugin({
                             <Button
                                 onClick={handleAddRow}
                                 variant={"subtle"}
+                                size="sm"
                             >
-                                <PlusIcon className="zd:w-4 zd:h-4 zd:mr-1" />
+                                <PlusIcon className="zd:w-4" />
                                 {t("Add Row")}
                             </Button>
                         )}
@@ -1090,7 +1091,7 @@ export const ReferenceTablePlugin = new FormPlugin({
                             <Popover open={sortOpen} onOpenChange={setSortOpen}>
                                 <PopoverTrigger asChild>
                                     <Button variant="subtle" size="sm">
-                                        <ArrowUpDown className="zd:w-4 zd:h-4 zd:mr-1" />
+                                        <ArrowUpDown className="zd:w-4" />
                                         {t("Sort")}
                                     </Button>
                                 </PopoverTrigger>

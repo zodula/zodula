@@ -4,6 +4,7 @@ import {
   ChevronUpIcon,
   Heart,
   MessageCircle,
+  SearchIcon,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
@@ -69,25 +70,23 @@ export function ListTable<TDoc extends Record<string, any>>({
     setSelected(newSelected);
   };
   return (
-    <div className="zd:w-full zd:overflow-auto">
+    <div className="zd:w-full zd:overflow-auto zd:shadow zd:rounded zd:border zd:min-h-[50vh]">
       <table className="zd:w-full zd:text-sm">
-        <thead>
+        <thead className="zd:border-b zd:border-dashed">
           <tr className="zd:text-left">
             {/* Checkbox column */}
-            <th className="zd:sticky zd:left-0 zd:px-3 zd:py-1 zd:font-medium zd:w-12 zd:bg-muted zd:rounded-l-lg">
+            <th className="zd:px-3 zd:py-1 zd:font-medium zd:w-12 zd:pl-5">
               <Checkbox checked={selectAll} onCheckedChange={handleSelectAll} />
             </th>
             {/* Data columns */}
             {columns.map((col, index) => {
               const isActive = sort === String(col.key);
-              const isDisplayField = index === 0;
               // const arrow = isActive ? (order === "asc" ? "▲" : "▼") : "";
               return (
                 <th
                   key={String(col.key)}
                   className={cn(
-                    "zd:px-2 zd:py-2 zd:font-medium zd:whitespace-nowrap zd:bg-muted zd:min-w-[100px]",
-                    isDisplayField ? "zd:sticky zd:left-11" : ""
+                    "zd:px-2 zd:py-2 zd:font-medium zd:whitespace-nowrap zd:min-w-[100px]",
                   )}
                 >
                   {col.sortable ? (
@@ -117,9 +116,9 @@ export function ListTable<TDoc extends Record<string, any>>({
             })}
             {/* Count column */}
             <th
-              className="zd:sticky zd:right-0 zd:px-3 zd:py-1 zd:font-medium zd:text-right zd:bg-muted zd:min-w-[100px] zd:rounded-r-lg"
+              className="zd:px-3 zd:py-1 zd:font-medium zd:text-right zd:min-w-[100px] zd:group-hover:bg-muted/30 zd:pr-5"
             >
-              {count ? `${docs.length} of ${count}` : ``}
+              {count ? `${docs.length} of ${count}` : ` 0 of 0`}
             </th>
           </tr>
         </thead>
@@ -130,19 +129,25 @@ export function ListTable<TDoc extends Record<string, any>>({
                 colSpan={columns.length + 2}
                 className="zd:px-3 zd:py-6 zd:text-center zd:text-muted-foreground"
               >
-                {t("No docs")}
+                <div className="zd:flex zd:items-center zd:justify-center zd:gap-2">
+                  <SearchIcon className="zd:w-4 zd:h-4 zd:text-muted-foreground" />
+                  {t("No docs")}
+                </div>
               </td>
             </tr>
           ) : (
             docs.map((doc, idx) => (
               <tr
                 key={idx}
-                className="zd:hover:bg-muted/30 zd:cursor-pointer"
+                className="zd:group zd:h-10 zd:hover:bg-muted/30 zd:cursor-pointer"
                 onClick={() => onRowClick?.(doc)}
               >
                 {/* Checkbox column */}
                 <td
-                  className="zd:z-10 zd:sticky zd:left-0 zd:px-3 zd:py-1 zd:bg-background"
+                  className={cn(
+                    "zd:px-3 zd:py-1 zd:pl-5",
+                    "zd:group-hover:bg-muted/30"
+                  )}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <Checkbox
@@ -161,10 +166,7 @@ export function ListTable<TDoc extends Record<string, any>>({
                     <td
                       key={String(col.key)}
                       className={cn(
-                        "zd:z-10 zd:px-2 zd:py-2 zd:whitespace-nowrap zd:max-w-[200px] zd:bg-background zd:overflow-hidden zd:text-ellipsis",
-                        isDisplayField
-                          ? "zd:sticky zd:left-11 zd:bg-background"
-                          : ""
+                        "zd:z-10 zd:px-2 zd:py-2 zd:whitespace-nowrap zd:max-w-[200px] zd:overflow-hidden zd:text-ellipsis",
                       )}
                     >
                       {(isUndefined || !Render) ? (
@@ -177,7 +179,7 @@ export function ListTable<TDoc extends Record<string, any>>({
                 })}
                 {/* Time column */}
                 <td
-                  className="zd:sticky zd:right-0 zd:px-2 zd:py-1 zd:bg-background zd:text-right zd:text-sm zd:text-muted-foreground"
+                  className="zd:px-3 zd:py-1 zd:text-right zd:text-sm zd:text-muted-foreground zd:pr-5"
                 >
                   <div className="zd:flex zd:items-center zd:justify-end zd:gap-1 zd:whitespace-nowrap">
                     <span>

@@ -108,6 +108,7 @@ const Select = ({
     width: 0,
     maxHeight: "200px",
   });
+  const [dropdownSide, setDropdownSide] = useState<"top" | "bottom">("bottom");
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -233,20 +234,26 @@ const Select = ({
       const dropdownHeight = parseMaxHeight(maxHeight);
       const gap = 4; // Gap between input and dropdown
 
-      // Calculate if dropdown should open above or below
-      const spaceBelow = viewportHeight - rect.bottom - gap;
-      const spaceAbove = rect.top - gap;
+      // Calculate if dropdown should open above or below (default: below; above when not enough space below)
+      const spaceBelow = viewportHeight - rect.bottom - gap - 8;
+      const spaceAbove = rect.top - gap - 8;
       const openAbove = spaceBelow < dropdownHeight && spaceAbove > spaceBelow;
+
+      // Calculate available height for the dropdown (needed before setting top when openAbove)
+      let availableHeight = dropdownHeight;
+      if (openAbove) {
+        availableHeight = Math.min(dropdownHeight, spaceAbove);
+      } else {
+        availableHeight = Math.min(dropdownHeight, spaceBelow);
+      }
+      availableHeight = Math.max(availableHeight, 100);
 
       // Calculate vertical position (fixed positioning uses viewport coordinates)
       let top: number;
       if (openAbove) {
-        // When opening above, position it just above the input with a small gap
-        top = rect.top - gap;
-        // If there's not enough space above, position it at the top of the viewport
-        if (top < 8) {
-          top = 8;
-        }
+        // When opening above, place dropdown so its bottom edge is just above the input (no overlap)
+        top = rect.top - gap - availableHeight;
+        top = Math.max(8, top);
       } else {
         // When opening below, position it just below the input
         top = rect.bottom + gap;
@@ -264,25 +271,13 @@ const Select = ({
         left = 8; // 8px margin from edge
       }
 
-      // Calculate available height for the dropdown
-      let availableHeight = dropdownHeight;
-      if (openAbove) {
-        // When opening above, limit height to available space above the input
-        availableHeight = Math.min(dropdownHeight, rect.top - gap - 8);
-      } else {
-        // When opening below, limit height to available space below the input
-        availableHeight = Math.min(
-          dropdownHeight,
-          viewportHeight - rect.bottom - gap - 8
-        );
-      }
-
       setDropdownPosition({
         top,
         left,
         width: dropdownWidth,
-        maxHeight: `${Math.max(availableHeight, 100)}px`, // Ensure minimum height of 100px
+        maxHeight: `${availableHeight}px`,
       });
+      setDropdownSide(openAbove ? "top" : "bottom");
     }
   };
 
@@ -562,7 +557,7 @@ const Select = ({
     if (allowFreeText) {
       cursor = "zd:cursor-text";
     }
-    if (isInputReadOnly) {
+    if (readOnly) {
       cursor = "zd:cursor-default";
     }
     return cursor;
@@ -583,9 +578,10 @@ const Select = ({
     <div
       ref={containerRef}
       className={cn(
-        "zd:relative",
+        "zd:relative zd:bg-muted zd:rounded",
         cursorClass,
-        className ?? ""
+        className ?? "",
+        readOnly ? "zd:bg-muted/50" : "",
       )}
       onClick={handleContainerClick}
     >
@@ -640,11 +636,14 @@ const Select = ({
         createPortal(
           <div
             ref={dropdownRef}
+            data-side={dropdownSide}
             className={cn(
               "zd:fixed zd:z-50",
               "zd:bg-background zd:border zd:border-border zd:rounded zd:shadow-lg",
               "zd:overflow-y-auto",
               "zd:no-scrollbar", // Hide scrollbar but keep scroll functionality
+              "zd:animate-in zd:fade-in-0 zd:zoom-in-95",
+              "zd:data-[side=bottom]:slide-in-from-top-2 zd:data-[side=top]:slide-in-from-bottom-2",
               dropdownClassName ?? ""
             )}
             style={{

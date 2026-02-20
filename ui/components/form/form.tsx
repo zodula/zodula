@@ -3,6 +3,7 @@ import { Tabs, Section, FormControl } from "@/zodula/ui";
 import { useTranslation } from "../../hooks/use-translation";
 import { zodula } from "@/zodula/client";
 import type { FormContext } from "../../zui";
+import { cn } from "../../lib/utils";
 
 interface LayoutItem {
   type: string;
@@ -323,21 +324,10 @@ export const Form = <T extends Record<string, Zodula.Field>>(
                 {rows.map(({ fields, columns }, rowIndex) => (
                   <div
                     key={rowIndex}
-                    className={`zd:grid zd:gap-4 ${
-                      columns === 1
-                        ? "zd:grid-cols-1"
-                        : columns === 2
-                          ? "zd:grid-cols-2"
-                          : columns === 3
-                            ? "zd:grid-cols-3"
-                            : columns === 4
-                              ? "zd:grid-cols-4"
-                              : columns === 5
-                                ? "zd:grid-cols-5"
-                                : columns === 6
-                                  ? "zd:grid-cols-6"
-                                  : "zd:grid-cols-1"
-                    }`}
+                    className={cn("zd:gap-4 zd:grid", 
+                      columns === 1 ? "zd:grid-cols-1" : columns === 2 ? "zd:grid-cols-2" : columns === 3 ? "zd:grid-cols-3" : columns === 4 ? "zd:grid-cols-4" : columns === 5 ? "zd:grid-cols-5" : columns === 6 ? "zd:grid-cols-6" : "zd:grid-cols-1",
+                      "zd:max-sm:grid-cols-1"
+                    )}
                   >
                     {fields.map(({ key, field: _field }) => {
                       const field = zodula.utils.getFormatFieldConfig(

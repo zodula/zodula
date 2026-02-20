@@ -6,22 +6,22 @@ import { Loader2 } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 const buttonVariants = cva(
-  "zd:inline-flex zd:items-center zd:justify-center zd:rounded zd:transition-colors zd:disabled:pointer-events-none zd:disabled:opacity-50 zd:cursor-pointer zd:h-8 zd:px-3 zd:w-fit zd:gap-2",
+  "zd:inline-flex zd:items-center zd:justify-center zd:rounded zd:shadow-sm zd:transition-[color,box-shadow] zd:disabled:pointer-events-none zd:disabled:opacity-50 zd:cursor-pointer zd:h-8 zd:px-3 zd:w-fit zd:gap-2",
   {
     variants: {
       variant: {
         destructive:
-          "zd:bg-destructive zd:text-primary-foreground zd:hover:bg-destructive/90 zd:active:bg-destructive/95 zd:active:shadow-sm",
+          "zd:bg-destructive zd:text-primary-foreground zd:shadow-sm zd:hover:bg-destructive/90 zd:hover:shadow-md zd:active:bg-destructive/95 zd:active:shadow-inner",
         solid:
-          "zd:bg-primary zd:text-primary-foreground zd:hover:bg-primary/90 zd:active:bg-primary/95 zd:active:shadow-sm",
+          "zd:bg-primary zd:text-primary-foreground zd:shadow-sm zd:hover:bg-primary/90 zd:hover:shadow-md zd:active:bg-primary/95 zd:active:shadow-inner",
         subtle:
-          "zd:bg-secondary zd:text-secondary-foreground zd:hover:bg-secondary/80 zd:active:bg-secondary/90",
+          "zd:bg-secondary zd:text-secondary-foreground zd:shadow-sm zd:hover:bg-secondary/80 zd:hover:shadow zd:active:bg-secondary/90 zd:active:shadow-inner",
         outline:
-          "zd:border zd:border-input zd:bg-background zd:hover:bg-accent zd:hover:text-accent-foreground zd:hover:border-accent zd:active:bg-accent/80",
+          "zd:border zd:border-input zd:bg-background zd:shadow-sm zd:hover:bg-accent zd:hover:text-accent-foreground zd:hover:border-accent zd:hover:shadow zd:active:bg-accent/80 zd:active:shadow-inner",
         ghost:
-          "zd:hover:bg-accent zd:hover:text-accent-foreground zd:active:bg-accent/80",
+          "zd:shadow-none zd:hover:bg-accent zd:hover:text-accent-foreground zd:hover:shadow-sm zd:active:bg-accent/80",
         success:
-          "zd:bg-success zd:text-success-foreground zd:hover:bg-success/90 zd:active:bg-success/95 zd:active:shadow-sm",
+          "zd:bg-success zd:text-success-foreground zd:shadow-sm zd:hover:bg-success/90 zd:hover:shadow-md zd:active:bg-success/95 zd:active:shadow-inner",
       },
       size: {
         default: "zd:h-8 zd:text-base",

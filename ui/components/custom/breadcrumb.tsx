@@ -82,7 +82,7 @@ export const Breadcrumb = ({ className = "", items, showHome = true }: Breadcrum
     const breadcrumbItems = items || generateBreadcrumb()
 
     return (
-        <nav className={cn("zd:flex zd:items-center zd:space-x-1 zd:text-muted-foreground zd:overflow-hidden", className)}>
+        <nav className={cn("zd:font-medium zd:flex zd:items-center zd:space-x-1 zd:text-muted-foreground zd:overflow-hidden", className)}>
             {breadcrumbItems.map((item, index) => (
                 <div key={index} className="zd:flex zd:items-center zd:space-x-1 zd:w-fit">
                     {index > 0 && (

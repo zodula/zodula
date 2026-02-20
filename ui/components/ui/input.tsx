@@ -71,7 +71,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     return (
       <div
         className={cn(
-          "zd:flex zd:h-8 zd:w-full zd:rounded zd:items-center zd:gap-1",
+          "zd:relative zd:flex zd:h-8 zd:w-full zd:rounded zd:items-center zd:gap-1",
           "zd:placeholder:text-muted-foreground/30 zd:focus-visible:outline-none",
           "zd:disabled:cursor-not-allowed",
           "zd:min-w-0 zd:bg-muted",
@@ -82,7 +82,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         style={wrapperStyle}
       >
         {prefix && (
-          <div className="zd:left-2 zd:text-muted-foreground">{prefix}</div>
+          <div className="zd:pl-2 zd:text-muted-foreground">{prefix}</div>
         )}
 
         <input

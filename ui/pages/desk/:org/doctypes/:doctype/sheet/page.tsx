@@ -13,13 +13,13 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/zodula/ui/components/ui/dropdown-menu";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { confirm, popup } from "@/zodula/ui/components/ui/popit";
 import { zodula } from "@/zodula/client";
 import { useAuth } from "@/zodula/ui/hooks/use-auth";
 import { FixtureDialog } from "@/zodula/ui/components/dialogs/fixture-dialog";
 import { toast } from "@/zodula/ui/components/ui/toast";
-import { CSVDialog } from "@/zodula/ui/components/dialogs/csv-dialog";
+import type { SheetViewExportHandle } from "@/zodula/ui/components/list/SheetView";
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
 import ErrorView from "@/zodula/ui/views/error-view";
 import { Button } from "@/zodula/ui/components/ui/button";
@@ -32,6 +32,7 @@ export default function DoctypeSheetPage() {
     const { t } = useTranslation()
     const [isRefreshing, setIsRefreshing] = useState(false)
     const { org } = useParams();
+    const sheetViewRef = useRef<SheetViewExportHandle | null>(null);
     const {
         limit,
         sort,
@@ -123,35 +124,13 @@ export default function DoctypeSheetPage() {
         }
         setIsRefreshing(true);
         reload();
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 50));
         setIsRefreshing(false);
     };
 
-    const handleExportCSV = async () => {
-        // TODO: Implement CSV export functionality
-        if (selected.size > 0) {
-            const { fields: selectedFields } = await popup(CSVDialog, {
-                title: `Export CSV for ${doctype}`,
-                description: `Selected ${selected.size} item(s)`
-            }, {
-                doctype,
-                selected: Array.from(selected)
-            }) || {}
-            if (selectedFields) {
-                const res = await zodula.action("zodula.exports.csv", {
-                    data: {
-                        doctype,
-                        ids: Array.from(selected),
-                        fields: columns.map((column) => column.key)
-                    }
-                })
-                const blob = new Blob([res], { type: "text/csv" })
-                const link = document.createElement("a")
-                link.href = URL.createObjectURL(blob)
-                link.download = `${doctype}.csv`
-                link.click()
-            }
-        }
+    const handleExportCSV = () => {
+        if (selected.size === 0) return;
+        sheetViewRef.current?.exportCSV();
     };
 
     const handleCancel = async () => {
@@ -181,7 +160,7 @@ export default function DoctypeSheetPage() {
             doctype,
             selected: Array.from(selected)
         }) || {}
-        const { app: selectedApp, app_field: selectedAppField, fields: selectedFields } = result
+        const { app: selectedApp, app_field: selectedAppField, fields: selectedFields } = result as { app: string, app_field: string, fields: string[] }
         if (selectedFields && (selectedApp || selectedAppField)) {
             await zodula.action("zodula.fixtures.exports", {
                 data: {
@@ -225,7 +204,8 @@ export default function DoctypeSheetPage() {
             onClick: handleCreate
         },
         {
-            label: t("Refresh"),
+            label: "",
+            icon: <RefreshCw className="zd:h-4 zd:w-4" />,
             onClick: handleRefresh,
             variant: "outline",
             disabled: isRefreshing
@@ -304,6 +284,7 @@ export default function DoctypeSheetPage() {
             }
         >
             <SheetView
+                ref={sheetViewRef}
                 hideDocStatus={doctypeDoc?.is_submittable !== 1}
                 doctype={doctype}
                 columns={columns}

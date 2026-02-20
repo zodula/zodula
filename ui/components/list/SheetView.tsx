@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect, useRef, useImperativeHandle, forwardRef } from "react";
 import { useDocList } from "../../hooks/use-doc-list";
 import { useDoc } from "../../hooks/use-doc";
 import { ListToolbar } from "./ListToolbar";
@@ -11,7 +11,6 @@ import { ColumnSelectDialog } from "../dialogs/column-select-dialog";
 import { zodula } from "@/zodula/client";
 import type { IFilter, IOperator } from "@/zodula/server/zodula/type";
 import { ClientFieldHelper } from "@/zodula/client/field";
-import { plugins } from "../form/plugins";
 import { useTranslation } from "../../hooks/use-translation";
 import { Checkbox } from "../ui/checkbox";
 import { cn } from "../../lib/utils";
@@ -89,7 +88,6 @@ function TableHeaderCell({
       {...dropZoneProps}
       className={cn(
         "zd:relative zd:group zd:px-2 zd:py-1.5 zd:font-medium zd:whitespace-nowrap zd:bg-muted zd:border-b zd:border-r zd:border-border zd:select-none",
-        isFirstColumn && "zd:sticky zd:left-10 zd:z-20",
         "zd:cursor-grab zd:active:cursor-grabbing",
         dropZoneClassName
       )}
@@ -168,6 +166,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "../ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 
 interface SheetViewProps {
   doctype: string;
@@ -195,31 +194,47 @@ interface SheetViewProps {
   hideDocStatus?: boolean;
 }
 
-export function SheetView({
-  doctype,
-  title,
-  columns,
-  docs,
-  count,
-  loading,
-  error,
-  limit,
-  sort,
-  order,
-  searchQuery,
-  filters,
-  fields,
-  onLimitChange,
-  onSort,
-  onSortChange,
-  onOrderChange,
-  onSearch,
-  onApplyFilters,
-  onClearFilter,
-  selected,
-  setSelected,
-  hideDocStatus = false,
-}: SheetViewProps) {
+/** Escape a value for CSV (wrap in quotes if contains comma, newline, or quote). */
+function escapeCsvValue(value: unknown): string {
+  const s = value == null ? "" : String(value);
+  if (/[,\n"]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+export interface SheetViewExportHandle {
+  exportCSV(): void;
+}
+
+export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps>(function SheetView(
+  {
+    doctype,
+    title,
+    columns,
+    docs,
+    count,
+    loading,
+    error,
+    limit,
+    sort,
+    order,
+    searchQuery,
+    filters,
+    fields,
+    onLimitChange,
+    onSort,
+    onSortChange,
+    onOrderChange,
+    onSearch,
+    onApplyFilters,
+    onClearFilter,
+    selected,
+    setSelected,
+    hideDocStatus = false,
+  },
+  ref
+) {
   const { push } = useRouter();
   const { t } = useTranslation();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -298,26 +313,11 @@ export function SheetView({
 
     // First column: display field or id
     const displayField = (doctypeDoc as any).display_field || "id";
-    const displayFieldInfo = fields.find(
-      (field: any) => field.name === displayField
-    );
-    const displayPlugin = displayFieldInfo
-      ? plugins.find((plugin) => plugin.types.includes(displayFieldInfo.type))
-      : null;
 
     cols.push({
       key: displayField,
       label: displayField === "id" ? "ID" : displayField,
       sortable: true,
-      render:
-        displayPlugin && displayFieldInfo
-          ? (doc: any) =>
-              displayPlugin.cellRender({
-                fieldOptions: displayFieldInfo,
-                value: doc[displayField],
-                doc: doc,
-              })
-          : undefined,
     });
 
     // Add ALL fields (not just in_list_view fields)
@@ -325,23 +325,10 @@ export function SheetView({
       if (ClientFieldHelper.isStandardField(field.name)) return;
       if (ClientFieldHelper.isLayoutField(field)) return;
       if (field.name !== displayField) {
-        // Find the plugin for this field type
-        const plugin = plugins.find((plugin) =>
-          plugin.types.includes(field.type)
-        );
-
         cols.push({
           key: field.name,
           label: field.label || field.name,
           sortable: field.type !== "Reference Table" && field.type !== "Extend",
-          render: plugin
-            ? (doc: any) =>
-                plugin.cellRender({
-                  fieldOptions: field,
-                  value: doc[field.name],
-                  doc: doc,
-                })
-            : undefined,
         });
       }
     });
@@ -489,6 +476,92 @@ export function SheetView({
     }));
   }, [allAvailableColumns, visibleColumns, sheetView, t]);
 
+  // Keep latest data for imperative exportCSV
+  const exportDataRef = useRef({
+    docs: [] as any[],
+    selected: new Set<string>(),
+    columnKeys: [] as string[],
+    aggregationConfig: null as { groupBy: string | null; aggregateField: string | null } | null,
+    aggregatedData: [] as any[],
+    derivedColumnKeys: [] as string[],
+  });
+  useEffect(() => {
+    exportDataRef.current = {
+      docs,
+      selected,
+      columnKeys: visibleColumns && visibleColumns.length > 0 ? [...visibleColumns] : [],
+      aggregationConfig: sheetView.aggregationConfig,
+      aggregatedData: [],
+      derivedColumnKeys: [],
+    };
+  }, [docs, selected, visibleColumns, sheetView.aggregationConfig]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      exportCSV() {
+        const ref = exportDataRef.current;
+        const aggConfig = ref.aggregationConfig;
+
+        if (aggConfig?.groupBy && ref.aggregatedData.length > 0) {
+          // Export aggregated view (e.g. Customer + Count), not underlying records
+          const cols = ref.derivedColumnKeys;
+          if (cols.length === 0) return;
+          const header = cols.map((k) => escapeCsvValue(k)).join(",");
+          const rows = ref.aggregatedData.map((doc: any) => {
+            return cols
+              .map((colKey) => {
+                let cellValue: any;
+                if (doc._isAggregated) {
+                  if (colKey === "_count") cellValue = doc._count;
+                  else if (
+                    aggConfig.aggregateField &&
+                    colKey === aggConfig.aggregateField
+                  )
+                    cellValue = doc[colKey];
+                  else if (aggConfig.groupBy && colKey === aggConfig.groupBy)
+                    cellValue = doc[colKey];
+                  else cellValue = null;
+                } else {
+                  cellValue = doc[colKey];
+                }
+                return escapeCsvValue(cellValue);
+              })
+              .join(",");
+          });
+          const csv = [header, ...rows].join("\n");
+          const blob = new Blob([csv], { type: "text/csv" });
+          const link = document.createElement("a");
+          link.href = URL.createObjectURL(blob);
+          link.download = `${doctype}.csv`;
+          link.click();
+          URL.revokeObjectURL(link.href);
+          toast.success(t("CSV exported"));
+          return;
+        }
+
+        // No aggregation: export selected records with visible columns
+        const { docs: d, selected: sel, columnKeys: cols } = ref;
+        if (cols.length === 0) return;
+        const selectedDocs = d.filter((doc) => sel.has(doc.id));
+        if (selectedDocs.length === 0) return;
+        const header = cols.map((k) => escapeCsvValue(k)).join(",");
+        const dataRows = selectedDocs.map((doc) =>
+          cols.map((key) => escapeCsvValue(doc[key])).join(",")
+        );
+        const csv = [header, ...dataRows].join("\n");
+        const blob = new Blob([csv], { type: "text/csv" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `${doctype}.csv`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+        toast.success(t("CSV exported"));
+      },
+    }),
+    [doctype, t]
+  );
+
   // Get available sort fields from columns - pass full field metadata for FilterPopup
   const sortFields = useMemo(() => {
     return fields.filter(
@@ -525,16 +598,17 @@ export function SheetView({
 
     const aggregatedRows = Object.entries(grouped).map(
       ([groupKey, groupDocs]) => {
-        const docs = groupDocs as any[];
-        const firstDoc = docs[0];
+        const groupDocsList = groupDocs as any[];
+        const firstDoc = groupDocsList[0];
         const result: any = {
           ...firstDoc,
           _isAggregated: true,
           _groupKey: groupKey,
+          _docIds: groupDocsList.map((d: any) => d.id).filter(Boolean),
         };
 
         if (aggregationConfig.aggregateField) {
-          const values = docs
+          const values = groupDocsList
             .map((doc: any) => {
               const val = doc[aggregationConfig.aggregateField!];
               return typeof val === "number"
@@ -546,7 +620,7 @@ export function SheetView({
           if (values.length > 0) {
             switch (aggregationConfig.aggregateFunction) {
               case "Count":
-                result[aggregationConfig.aggregateField!] = docs.length;
+                result[aggregationConfig.aggregateField!] = groupDocsList.length;
                 break;
               case "Sum":
                 result[aggregationConfig.aggregateField!] = values.reduce(
@@ -563,7 +637,7 @@ export function SheetView({
           }
         } else {
           // Count only - store in a special field
-          result._count = docs.length;
+          result._count = groupDocsList.length;
         }
 
         return result;
@@ -629,6 +703,15 @@ export function SheetView({
     return aggregatedRows;
   }, [docs, sheetView.aggregationConfig, t]);
 
+  // Keep ref in sync for exportCSV when in aggregation mode
+  useEffect(() => {
+    exportDataRef.current.aggregatedData = aggregatedData;
+    exportDataRef.current.derivedColumnKeys = derivedColumns.map((c) =>
+      String(c.key)
+    );
+    exportDataRef.current.aggregationConfig = sheetView.aggregationConfig;
+  }, [aggregatedData, derivedColumns, sheetView.aggregationConfig]);
+
   // Debounced search effect
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -670,16 +753,13 @@ export function SheetView({
       return;
     }
 
-    // Don't start selection if clicking on checkbox or aggregated rows
+    // Don't start selection if clicking on checkbox
     if (
       e.target instanceof HTMLElement &&
       e.target.closest('input[type="checkbox"]')
     ) {
       return;
     }
-
-    const isAggregated = doc._isAggregated;
-    if (isAggregated) return;
 
     e.preventDefault();
     const cellKey = getCellKey(rowIdx, colKey);
@@ -699,8 +779,6 @@ export function SheetView({
 
   const handleCellMouseEnter = (rowIdx: number, colKey: string, doc: any) => {
     if (!isSelecting || !selectionStart) return;
-    const isAggregated = doc._isAggregated;
-    if (isAggregated) return;
 
     setSelectionEnd({ rowIdx, colKey });
 
@@ -1004,18 +1082,30 @@ export function SheetView({
     }
   };
 
-  // Calculate selectAll state based on selected items
+  // Rows that can have checkboxes: normal docs or aggregated group rows (with _docIds)
+  const selectableRows = useMemo(
+    () =>
+      aggregatedData.filter(
+        (doc) => !doc._isAggregated || (doc._docIds && doc._docIds.length > 0)
+      ),
+    [aggregatedData]
+  );
+
+  // Calculate selectAll state: all selectable rows are "checked" (all their doc ids in selected)
   const selectAll =
-    aggregatedData.length > 0 &&
-    aggregatedData
-      .filter((doc) => !doc._isAggregated)
-      .every((doc) => selected.has(doc.id));
+    selectableRows.length > 0 &&
+    selectableRows.every((doc) => {
+      const ids = doc._docIds ?? (doc.id ? [doc.id] : []);
+      return ids.length > 0 && ids.every((id: string) => selected.has(id));
+    });
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      const allIds = new Set(
-        aggregatedData.filter((doc) => !doc._isAggregated).map((doc) => doc.id)
-      );
+      const allIds = new Set<string>();
+      selectableRows.forEach((doc) => {
+        const ids = doc._docIds ?? (doc.id ? [doc.id] : []);
+        ids.forEach((id: string) => allIds.add(id));
+      });
       setSelected(allIds);
     } else {
       setSelected(new Set());
@@ -1030,6 +1120,23 @@ export function SheetView({
       newSelected.delete(docId);
     }
     setSelected(newSelected);
+  };
+
+  const handleAggregatedRowSelect = (doc: any, checked: boolean) => {
+    const ids = doc._docIds ?? [];
+    if (ids.length === 0) return;
+    const newSelected = new Set(selected);
+    if (checked) {
+      ids.forEach((id: string) => newSelected.add(id));
+    } else {
+      ids.forEach((id: string) => newSelected.delete(id));
+    }
+    setSelected(newSelected);
+  };
+
+  const isAggregatedRowChecked = (doc: any) => {
+    const ids = doc._docIds ?? [];
+    return ids.length > 0 && ids.every((id: string) => selected.has(id));
   };
 
   // Column reordering with useColumnDnd
@@ -1058,25 +1165,6 @@ export function SheetView({
     columns: derivedColumns,
     onReorder: handleColumnReorder,
   });
-
-  // Column copy handler
-  const handleCopyColumn = (columnKey: string) => {
-    const column = derivedColumns.find((col) => String(col.key) === columnKey);
-    if (!column) return;
-
-    const columnData = aggregatedData
-      .filter((doc) => !doc._isAggregated)
-      .map((doc) => {
-        const value = column.render
-          ? column.render(doc)
-          : (doc as any)[columnKey];
-        return String(value || "");
-      })
-      .join("\n");
-
-    navigator.clipboard.writeText(columnData);
-    toast.success(t("Column copied to clipboard"));
-  };
 
   return (
     <div className="zd:flex zd:flex-col zd:gap-4 zd:pb-12 zd:h-full">
@@ -1109,154 +1197,141 @@ export function SheetView({
           doctype={doctype as any}
         />
 
-        {/* Aggregation Button - Frappe Style */}
-        <div className="zd:relative">
-          <Button
-            variant="outline"
-            onClick={() => setAggregationPopupOpen(!aggregationPopupOpen)}
-            className={cn(
-              "zd:flex zd:items-center zd:gap-2 zd:whitespace-nowrap",
-              sheetView.aggregationConfig.groupBy ? "zd:bg-muted" : ""
-            )}
-          >
-            <FolderPlus className="zd:h-4 zd:w-4" />
-            {sheetView.aggregationConfig.groupBy
-              ? t(
-                  `Grouped by ${t(allAvailableColumns.find((col) => String(col.key) === sheetView.aggregationConfig.groupBy)?.label || sheetView.aggregationConfig.groupBy || "")}`
-                )
-              : t("Add Group")}
-          </Button>
-
-          {aggregationPopupOpen && (
-            <div className="zd:absolute zd:top-full zd:right-0 zd:mt-2 zd:z-50 zd:bg-background zd:border zd:border-border zd:rounded-lg zd:shadow-lg zd:p-4 zd:min-w-[300px]">
-              <div className="zd:flex zd:items-center zd:justify-between zd:mb-3">
-                <span className="zd:font-medium">{t("Group By")}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setAggregationPopupOpen(false)}
-                  className="zd:h-6 zd:w-6 zd:p-0"
-                >
-                  <X className="zd:h-4 zd:w-4" />
-                </Button>
+        {/* Aggregation - Popover (Select works inside Popover; not inside DropdownMenu) */}
+        <Popover
+          open={aggregationPopupOpen}
+          onOpenChange={setAggregationPopupOpen}
+        >
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "zd:flex zd:items-center zd:gap-2 zd:whitespace-nowrap",
+                sheetView.aggregationConfig.groupBy ? "zd:bg-muted" : ""
+              )}
+            >
+              <FolderPlus className="zd:h-4 zd:w-4" />
+              {sheetView.aggregationConfig.groupBy
+                ? t(
+                    `Grouped by ${t(allAvailableColumns.find((col) => String(col.key) === sheetView.aggregationConfig.groupBy)?.label || sheetView.aggregationConfig.groupBy || "")}`
+                  )
+                : t("Add Group")}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="zd:min-w-[300px]">
+            <div className="zd:space-y-3">
+              <div>
+                <label className="zd:text-sm zd:text-muted-foreground zd:mb-1 zd:block">
+                  {t("Select Group By...")}
+                </label>
+                <Select
+                  options={allAvailableColumns
+                    .filter((col) => col.sortable)
+                    .map((col) => ({
+                      value: col.key,
+                      label: t(col.label || String(col.key)),
+                    }))}
+                  value={pendingAggregationConfig.groupBy || ""}
+                  onChange={(value) =>
+                    setPendingAggregationConfig({
+                      ...pendingAggregationConfig,
+                      groupBy: value || null,
+                    })
+                  }
+                  placeholder={t("Select Group By...") || ""}
+                  clearable
+                  displayMode="label"
+                />
               </div>
 
-              <div className="zd:space-y-3">
-                <div>
-                  <label className="zd:text-sm zd:text-muted-foreground zd:mb-1 zd:block">
-                    {t("Select Group By...")}
-                  </label>
-                  <Select
-                    options={allAvailableColumns
-                      .filter((col) => col.sortable)
-                      .map((col) => ({
-                        value: col.key,
-                        label: t(col.label || String(col.key)),
-                      }))}
-                    value={pendingAggregationConfig.groupBy || ""}
-                    onChange={(value) =>
-                      setPendingAggregationConfig({
-                        ...pendingAggregationConfig,
-                        groupBy: value || null,
-                      })
-                    }
-                    placeholder={t("Select Group By...") || ""}
-                    clearable
-                    displayMode="label"
-                  />
-                </div>
+              {pendingAggregationConfig.groupBy && (
+                <>
+                  <div>
+                    <label className="zd:text-sm zd:text-muted-foreground zd:mb-1 zd:block">
+                      {t("Aggregate Function")}
+                    </label>
+                    <Select
+                      options={[
+                        { value: "Count", label: t("Count") },
+                        { value: "Sum", label: t("Sum") },
+                        { value: "Average", label: t("Average") },
+                      ]}
+                      value={pendingAggregationConfig.aggregateFunction}
+                      onChange={(value) =>
+                        setPendingAggregationConfig({
+                          ...pendingAggregationConfig,
+                          aggregateFunction:
+                            (value as AggregateFunction) || "Count",
+                          aggregateField:
+                            value === "Sum" || value === "Average"
+                              ? pendingAggregationConfig.aggregateField
+                              : null,
+                        })
+                      }
+                      displayMode="label"
+                    />
+                  </div>
 
-                {pendingAggregationConfig.groupBy && (
-                  <>
+                  {(pendingAggregationConfig.aggregateFunction === "Sum" ||
+                    pendingAggregationConfig.aggregateFunction ===
+                      "Average") && (
                     <div>
                       <label className="zd:text-sm zd:text-muted-foreground zd:mb-1 zd:block">
-                        {t("Aggregate Function")}
+                        {t("Aggregate Field")}
                       </label>
                       <Select
-                        options={[
-                          { value: "Count", label: t("Count") },
-                          { value: "Sum", label: t("Sum") },
-                          { value: "Average", label: t("Average") },
-                        ]}
-                        value={pendingAggregationConfig.aggregateFunction}
+                        options={numericFields.map((field) => ({
+                          value: field.name || "",
+                          label: t(field.label || String(field.name || "")),
+                        }))}
+                        value={pendingAggregationConfig.aggregateField || ""}
                         onChange={(value) =>
                           setPendingAggregationConfig({
                             ...pendingAggregationConfig,
-                            aggregateFunction:
-                              (value as AggregateFunction) || "Count",
-                            aggregateField:
-                              value === "Sum" || value === "Average"
-                                ? pendingAggregationConfig.aggregateField
-                                : null,
+                            aggregateField: value || null,
                           })
                         }
+                        placeholder={t("Select Field...") || ""}
+                        clearable
                         displayMode="label"
                       />
                     </div>
+                  )}
 
-                    {(pendingAggregationConfig.aggregateFunction === "Sum" ||
-                      pendingAggregationConfig.aggregateFunction ===
-                        "Average") && (
-                      <div>
-                        <label className="zd:text-sm zd:text-muted-foreground zd:mb-1 zd:block">
-                          {t("Aggregate Field")}
-                        </label>
-                        <Select
-                          options={numericFields.map((field) => ({
-                            value: field.name || "",
-                            label: t(field.label || String(field.name || "")),
-                          }))}
-                          value={pendingAggregationConfig.aggregateField || ""}
-                          onChange={(value) =>
-                            setPendingAggregationConfig({
-                              ...pendingAggregationConfig,
-                              aggregateField: value || null,
-                            })
-                          }
-                          placeholder={t("Select Field...") || ""}
-                          clearable
-                          displayMode="label"
-                        />
-                      </div>
-                    )}
-
-                    <div className="zd:flex zd:gap-2 zd:pt-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          // Clear and apply immediately
-                          const clearedConfig = {
-                            groupBy: null,
-                            aggregateFunction: "Count" as AggregateFunction,
-                            aggregateField: null,
-                          };
-                          setPendingAggregationConfig(clearedConfig);
-                          sheetView.setAggregationConfig(clearedConfig);
-                          setAggregationPopupOpen(false);
-                        }}
-                      >
-                        {t("Clear")}
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          // Apply the pending config
-                          sheetView.setAggregationConfig(
-                            pendingAggregationConfig
-                          );
-                          setAggregationPopupOpen(false);
-                        }}
-                      >
-                        {t("Apply")}
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </div>
+                  <div className="zd:flex zd:gap-2 zd:pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const clearedConfig = {
+                          groupBy: null,
+                          aggregateFunction: "Count" as AggregateFunction,
+                          aggregateField: null,
+                        };
+                        setPendingAggregationConfig(clearedConfig);
+                        sheetView.setAggregationConfig(clearedConfig);
+                        setAggregationPopupOpen(false);
+                      }}
+                    >
+                      {t("Clear")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        sheetView.setAggregationConfig(
+                          pendingAggregationConfig
+                        );
+                        setAggregationPopupOpen(false);
+                      }}
+                    >
+                      {t("Apply")}
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
-          )}
-        </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {error ? (
@@ -1266,7 +1341,7 @@ export function SheetView({
       {/* Sheet View Grid */}
       <div
         ref={scrollContainerRef}
-        className="zd:flex-1 zd:overflow-auto zd:rounded-lg zd:bg-background"
+        className="zd:flex-1 zd:overflow-auto zd:rounded-lg zd:bg-background zd:shadow zd:border"
         style={{ maxHeight: "calc(100vh - 300px)" }}
         onClick={(e) => {
           // Don't clear selection if we just finished dragging
@@ -1282,17 +1357,17 @@ export function SheetView({
           }
         }}
       >
-        <div className="zd:inline-block">
+        <div className="zd:inline-block  zd:min-h-[50vh]">
           <table
             ref={tableRef}
-            className="zd:text-sm zd:border"
+            className="zd:text-sm zd:rounded"
             style={{ width: "max-content" }}
           >
-            <thead className="zd:sticky zd:top-0 zd:z-20 zd:bg-muted">
-              <tr>
+            <thead className="zd:z-20 zd:bg-muted">
+              <tr className="zd:border-b zd:border-dashed zd:rounded-t">
                 {/* Checkbox column */}
                 <th
-                  className="zd:sticky zd:left-0 zd:z-30 zd:px-2 zd:py-1.5 zd:font-medium zd:bg-muted zd:border-b zd:border-r zd:border-border"
+                  className="zd:z-30 zd:px-2 zd:py-1.5 zd:font-medium zd:bg-muted zd:border-b zd:border-r zd:border-border"
                   style={{ width: 40, minWidth: 40, maxWidth: 40 }}
                 >
                   <Checkbox
@@ -1364,7 +1439,7 @@ export function SheetView({
                     >
                       {/* Checkbox column */}
                       <td
-                        className="zd:sticky zd:left-0 zd:z-10 zd:px-2 zd:py-1.5 zd:bg-background zd:border-r zd:border-border"
+                        className="zd:z-10 zd:px-2 zd:py-1.5 zd:bg-background zd:border-r zd:border-border"
                         style={{ width: 40, minWidth: 40, maxWidth: 40 }}
                         onClick={(e) => e.stopPropagation()}
                       >
@@ -1373,6 +1448,14 @@ export function SheetView({
                             checked={selected.has(doc.id)}
                             onCheckedChange={(checked) =>
                               handleRowSelect(doc.id, checked as boolean)
+                            }
+                          />
+                        )}
+                        {isAggregated && !isTotals && doc._docIds?.length > 0 && (
+                          <Checkbox
+                            checked={isAggregatedRowChecked(doc)}
+                            onCheckedChange={(checked) =>
+                              handleAggregatedRowSelect(doc, checked as boolean)
                             }
                           />
                         )}
@@ -1410,17 +1493,8 @@ export function SheetView({
                           cellValue = doc[columnKey];
                         }
 
-                        // Use field renderer for aggregated values if available (for currency formatting, etc.)
-                        const shouldUseRenderer =
-                          col.render &&
-                          (!isAggregated ||
-                            (isAggregated &&
-                              columnKey === aggConfig.aggregateField));
-
                         const cellDisplayValue =
-                          shouldUseRenderer && cellValue != null ? (
-                            col.render!(doc)
-                          ) : cellValue != null ? (
+                          cellValue != null ? (
                             String(cellValue)
                           ) : (
                             <span className="zd:text-muted-foreground zd:italic">
@@ -1434,14 +1508,10 @@ export function SheetView({
                           <td
                             key={columnKey}
                             className={cn(
-                              "zd:truncate  zd:px-2 zd:py-1.5 zd:whitespace-nowrap zd:bg-background zd:border-r zd:border-border",
-                              isFirstColumn &&
-                                "zd:sticky zd:left-10 zd:z-10 zd:bg-background",
+                              "zd:truncate  zd:px-2 zd:py-1.5 zd:whitespace-nowrap zd:bg-background zd:border-r zd:border-border zd:cursor-cell",
                               isAggregated && "zd:bg-muted/50",
                               isTotals && "zd:bg-muted/70",
-                              !isAggregated && "zd:cursor-cell",
                               isCellSelected &&
-                                !isAggregated &&
                                 "zd:bg-blue-100 dark:zd:bg-blue-900/30 zd:outline zd:outline-2 zd:outline-blue-500 zd:outline-offset-[-1px]"
                             )}
                             style={{ width, minWidth: width, maxWidth: width }}
@@ -1460,57 +1530,7 @@ export function SheetView({
                               )
                             }
                           >
-                            <div
-                              className={cn(
-                                "zd:truncate zd:w-fit",
-                                (() => {
-                                  if (isAggregated) return "";
-                                  const field = fields.find(
-                                    (f) => f.name === columnKey
-                                  );
-                                  const isIdField = columnKey === "id";
-                                  const isReferenceField =
-                                    field?.type === "Reference"
-                                  return (isIdField || isReferenceField) &&
-                                    cellValue
-                                    ? "zd:hover:underline zd:cursor-pointer"
-                                    : "";
-                                })()
-                              )}
-                              title={cellValue != null ? String(cellValue) : ""}
-                              onClick={(e) => {
-                                // Only navigate when clicking on ID or Reference field text
-                                if (isAggregated) return;
-
-                                const field = fields.find(
-                                  (f) => f.name === columnKey
-                                );
-                                const isIdField = columnKey === "id";
-                                const isReferenceField =
-                                  field?.type === "Reference" ||
-                                  field?.reference_type === "Reference";
-
-                                if (
-                                  (isIdField || isReferenceField) &&
-                                  cellValue
-                                ) {
-                                  e.stopPropagation();
-                                  const targetDocId = isIdField
-                                    ? doc.id
-                                    : String(cellValue);
-                                  if (targetDocId) {
-                                    const targetDoctype = isIdField
-                                      ? doctype
-                                      : field?.reference || doctype;
-                                    push(
-                                      `/desk/${org}/doctypes/${targetDoctype}/form/${targetDocId}`
-                                    );
-                                  }
-                                }
-                              }}
-                            >
-                              {cellDisplayValue}
-                            </div>
+                            {cellDisplayValue}
                           </td>
                         );
                       })}
@@ -1538,7 +1558,7 @@ export function SheetView({
               </Button>
             ))}
           </div>
-          {count && (
+          {count > 0 && (
             <span className="zd:text-sm zd:text-muted-foreground">
               {aggregatedData.filter((doc) => !doc._isAggregated).length} of{" "}
               {count}
@@ -1547,42 +1567,36 @@ export function SheetView({
         </div>
       </div>
 
-      {/* Context Menu for Cells */}
-      {contextMenuOpen && (
-        <>
-          <div
-            className="zd:fixed zd:inset-0 zd:z-40"
-            onClick={() => setContextMenuOpen(false)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setContextMenuOpen(false);
-            }}
-          />
-          <div
-            className="zd:fixed zd:z-50 zd:min-w-[8rem] zd:overflow-hidden zd:rounded-md zd:border zd:bg-popover zd:p-1 zd:text-popover-foreground zd:shadow-md"
+      {/* Context Menu for Cells - DropdownMenu positioned at cursor */}
+      <DropdownMenu
+        open={contextMenuOpen}
+        onOpenChange={setContextMenuOpen}
+      >
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="zd:fixed zd:w-px zd:h-px zd:opacity-0 zd:pointer-events-none zd:border-0"
             style={{
               left: contextMenuPosition.x,
               top: contextMenuPosition.y,
             }}
-            onClick={(e) => e.stopPropagation()}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
-            <button
-              type="button"
-              onClick={handleCellCopy}
-              className="zd:relative zd:flex zd:gap-2 zd:cursor-pointer zd:select-none zd:items-center zd:rounded-sm zd:px-2 zd:py-1.5 zd:w-full zd:text-left zd:outline-none zd:transition-colors zd:hover:bg-accent zd:hover:text-accent-foreground"
-            >
-              <Copy className="zd:mr-2 zd:h-4 zd:w-4" />
-              {selectedCells.size > 0
-                ? t(`Copy ${selectedCells.size} cell(s)`)
-                : t("Copy")}
-            </button>
-          </div>
-        </>
-      )}
+            aria-hidden
+            tabIndex={-1}
+          />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          side="bottom"
+          onCloseAutoFocus={(e) => e.preventDefault()}
+        >
+          <DropdownMenuItem onSelect={handleCellCopy}>
+            <Copy className="zd:mr-2 zd:h-4 zd:w-4" />
+            {selectedCells.size > 0
+              ? t(`Copy ${selectedCells.size} cell(s)`)
+              : t("Copy")}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
-}
+});

@@ -721,7 +721,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
 
                                             {/* Calendar Grid */}
                                             {/* Day headers */}
-                                            <div className="zd:grid zd:grid-cols-7 zd:gap-0 zd:mb-2">
+                                            <div className="zd:grid zd:grid-cols-7 zd:gap-0 zd:mb-2 zd:text-xs">
                                                 {['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'].map(day => (
                                                     <div key={day} className="zd:w-full zd:h-6 zd:w-6 zd:text-center zd:font-medium zd:text-muted-foreground zd:py-1">
                                                         {day}
@@ -752,7 +752,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
                                                             onMouseLeave={() => setHoveredDate(null)}
                                                             disabled={isDisabled}
                                                             className={cn(
-                                                                "zd:flex zd:!h-8 zd:!w-full zd:justify-center zd:items-center zd:transition-colors zd:relative",
+                                                                "zd:font-medium zd:flex zd:!h-8 zd:!w-full zd:justify-center zd:items-center zd:transition-colors zd:relative",
                                                                 "zd:hover:text-accent-foreground",
                                                                 isStartDate ? "zd:bg-primary zd:text-primary-foreground zd:font-bold" : "",
                                                                 isEndDate ? "zd:bg-primary zd:text-primary-foreground zd:font-bold" : "",

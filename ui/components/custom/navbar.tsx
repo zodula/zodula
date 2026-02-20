@@ -173,10 +173,11 @@ export const Navbar = ({ children }: NavbarProps) => {
 
   return (
     <>
-      <div className="zd:flex zd:w-full zd:items-center zd:justify-center zd:border-b no-print">
+    {/* blur background for nav */}
+      <div className="zd:sticky zd:top-0 zd:z-10 zd:flex zd:w-full zd:items-center zd:justify-center no-print zd:backdrop-blur zd:bg-background/80">
         <div
           className={cn(
-            "zd:flex zd:gap-4 zd:items-center zd:justify-between zd:px-4 zd:py-2 zd:w-full zd:max-w-9xl",
+            "zd:flex zd:gap-4 zd:items-center zd:justify-between zd:px-4 zd:py-2 zd:w-full zd:max-w-8xl zd:transition-all zd:duration-200 zd:ease-out",
             fullWidth ? "zd:max-w-screen" : ""
           )}
         >
@@ -203,7 +204,7 @@ export const Navbar = ({ children }: NavbarProps) => {
                 className={cn("zd:rounded")}
               />
             </Link>
-            <Breadcrumb showHome={true} className="zd:w-full zd:ml-2" />
+            <Breadcrumb showHome={true} className="zd:w-full zd:ml-2 zd:max-md:hidden" />
           </div>
 
           <div className="zd:flex zd:gap-2 zd:items-center zd:justify-end zd:flex-1">

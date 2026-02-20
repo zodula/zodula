@@ -556,7 +556,7 @@ const ReferenceInput = (props: {
 
   const className = useMemo(() => {
     return cn(
-      "zd:rounded-md zd:border-l-3 zd:font-bold",
+      "zd:rounded zd:border-l-3 zd:font-bold",
       !isVirtual ? "zd:hover:ring-primary zd:hover:ring-1" : "",
     );
   }, [isVirtual]);

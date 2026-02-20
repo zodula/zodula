@@ -98,7 +98,6 @@ export default $doctype(
     label: "Doctype",
     is_system_generated: 1,
     display_field: "label",
-    search_fields: "app\nname",
     is_global: 1,
   }
 );

@@ -1,6 +1,7 @@
 [
     {
         "id": "System Panel",
+        "abbr": "SYS",
         "name": "System Panel"
     }
 ]

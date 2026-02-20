@@ -1938,7 +1938,7 @@ export function DocFormView({
         }
       >
         {/* Form Content */}
-        <div className="zd:flex zd:flex-col zd:gap-8 zd:border zd:rounded zd:p-4">
+        <div className="zd:flex zd:flex-col zd:gap-8 zd:rounded-lg zd:px-4 zd:md:px-8 zd:py-4 zd:shadow-lg zd:border-t zd:border-dashed">
           <Form
             translate
             debug={roles?.includes("System Admin") || false}

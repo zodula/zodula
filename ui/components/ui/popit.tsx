@@ -84,9 +84,9 @@ function AlertDialog({
 
   return (
     <Dialog open={dialog.isOpen} onClose={onClose} className="relative z-50">
-      <div className="zd:fixed zd:inset-0 zd:bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" aria-hidden="true" />
+      <div className="zd:fixed zd:inset-0 zd:bg-black/40 zd:backdrop-blur-md zd:animate-in zd:fade-in-0 zd:duration-200 zd:transition-[backdrop-filter,background-color]" aria-hidden="true" />
       <div className="zd:fixed zd:inset-0 zd:flex zd:items-center zd:justify-center zd:p-4">
-        <DialogContent className="zd:mx-auto zd:max-w-[600px] zd:w-[90vw] zd:rounded zd:bg-background zd:p-6 zd:shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+        <DialogContent className="zd:mx-auto zd:max-w-[600px] zd:w-[90vw] zd:rounded zd:bg-background zd:p-6 zd:shadow-lg zd:animate-in zd:fade-in-0 zd:zoom-in-95 zd:duration-200">
           <div className="zd:flex zd:items-start zd:gap-4">
             <div className="zd:flex-1">
               <DialogTitle className="zd:text-lg zd:font-semibold zd:text-foreground">
@@ -179,9 +179,9 @@ function PromptDialog({
 
   return (
     <Dialog open={dialog.isOpen} onClose={onClose} className="relative z-50">
-      <div className="zd:fixed zd:inset-0 zd:bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" aria-hidden="true" />
+      <div className="zd:fixed zd:inset-0 zd:bg-black/40 zd:backdrop-blur-md zd:animate-in zd:fade-in-0 zd:duration-200 zd:transition-[backdrop-filter,background-color]" aria-hidden="true" />
       <div className="zd:fixed zd:inset-0 zd:flex zd:items-center zd:justify-center zd:p-4">
-        <Dialog.Panel className="zd:mx-auto zd:max-w-[600px] zd:w-[90vw] zd:rounded zd:bg-background zd:p-6 zd:shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+        <Dialog.Panel className="zd:mx-auto zd:max-w-[600px] zd:w-[90vw] zd:rounded zd:bg-background zd:p-6 zd:shadow-lg zd:animate-in zd:fade-in-0 zd:zoom-in-95 zd:duration-200">
           <div className="zd:flex zd:items-start zd:gap-4">
             <div className="zd:flex-1">
               <Dialog.Title className="zd:text-lg zd:font-semibold zd:text-foreground">
@@ -248,9 +248,9 @@ function ConfirmDialog({
 
   return (
     <Dialog open={dialog.isOpen} onClose={onClose} className="zd:relative zd:z-50">
-      <div className="zd:fixed zd:inset-0 zd:bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" aria-hidden="true" />
+      <div className="zd:fixed zd:inset-0 zd:bg-black/40 zd:backdrop-blur-md zd:animate-in zd:fade-in-0 zd:duration-200 zd:transition-[backdrop-filter,background-color]" aria-hidden="true" />
       <div className="zd:fixed zd:inset-0 zd:flex zd:items-center zd:justify-center zd:p-4">
-        <Dialog.Panel className="zd:mx-auto zd:max-w-[600px] zd:w-[90vw] zd:rounded zd:bg-background zd:p-6 zd:shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+        <Dialog.Panel className="zd:mx-auto zd:max-w-[600px] zd:w-[90vw] zd:rounded zd:bg-background zd:p-6 zd:shadow-lg zd:animate-in zd:fade-in-0 zd:zoom-in-95 zd:duration-200">
           <div className="zd:flex zd:items-start zd:gap-4">
             <div className="zd:flex-1">
               <Dialog.Title className="zd:text-lg zd:font-semibold zd:text-foreground">
@@ -307,11 +307,11 @@ function CustomDialog({
 
   return (
     <Dialog open={dialog.isOpen} onClose={() => onClose()}>
-      <div className="zd:fixed zd:inset-0 zd:bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" aria-hidden="true" />
+      <div className="zd:fixed zd:inset-0 zd:bg-black/40 zd:backdrop-blur-md zd:animate-in zd:fade-in-0 zd:duration-200 zd:transition-[backdrop-filter,background-color]" aria-hidden="true" />
       <div className="zd:fixed zd:inset-0 zd:flex zd:items-center zd:justify-center zd:p-4">
         <DialogContent
           className={cn(
-            "zd:rounded zd:bg-background zd:shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 zd:max-h-[90vh] zd:flex zd:flex-col",
+            "zd:rounded zd:bg-background zd:shadow-lg zd:animate-in zd:fade-in-0 zd:zoom-in-95 zd:duration-200 zd:max-h-[90vh] zd:flex zd:flex-col",
             !hasWidth && "zd:max-w-4xl zd:w-fit"
           )}
           style={widthStyle ?? undefined}

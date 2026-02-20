@@ -169,7 +169,7 @@ export const SidebarLayout = ({
 
   return (
     <div className="zd:flex zd:flex-col zd:h-full zd:gap-4">
-      <div className="zd:flex zd:items-center zd:justify-between zd:bg-background zd:flex-wrap zd:gap-2">
+      <div className="zd:flex zd:items-center zd:justify-between zd:flex-wrap zd:gap-2">
         <div className="zd:flex zd:items-center zd:gap-4">
           <Button
             variant="ghost"

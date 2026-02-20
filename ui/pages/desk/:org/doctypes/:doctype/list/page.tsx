@@ -239,8 +239,8 @@ export default function DoctypeListPage() {
             onClick: handleCreate
         },
         {
-            label: t("Refresh"),
-            // icon: <RefreshCw className={`zd:h-4 zd:w-4`} />,
+            label: "",
+            icon: <RefreshCw className="zd:h-4 zd:w-4" />,
             onClick: handleRefresh,
             variant: "outline",
             disabled: isRefreshing
