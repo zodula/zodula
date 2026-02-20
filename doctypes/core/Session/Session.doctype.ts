@@ -2,7 +2,7 @@ export default $doctype({
     user: {
         type: "Reference",
         label: "User",
-        reference: "zodula__User",
+        reference: "User",
         required: 1,
         on_delete: "CASCADE"
     },

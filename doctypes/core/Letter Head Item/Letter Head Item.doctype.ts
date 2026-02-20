@@ -1,8 +1,8 @@
-export default $doctype<"zodula__Letter Head Item">({
+export default $doctype<"Letter Head Item">({
     letter_head: {
         type: "Reference",
         label: "Letter Head",
-        reference: "zodula__Letter Head",
+        reference: "Letter Head",
         required: 1
     },
     type: {

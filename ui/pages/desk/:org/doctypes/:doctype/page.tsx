@@ -12,7 +12,7 @@ export default function DoctypePage() {
     const { org } = useParams();
     // Get doctype metadata to check if it's single
     const { doc: doctypeDoc, loading } = useDocAll({
-        doctype: "zodula__Doctype",
+        doctype: "Doctype",
         id: doctype
     });
 

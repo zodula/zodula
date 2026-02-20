@@ -13,7 +13,7 @@ export const LinkDoctypePlugin = new BaseWorkspaceItemPlugin(
         const { t } = useTranslation()
         const { org } = useParams();
         const { doc } = useDoc({
-            doctype: "zodula__Doctype",
+            doctype: "Doctype",
             id: props.value
         })
         return (
@@ -40,7 +40,7 @@ export const LinkDoctypePlugin = new BaseWorkspaceItemPlugin(
         <FormControl
             field={{
                 type: "Virtual Reference",
-                reference: "zodula__Doctype"
+                reference: "Doctype"
             }}
             value={props.value}
             fieldKey="value"

@@ -1,4 +1,4 @@
-export default $doctype<"zodula__User">({
+export default $doctype<"User">({
     name: {
         type: "Text",
         in_list_view: 1
@@ -22,12 +22,12 @@ export default $doctype<"zodula__User">({
     organization_roles: {
         type: "Reference Table",
         label: "Organization Roles",
-        reference: "zodula__Organization Role",
+        reference: "Organization Role",
     },
     roles: {
         type: "Reference Table",
         label: "Roles",
-        reference: "zodula__User Role",
+        reference: "User Role",
         required: 0
     }
 }, {
@@ -36,11 +36,6 @@ export default $doctype<"zodula__User">({
     is_global: 1,
     naming_series: "{{email}}",
 })
-    .on("before_insert", async ({ doc }) => {
-        if (doc?.password) {
-            doc.password = await Bun.password.hash(doc.password as string);
-        }
-    })
     .on("before_change", async ({ doc, old, input }) => {
         if (input?.password) {
             doc.password = await Bun.password.hash(input.password as string);

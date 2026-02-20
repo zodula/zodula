@@ -17,7 +17,7 @@ export class ZodulaSession {
       doc_status: 1,
       owner: "1",
       organization: "System Panel",
-    } satisfies Zodula.SelectDoctype<"zodula__User">;
+    } satisfies Zodula.SelectDoctype<"User">;
   }
 
   async organizations(bypass?: boolean) {
@@ -25,14 +25,14 @@ export class ZodulaSession {
     const user = await this.user(true);
     const organizationsOwner = (await db
       .select("*")
-      .from("zodula__Organization")
+      .from("Organization")
       .where("owner", "=", user.id)
-      .execute()) as Zodula.SelectDoctype<"zodula__Organization">[];
+      .execute()) as Zodula.SelectDoctype<"Organization">[];
     const organizationsUser = (await db
       .select("*")
-      .from("zodula__Organization Role")
+      .from("Organization Role")
       .where("user", "=", user.id)
-      .execute()) as Zodula.SelectDoctype<"zodula__Organization Role">[];
+      .execute()) as Zodula.SelectDoctype<"Organization Role">[];
     return [
       ...organizationsOwner?.map((organization) => organization.id),
       ...organizationsUser.map((organization) => organization.organizationId),
@@ -48,7 +48,7 @@ export class ZodulaSession {
     }
     const organizationRoles = await db
       .select("*")
-      .from("zodula__Organization Role")
+      .from("Organization Role")
       .where("userId", "=", user.id)
       .where("organizationId", "=", org)
       .execute();
@@ -71,14 +71,14 @@ export class ZodulaSession {
     const db = Database("main");
     const organizationRoles = (await db
       .select("*")
-      .from("zodula__Organization Role")
+      .from("Organization Role")
       .where("organization", "=", organization_id)
-      .execute()) as Zodula.SelectDoctype<"zodula__Organization Role">[];
+      .execute()) as Zodula.SelectDoctype<"Organization Role">[];
     const organizationOwner = (await db
       .select("*")
-      .from("zodula__Organization")
+      .from("Organization")
       .where("id", "=", organization_id)
-      .execute()) as Zodula.SelectDoctype<"zodula__Organization">[];
+      .execute()) as Zodula.SelectDoctype<"Organization">[];
 
     if (organizationOwner.length > 0 || organizationRoles.length > 0) {
       return organization_id;
@@ -101,10 +101,10 @@ export class ZodulaSession {
     }
     const session = (await db
       .select("*")
-      .from("zodula__Session" as Zodula.DoctypeName)
+      .from("Session" as Zodula.DoctypeName)
       .where("id", "=", sid)
       .where("expires_at", ">", new Date().toISOString())
-      .first()) as Zodula.SelectDoctype<"zodula__Session">;
+      .first()) as Zodula.SelectDoctype<"Session">;
     if (!session) {
       if (bypass) {
         return this.getSystemUser();
@@ -115,9 +115,9 @@ export class ZodulaSession {
     }
     const user = (await db
       .select("*")
-      .from("zodula__User" as Zodula.DoctypeName)
+      .from("User" as Zodula.DoctypeName)
       .where("id", "=", session.user)
-      .first()) as Zodula.SelectDoctype<"zodula__User">;
+      .first()) as Zodula.SelectDoctype<"User">;
 
     if (!user) {
       if (bypass) {
@@ -135,11 +135,11 @@ export class ZodulaSession {
     const user = await this.user(true);
     const org = organization ?? (await this.organization(true));
     const organizationRoles = await this.organizationRoles(org ?? undefined, true);
-    const organizationDoc = await $zodula.doctype("zodula__Organization").get(org ?? "").bypass()
+    const organizationDoc = await $zodula.doctype("Organization").get(org ?? "").bypass()
 
     const roles = await db
       .select("*")
-      .from("zodula__User Role")
+      .from("User Role")
       .where("user", "=", user.id)
       .execute();
     const _roles = roles.map((role) => role.role);

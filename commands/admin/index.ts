@@ -14,18 +14,17 @@ export default new Command("admin")
                 await startup()
                 const { email, password, roles } = options
                 const _roles = roles.split(",")
-                const exists = await $zodula.doctype("zodula__User").select().where("email", "=", email).bypass(true)
+                const exists = await $zodula.doctype("User").select().where("email", "=", email).bypass(true)
                 if (exists.count > 0) {
                     throw "User already exists"
                 } else {
-                    const hashedPassword = await Bun.password.hash(password)
-                    const user = await $zodula.doctype("zodula__User").insert({
+                    const user = await $zodula.doctype("User").insert({
                         email,
-                        password: hashedPassword,
+                        password,
                         is_active: 1
                     }).bypass(true)
                     for (const role of _roles) {
-                        await $zodula.doctype("zodula__User Role").insert({
+                        await $zodula.doctype("User Role").insert({
                             user: user.id,
                             role
                         }).bypass(true)

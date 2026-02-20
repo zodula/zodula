@@ -1,14 +1,14 @@
-export default $doctype<"zodula__Tier Config Doctype Item">({
+export default $doctype<"Tier Config Doctype Item">({
     tier_config: {
         type: "Reference",
         label: "Tier Config",
-        reference: "zodula__Tier Config",
+        reference: "Tier Config",
         required: 1
     },
     doctype: {
         type: "Reference",
         label: "Doctype",
-        reference: "zodula__Doctype",
+        reference: "Doctype",
         required: 1
     },
     max_doc: {

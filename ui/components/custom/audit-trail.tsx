@@ -39,7 +39,7 @@ export function AuditTrail({
   
   // Fetch doctype to check comments_enabled
   const { doc: doctypeDoc } = useDoc({
-    doctype: "zodula__Doctype",
+    doctype: "Doctype",
     id: doctype,
   }, [doctype]);
 
@@ -50,7 +50,7 @@ export function AuditTrail({
     error,
     reload,
   } = useDocList({
-    doctype: "zodula__Audit Trail",
+    doctype: "Audit Trail",
     filters: [
       ["doctype", "=", doctype],
       ["doctype_id", "=", docId],
@@ -69,7 +69,7 @@ export function AuditTrail({
     setIsSubmitting(true);
     try {
       // Create audit trail entry with comment
-      await zodula.doc.create_doc("zodula__Audit Trail", {
+      await zodula.doc.create_doc("Audit Trail", {
         doctype: doctype,
         doctype_id: docId,
         action: "Comment",
@@ -314,7 +314,7 @@ export function AuditTrail({
                   <div className="zd:flex zd:items-center zd:gap-2">
                     <div className="zd:text-sm zd:text-gray-700 zd:leading-relaxed">
                       <Link
-                        to={`/desk/doctypes/zodula__User/form/${trail.created_by}`}
+                        to={`/desk/doctypes/User/form/${trail.created_by}`}
                         className="zd:text-muted-foreground zd:hover:text-primary zd:transition-colors"
                       >
                         {trail.by_name
@@ -340,7 +340,7 @@ export function AuditTrail({
                       </span>
                       <span className="zd:text-muted-foreground">·</span>
                       <Link
-                        to={`/desk/${org}/doctypes/zodula__Audit Trail/form/${trail.id}`}
+                        to={`/desk/${org}/doctypes/Audit Trail/form/${trail.id}`}
                         className="zd:text-primary zd:hover:text-primary zd:transition-colors zd:opacity-0 zd:group-hover:opacity-100"
                       >
                         <ExternalLinkIcon className="zd:w-3 zd:h-3" />

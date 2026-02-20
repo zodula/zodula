@@ -1,8 +1,8 @@
-export default $doctype<"zodula__Tier Config">({
+export default $doctype<"Tier Config">({
     app: {
         type: "Reference",
         label: "App",
-        reference: "zodula__App",
+        reference: "App",
         required: 1,
         unique: 1,
         group: "tier_config_unique",
@@ -19,7 +19,7 @@ export default $doctype<"zodula__Tier Config">({
     doctype_items: {
         type: "Reference Table",
         label: "Doctype Items",
-        reference: "zodula__Tier Config Doctype Item",
+        reference: "Tier Config Doctype Item",
     }
 }, {
     naming_series: "{{app}} - {{tier_level}}",

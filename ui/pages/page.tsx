@@ -9,8 +9,8 @@ export default function Page() {
     const [showHomepage, setShowHomepage] = useState(false);
 
     const { doc } = useDoc({
-        doctype: "zodula__Global Setting",
-        id: "zodula__Global Setting"
+        doctype: "Global Setting",
+        id: "Global Setting"
     });
 
     useEffect(() => {
@@ -49,7 +49,7 @@ export default function Page() {
                 {/* Action Buttons */}
                 <div className="zd:flex zd:flex-col sm:zd:flex-row zd:gap-4 zd:justify-center">
                     <Button 
-                        onClick={() => push("/desk/System Panel/doctypes/zodula__Global Setting")}
+                        onClick={() => push("/desk/System Panel/doctypes/Global Setting")}
                         className="zd:flex zd:items-center zd:space-x-2"
                     >
                         <span>Configure Homepage</span>
@@ -109,12 +109,12 @@ export default function Page() {
                         Quick Setup
                     </h3>
                     <p className="zd:text-sm zd:text-muted-foreground zd:mb-4">
-                        To set your homepage redirect, go to <code className="zd:bg-muted zd:px-2 zd:py-1 zd:rounded zd:text-xs">/desk/doctypes/zodula__Global Setting</code> 
+                        To set your homepage redirect, go to <code className="zd:bg-muted zd:px-2 zd:py-1 zd:rounded zd:text-xs">/desk/doctypes/Global Setting</code> 
                         and set the "homepage" field to your desired URL (e.g., <code className="zd:bg-muted zd:px-2 zd:py-1 zd:rounded zd:text-xs">/desk</code>).
                     </p>
                     <Button 
                         variant="outline" 
-                        onClick={() => push("/desk/doctypes/zodula__Global Setting")}
+                        onClick={() => push("/desk/doctypes/Global Setting")}
                         className="zd:flex zd:items-center zd:space-x-2"
                     >
                         <Settings className="zd:w-4 zd:h-4" />

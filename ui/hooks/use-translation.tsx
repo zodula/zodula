@@ -15,18 +15,18 @@ export interface LanguageStore {
 
 // Translation store - not persisted, refetches on page reload
 export interface TranslationStore {
-    translations: Zodula.SelectDoctype<"zodula__Translation">[];
-    setTranslations: (translations: Zodula.SelectDoctype<"zodula__Translation">[]) => void;
-    getTranslation: (key: string) => Zodula.SelectDoctype<"zodula__Translation"> | undefined;
-    setTranslation: (key: string, translation: Zodula.SelectDoctype<"zodula__Translation">) => void;
+    translations: Zodula.SelectDoctype<"Translation">[];
+    setTranslations: (translations: Zodula.SelectDoctype<"Translation">[]) => void;
+    getTranslation: (key: string) => Zodula.SelectDoctype<"Translation"> | undefined;
+    setTranslation: (key: string, translation: Zodula.SelectDoctype<"Translation">) => void;
     deleteTranslation: (key: string) => void;
     isLoaded: boolean; // Track if translations have been loaded in this session
     // Cache for translation lookups
     translationCache: Map<string, string>;
     patternCache: Map<string, { key: string; variables: TranslationVariables }>;
     // Languages with flag emojis
-    languages: Zodula.SelectDoctype<"zodula__Language">[];
-    setLanguages: (languages: Zodula.SelectDoctype<"zodula__Language">[]) => void;
+    languages: Zodula.SelectDoctype<"Language">[];
+    setLanguages: (languages: Zodula.SelectDoctype<"Language">[]) => void;
 }
 
 // Type for auto-detected translation variables
@@ -54,7 +54,7 @@ export const useTranslationStore = create<TranslationStore>((set, get) => ({
     patternCache: new Map(),
     isLoaded: false, // Track if translations have been loaded in this session
     languages: [],
-    setTranslations: (translations: Zodula.SelectDoctype<"zodula__Translation">[]) => {
+    setTranslations: (translations: Zodula.SelectDoctype<"Translation">[]) => {
         set({
             translations,
             translationCache: new Map(), // Clear cache when translations change
@@ -62,11 +62,11 @@ export const useTranslationStore = create<TranslationStore>((set, get) => ({
             isLoaded: true
         });
     },
-    setLanguages: (languages: Zodula.SelectDoctype<"zodula__Language">[]) => {
+    setLanguages: (languages: Zodula.SelectDoctype<"Language">[]) => {
         set({ languages });
     },
     getTranslation: (text: string) => get().translations.find((translation) => translation.translation === text),
-    setTranslation: (key: string, translation: Zodula.SelectDoctype<"zodula__Translation">) => set({ translations: get().translations.map((translation) => translation.key === key ? translation : translation) }),
+    setTranslation: (key: string, translation: Zodula.SelectDoctype<"Translation">) => set({ translations: get().translations.map((translation) => translation.key === key ? translation : translation) }),
     deleteTranslation: (key: string) => set({ translations: get().translations.filter((translation) => translation.key !== key) }),
 }))
 
@@ -82,31 +82,31 @@ export const useTranslation = (lang?: string) => {
 
     // Use useDocListAll for fetching all languages with persistent caching
     const { docs: languageDocs } = useDocListAll({
-        doctype: "zodula__Language"
+        doctype: "Language"
     });
 
     // Use useDocListAll for fetching all translations with persistent caching
     const { docs: translationDocs } = useDocListAll({
-        doctype: "zodula__Translation"
+        doctype: "Translation"
     });
 
     // Use useDocAll for Global Setting (single doctype) with persistent caching
     const { doc: websiteSetting } = useDocAll({
-        doctype: "zodula__Global Setting",
-        id: "zodula__Global Setting"
+        doctype: "Global Setting",
+        id: "Global Setting"
     });
 
     // Update languages when fetched
     useEffect(() => {
         if (languageDocs && languageDocs.length > 0) {
-            setLanguages(languageDocs as Zodula.SelectDoctype<"zodula__Language">[]);
+            setLanguages(languageDocs as Zodula.SelectDoctype<"Language">[]);
         }
     }, [languageDocs, setLanguages]);
 
     // Update translations when fetched (only once per session)
     useEffect(() => {
         if (translationDocs && translationDocs.length > 0 && !isLoaded) {
-            setTranslations(translationDocs as Zodula.SelectDoctype<"zodula__Translation">[]);
+            setTranslations(translationDocs as Zodula.SelectDoctype<"Translation">[]);
         }
     }, [translationDocs, setTranslations, isLoaded]);
 

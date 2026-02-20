@@ -147,23 +147,23 @@ async function upsertTranslation(
       idx: 0,
       vector: "[]",
       ...basePayload,
-    } satisfies Required<Zodula.SelectDoctype<"zodula__Translation">>;
+    } satisfies Required<Zodula.SelectDoctype<"Translation">>;
 
     const isExist = await trx
       .select("*")
-      .from("zodula__Translation")
+      .from("Translation")
       .where("id", "=", id)
       .first();
 
     if (isExist) {
       await trx
-        .update("zodula__Translation")
+        .update("Translation")
         .set(translationPayload)
         .where("id", "=", id)
         .execute();
     } else {
       await trx
-        .insert("zodula__Translation")
+        .insert("Translation")
         .values(translationPayload)
         .execute();
     }
@@ -215,7 +215,7 @@ async function cleanupOrphanedTranslations(
   try {
     if (processedTranslationIds.length > 0) {
       await trx
-        .delete("zodula__Translation")
+        .delete("Translation")
         .where("id", "NOT IN", processedTranslationIds)
         .execute();
     }

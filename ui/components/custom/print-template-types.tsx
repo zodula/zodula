@@ -8,7 +8,7 @@ export interface PrintTemplateElement {
   verticalAlign?: "top" | "middle" | "bottom";
   fields?: string[]; // For Reference Table and Extend: child fields to display
   // For reference element type
-  referenceDoctype?: string; // Doctype to fetch from (e.g., "zodula__Organization")
+  referenceDoctype?: string; // Doctype to fetch from (e.g., "Organization")
   referenceIdFilter?: string; // ID filter expression (e.g., "{{session.organization}}")
   referenceField?: string; // Field to fetch (e.g., "name")
   // Label support for field and reference

@@ -11,7 +11,7 @@ interface CSVDialogProps {
 
 export const CSVDialog = ({ isOpen, onClose, initialData }: CSVDialogProps) => {
     const { docs: fields } = useDocList({
-        doctype: "zodula__Field",
+        doctype: "Field",
         limit: -1,
         sort: "idx",
         order: "asc",

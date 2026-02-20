@@ -10,7 +10,7 @@ interface AboutZodulaDialogProps {
 
 export const AboutZodulaDialog = ({ isOpen, onClose }: AboutZodulaDialogProps) => {
     const { docs: apps } = useDocList({
-        doctype: "zodula__App",
+        doctype: "App",
         limit: 1000,
         sort: "created_at",
         order: "asc"

@@ -226,6 +226,16 @@ export const extendDoctype = () => {
               .from(doctypeMeta.name)
               .where("id", "=", docid)
               .first();
+              const isSingle = doctypeMeta.config.is_single === 1;
+
+              if(isSingle && !isExist) {
+                const result = await zodula
+                  .doctype(doctypeMeta.name)
+                  .insert({})
+                  .override(true)
+                  .bypass(true)
+                return ctx.json(result);
+              }
             const result = await zodula
               .doctype(doctypeMeta.name)
               .get(docid)
@@ -426,7 +436,7 @@ export const extendDoctype = () => {
     // bulk create docs
     server.post(
       `/api/resources/${doctypeMeta.name}`,
-      async (ctx) => {
+      async (ctx: any) => {
         try {
           ctxContext.enterWith({
             ctx: ctx as any,
@@ -436,7 +446,6 @@ export const extendDoctype = () => {
             dbcontext.enterWith({
               trx: trx,
             });
-            console.log("is Transaction", trx.isTransaction);
             const input = await ctx.body;
             let result: Zodula.SelectDoctype<typeof doctypeMeta.name>[] = [];
             for (const item of input.docs || []) {

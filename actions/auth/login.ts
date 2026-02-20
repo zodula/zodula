@@ -10,7 +10,7 @@ export default $action(async ctx => {
     if (!email || !password) {
         throw new Error("Email and password are required")
     }
-    const { docs: users } = await $zodula.doctype("zodula__User").select().where("email", "=", email).where("is_active", "=", 1).unsafe(true).bypass(true)
+    const { docs: users } = await $zodula.doctype("User").select().where("email", "=", email).where("is_active", "=", 1).unsafe(true).bypass(true)
     if (!users[0]) {
         throw new Error("User not found")
     }
@@ -20,14 +20,14 @@ export default $action(async ctx => {
     if (!isPasswordValid) {
         throw new Error("Invalid password")
     }
-    const { docs: [existingSession] } = await $zodula.doctype("zodula__Session").select().where("user", "=", user.id)
+    const { docs: [existingSession] } = await $zodula.doctype("Session").select().where("user", "=", user.id)
         .where("user_agent", "=", userAgent)
         .where("ip_address", "=", ipAddress)
         .sort("expires_at", "desc").bypass(true)
     // validate if session is already exists and not expired
     if (!existingSession || new Date(existingSession.expires_at) < new Date()) {
         // create new session
-        const createdSession = await $zodula.doctype("zodula__Session").insert({
+        const createdSession = await $zodula.doctype("Session").insert({
             user: user.id,
             // 7 days
             expires_at: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
@@ -59,10 +59,10 @@ export default $action(async ctx => {
         })
         return ctx.json({
             session: createdSession,
-            user: $zodula.utils.safe("zodula__User", user)
+            user: $zodula.utils.safe("User", user)
         })
     } else {
-        const updatedSession = await $zodula.doctype("zodula__Session").update(existingSession.id, {
+        const updatedSession = await $zodula.doctype("Session").update(existingSession.id, {
             expires_at: $zodula.utils.format(new Date(Date.now() + 1000 * 60 * 60 * 24 * 7), "datetime"),
             updated_by: user.id,
             created_by: user.id,
@@ -90,7 +90,7 @@ export default $action(async ctx => {
         })
         return ctx.json({
             session: updatedSession,
-            user: $zodula.utils.safe("zodula__User", user)
+            user: $zodula.utils.safe("User", user)
         })
     }
 }, {
@@ -100,8 +100,8 @@ export default $action(async ctx => {
     }),
     response: {
         200: z.object({
-            session: $zodula.utils.zod("zodula__Session"),
-            user: $zodula.utils.zod("zodula__User")
+            session: $zodula.utils.zod("Session"),
+            user: $zodula.utils.zod("User")
         })
     }
 })

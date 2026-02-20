@@ -34,7 +34,7 @@ const ReferenceInput = (props: {
     { id: string; title: string; subtitle: string; doc: any }[]
   >([]);
   const [doctype, setDoctype] =
-    useState<Zodula.SelectDoctype<"zodula__Doctype"> | null>(null);
+    useState<Zodula.SelectDoctype<"Doctype"> | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const isVirtual = props.fieldOptions.type === "Virtual Reference";
 
@@ -52,13 +52,13 @@ const ReferenceInput = (props: {
 
   // Get doctype metadata to check if it's quick entry
   const { doc: referenceDoctypeDoc } = useDoc({
-    doctype: "zodula__Doctype",
+    doctype: "Doctype",
     id: referenceDoctype || ""
   }, [referenceDoctype]);
 
   // Get fields for the reference doctype
   const { docs: referenceFields } = useDocList({
-    doctype: "zodula__Field",
+    doctype: "Field",
     limit: -1,
     sort: "idx",
     order: "asc",
@@ -134,7 +134,7 @@ const ReferenceInput = (props: {
       const reference = referenceDoctype;
       if (!reference) return;
       const doctype = await zodula.doc.get_doc(
-        "zodula__Doctype",
+        "Doctype",
         reference as any,
         {}
       );

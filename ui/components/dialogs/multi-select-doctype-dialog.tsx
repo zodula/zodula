@@ -71,7 +71,7 @@ export function MultiSelectDoctypeDialog({
 
   const { docs: fieldDocs } = useDocList(
     {
-      doctype: "zodula__Field" as Zodula.DoctypeName,
+      doctype: "Field" as Zodula.DoctypeName,
       limit: -1,
       filters: doctype ? [["doctype", "=", doctype]] : [],
       sort: "idx",
@@ -120,7 +120,7 @@ export function MultiSelectDoctypeDialog({
   const { docs, loading, error } = useDocList(
     doctype
       ? { doctype, filters: appliedFilters, limit, sort: "updated_at", order: "desc" }
-      : { doctype: "zodula__Doctype" as Zodula.DoctypeName, limit: 0 },
+      : { doctype: "Doctype" as Zodula.DoctypeName, limit: 0 },
     [isOpen, doctype, JSON.stringify(appliedFilters), limit]
   );
 

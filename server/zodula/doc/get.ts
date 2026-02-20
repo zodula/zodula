@@ -70,7 +70,7 @@ export class ZodulaDoctypeGetter<
 
         if (
           !can &&
-          !["zodula__Organization", "zodula__Organization Role"].includes(
+          !["Organization", "Organization Role"].includes(
             this.doctypeName
           )
         ) {

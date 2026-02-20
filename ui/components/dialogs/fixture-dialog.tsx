@@ -14,7 +14,7 @@ interface FixtureDialogProps {
 
 export const FixtureDialog = ({ isOpen, onClose, initialData }: FixtureDialogProps) => {
     const { docs: fields } = useDocList({
-        doctype: "zodula__Field",
+        doctype: "Field",
         limit: -1,
         sort: "idx",
         order: "asc",
@@ -32,11 +32,11 @@ export const FixtureDialog = ({ isOpen, onClose, initialData }: FixtureDialogPro
     const [useAppField, setUseAppField] = useState<boolean>(false)
     const [hasUserInteracted, setHasUserInteracted] = useState<boolean>(false)
     
-    // Find fields that reference zodula__App
+    // Find fields that reference App
     const appFields = useMemo(() => {
         return fields.filter(field => 
             field.type === "Reference" && 
-            field.reference === "zodula__App"
+            field.reference === "App"
         )
     }, [fields])
     
@@ -109,7 +109,7 @@ export const FixtureDialog = ({ isOpen, onClose, initialData }: FixtureDialogPro
                         />
                     ) : (
                         <div className="zd:text-sm zd:text-muted-foreground">
-                            No fields found that reference zodula__App. Please use a fixed app instead.
+                            No fields found that reference App. Please use a fixed app instead.
                         </div>
                     )}
                 </div>
@@ -120,7 +120,7 @@ export const FixtureDialog = ({ isOpen, onClose, initialData }: FixtureDialogPro
                     label="Select App"
                     field={{
                         type: "Reference",
-                        reference: "zodula__App"
+                        reference: "App"
                     }}
                     value={selectedApp}
                     fieldKey="value"

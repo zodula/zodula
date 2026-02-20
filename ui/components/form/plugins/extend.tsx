@@ -24,7 +24,7 @@ export const ExtendPlugin = new FormPlugin({
     fieldPath?: string;
 }) => {
     const { doc: doctypeDoc } = useDocAll({
-        doctype: "zodula__Doctype",
+        doctype: "Doctype",
         id: props.fieldOptions.reference as any
     });
 
@@ -58,7 +58,7 @@ export const ExtendPlugin = new FormPlugin({
 
     // Fetch all fields with persistent caching, then filter client-side
     const { docs: allFields } = useDocListAll({
-        doctype: "zodula__Field"
+        doctype: "Field"
     });
 
     // Filter fields by doctype and sort by idx

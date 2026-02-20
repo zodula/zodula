@@ -1,11 +1,11 @@
 import { zodula } from "../.."
 
 declare global {
-    var $translation: Zodula.SelectDoctype<"zodula__Translation">[]
+    var $translation: Zodula.SelectDoctype<"Translation">[]
 }
 
 export const extendTranslation = async () => {
-    const translations = await zodula.doctype("zodula__Translation").select().fields(["key", "translation", "language"]).bypass(true)
+    const translations = await zodula.doctype("Translation").select().fields(["key", "translation", "language"]).bypass(true)
     global.$translation = translations.docs
 }
 

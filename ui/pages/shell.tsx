@@ -85,7 +85,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         reload: reloadOrganization,
     } = useDoc(
         {
-            doctype: "zodula__Organization",
+            doctype: "Organization",
             id: orgSlug || "",
         },
         [orgSlug]

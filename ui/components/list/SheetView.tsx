@@ -242,7 +242,7 @@ export function SheetView({
 
   // Get doctype schema to determine columns
   const { doc: doctypeDoc } = useDoc({
-    doctype: "zodula__Doctype",
+    doctype: "Doctype",
     id: doctype,
   });
 

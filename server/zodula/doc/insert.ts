@@ -57,7 +57,7 @@ export class ZodulaDoctypeInsert<
       const user = await this.session.user(true);
       const doctype = loader.from("doctype").get(this.doctypeName);
       const organizationName = await this.session.organization(true);
-      const organization = await zodula.doctype("zodula__Organization").get(organizationName || "System Panel").bypass(true).fields(["abbr","name"])
+      const organization = await zodula.doctype("Organization").get(organizationName || "System Panel").bypass(true).fields(["abbr","name"])
 
       if(!this.input.organization) {
         this.input.organization = organization?.name || "System Panel";
@@ -180,7 +180,7 @@ export class ZodulaDoctypeInsert<
     let orgDoc;
     try {
       orgDoc = await zodula
-        .doctype("zodula__Organization")
+        .doctype("Organization")
         .get(organization)
         .bypass(true);
     } catch {
@@ -239,7 +239,7 @@ export class ZodulaDoctypeInsert<
     let apps: { docs: any[]; count: number };
     try {
       apps = await zodula
-        .doctype("zodula__App")
+        .doctype("App")
         .select()
         .bypass(true);
     } catch {
@@ -258,7 +258,7 @@ export class ZodulaDoctypeInsert<
         let tierConfig: { docs: any[]; count: number };
         try {
           tierConfig = await zodula
-            .doctype("zodula__Tier Config")
+            .doctype("Tier Config")
             .select()
             .where("tier_level", "=", tier.toString() as "0" | "1" | "2" | "3" | "4" | "5")
             .where("app", "=", app.id)
@@ -274,7 +274,7 @@ export class ZodulaDoctypeInsert<
           let doctypeItems: { docs: any[]; count: number };
           try {
             doctypeItems = await zodula
-              .doctype("zodula__Tier Config Doctype Item")
+              .doctype("Tier Config Doctype Item")
               .select()
               .where("tier_config", "=", tierConfigDoc.id)
               .where("doctype", "=", doctypeName)

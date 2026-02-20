@@ -26,8 +26,8 @@ export default function DeskPage() {
   const { push, pathname } = useRouter();
   const { user } = useAuth();
   const { doc: globalSetting } = useDocAll({
-    doctype: "zodula__Global Setting",
-    id: "zodula__Global Setting"
+    doctype: "Global Setting",
+    id: "Global Setting"
   });
   const { t } = useTranslation();
 
@@ -39,7 +39,7 @@ export default function DeskPage() {
   );
 
   // Extract organizations from response
-  const organizations: Zodula.SelectDoctype<"zodula__Organization">[] = organizationsResponse?.data || [];
+  const organizations: Zodula.SelectDoctype<"Organization">[] = organizationsResponse?.data || [];
 
   // Get selected organization from localStorage
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
@@ -87,7 +87,7 @@ export default function DeskPage() {
 
   const logoUrl = globalSetting?.logo
     ? zodula.utils.getDoctypeFileUrl(
-        "zodula__Global Setting",
+        "Global Setting",
         globalSetting?.id || "",
         "logo",
         (globalSetting?.logo as string) || "",

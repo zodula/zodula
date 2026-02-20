@@ -75,7 +75,7 @@ export type DoctypeEventCallbackByName<DN extends Zodula.DoctypeName> = (data: E
  * Metadata for a loaded doctype
  */
 export interface DoctypeMetadata {
-    /** The full doctype name (e.g., "zodula__User") */
+    /** The full doctype name (e.g., "User") */
     name: Zodula.DoctypeName;
     /** Absolute path to the doctype file */
     dir: string;
@@ -471,7 +471,7 @@ export class DoctypeLoader implements DoctypePlugin {
         // Extract doctype folder name from path: apps/<app>/doctypes/<domain>/<doctype>/<doctype>.doctype.ts
         const pathParts = comparePath.split("/");
         const doctypeFolderName = pathParts[pathParts.length - 1] || "";
-        const doctypeName = `${appName}__${doctypeFolderName}` as Zodula.DoctypeName;
+        const doctypeName = `${doctypeFolderName}` as Zodula.DoctypeName;
         const domain = LoaderHelper.getDomainByPath(comparePath);
         const domainName = domain?.name || "";
         if (doctypeFolderName.startsWith("_")) {
@@ -671,8 +671,8 @@ export class DoctypeLoader implements DoctypePlugin {
      * Generates core-doctype.d.ts file
      */
     private async generateCoreDoctypeTypes(): Promise<void> {
-        const doctypeMetadata = this.safeGetDoctype("zodula__Doctype");
-        const fieldMetadata = this.safeGetDoctype("zodula__Field");
+        const doctypeMetadata = this.safeGetDoctype("Doctype");
+        const fieldMetadata = this.safeGetDoctype("Field");
 
         if (!doctypeMetadata || !fieldMetadata) {
             logger.warn("Core doctypes not found, skipping type generation");

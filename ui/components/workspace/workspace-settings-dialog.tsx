@@ -87,7 +87,7 @@ export const WorkspaceSettingsDialog = ({
                                 label="App"
                                 field={{
                                     type: "Reference",
-                                    reference: "zodula__App"
+                                    reference: "App"
                                 }}
                                 value={editedWorkspace.app}
                                 fieldKey="app"

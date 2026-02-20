@@ -192,8 +192,8 @@ export class ZodulaDoctypeSelector<
   private buildWhereClause(
     doctype: DoctypeMetadata,
     roles: string[],
-    permissions: Zodula.SelectDoctype<"zodula__Doctype Permission">[],
-    user: Zodula.SelectDoctype<"zodula__User">,
+    permissions: Zodula.SelectDoctype<"Doctype Permission">[],
+    user: Zodula.SelectDoctype<"User">,
     organization: string | null,
     userOrganizationRoles: string[],
     joinAliases?: Map<string, string>
@@ -288,7 +288,7 @@ export class ZodulaDoctypeSelector<
     if (doctype.config.is_global !== 1 && organization !== "System Panel" && !this.options.bypass) {
       whereConditions.push(`("${doctype.name}"."organization" = "${organization}" OR "${doctype.name}"."organization" = "System Panel")`);
     }
-    if(doctype.name === "zodula__Organization" && !roles.includes("System Admin") && !this.options.bypass) {
+    if(doctype.name === "Organization" && !roles.includes("System Admin") && !this.options.bypass) {
       whereConditions.push(`("${doctype.name}"."owner" = "${user?.id}" OR "${doctype.name}"."id" IN ("${userOrganizationRoles.join('","')}"))`);
     }
 
@@ -309,7 +309,7 @@ export class ZodulaDoctypeSelector<
 
     let mergePermission = {} as Record<
       string,
-      Zodula.SelectDoctype<"zodula__Doctype Permission">
+      Zodula.SelectDoctype<"Doctype Permission">
     >;
     for (const permission of permissions) {
       for (const [key, value] of Object.entries(permission)) {

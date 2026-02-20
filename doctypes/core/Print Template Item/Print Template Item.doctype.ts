@@ -1,4 +1,4 @@
-export default $doctype<"zodula__Print Template Item">({
+export default $doctype<"Print Template Item">({
     type: {
         type: "Select",
         label: "Type",

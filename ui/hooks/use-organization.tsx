@@ -2,10 +2,10 @@ import { create } from 'zustand';
 import { useDoc } from './use-doc';
 
 interface OrganizationState {
-  organization: Zodula.SelectDoctype<"zodula__Organization"> | null;
+  organization: Zodula.SelectDoctype<"Organization"> | null;
   loading: boolean;
   error: string | null;
-  setOrganization: (org: Zodula.SelectDoctype<"zodula__Organization"> | null) => void;
+  setOrganization: (org: Zodula.SelectDoctype<"Organization"> | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
 }
@@ -29,7 +29,7 @@ export function useOrganization() {
 export function useOrganizationById(id: string | null | undefined) {
   const { doc, loading, error } = useDoc(
     {
-      doctype: 'zodula__Organization',
+      doctype: 'Organization',
       id: id ?? '',
     },
     [id ?? '']

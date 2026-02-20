@@ -1,7 +1,7 @@
 [
   {
     "id": "0199b69c-1cf2-7000-ba1c-7f19f6eb4653",
-    "doctype": "zodula__Field",
+    "doctype": "Field",
     "role": "Anonymous",
     "perm_level": "0",
     "can_get": 1,
@@ -31,7 +31,7 @@
   },
   {
     "id": "0199b69c-4b9e-7000-bd67-33e2ec165f2e",
-    "doctype": "zodula__Doctype",
+    "doctype": "Doctype",
     "role": "Anonymous",
     "perm_level": "0",
     "can_get": 1,
@@ -61,7 +61,7 @@
   },
   {
     "id": "0199cfd0-8f62-7000-a2de-f311057f2dac",
-    "doctype": "zodula__Doctype Relative",
+    "doctype": "Doctype Relative",
     "role": "Anonymous",
     "perm_level": "0",
     "can_get": 1,
@@ -91,7 +91,7 @@
   },
   {
     "id": "0199cfd0-be9b-7000-a65f-e242341207dc",
-    "doctype": "zodula__Translation",
+    "doctype": "Translation",
     "role": "Anonymous",
     "perm_level": "0",
     "can_get": 1,
@@ -121,7 +121,7 @@
   },
   {
     "id": "0199cfd1-0a19-7000-ac2b-95472a13f1b6",
-    "doctype": "zodula__Global Setting",
+    "doctype": "Global Setting",
     "role": "Anonymous",
     "perm_level": "0",
     "can_get": 1,
@@ -151,7 +151,7 @@
   },
   {
     "id": "0199cfd1-4d96-7000-917e-dcd5d783b542",
-    "doctype": "zodula__Language",
+    "doctype": "Language",
     "role": "Anonymous",
     "perm_level": "0",
     "can_get": 1,
@@ -181,7 +181,7 @@
   },
   {
     "id": "0199d055-9f1c-7000-805d-e131d7566754",
-    "doctype": "zodula__Workspace",
+    "doctype": "Workspace",
     "role": "Authenticated",
     "perm_level": "0",
     "can_get": 1,
@@ -211,7 +211,7 @@
   },
   {
     "id": "0199d055-e5cf-7000-b505-4e25edddbe35",
-    "doctype": "zodula__Workspace Item",
+    "doctype": "Workspace Item",
     "role": "Authenticated",
     "perm_level": "0",
     "can_get": 1,
@@ -241,7 +241,7 @@
   },
   {
     "id": "0199d059-fafd-7000-9937-0a84b430c155",
-    "doctype": "zodula__Doctype Permission",
+    "doctype": "Doctype Permission",
     "role": "Anonymous",
     "perm_level": "0",
     "can_get": 1,
@@ -271,7 +271,7 @@
   },
   {
     "id": "0199d05b-895a-7000-af4b-d38a874c0ea5",
-    "doctype": "zodula__Session",
+    "doctype": "Session",
     "role": "Authenticated",
     "perm_level": "0",
     "can_get": 0,
@@ -301,7 +301,7 @@
   },
   {
     "id": "0199d072-02cb-7000-b599-0696e549d301",
-    "doctype": "zodula__User",
+    "doctype": "User",
     "role": "Authenticated",
     "perm_level": "0",
     "can_get": 0,
@@ -331,7 +331,7 @@
   },
   {
     "id": "0a24dd490d0691f5",
-    "doctype": "zodula__Page",
+    "doctype": "Page",
     "role": "Authenticated",
     "perm_level": "0",
     "can_get": 1,
@@ -361,7 +361,7 @@
   },
   {
     "id": "f25abb64e4bddf98",
-    "doctype": "zodula__Audit Trail",
+    "doctype": "Audit Trail",
     "role": "Authenticated",
     "perm_level": "0",
     "can_get": 1,
@@ -391,7 +391,7 @@
   },
   {
     "id": "99a7348113048b26",
-    "doctype": "zodula__Organization",
+    "doctype": "Organization",
     "role": "Authenticated",
     "perm_level": "0",
     "can_get": 0,
@@ -421,7 +421,7 @@
   },
   {
     "id": "5184d8eb21be7fd7",
-    "doctype": "zodula__Print Template",
+    "doctype": "Print Template",
     "role": "Organization Owner",
     "perm_level": "0",
     "can_get": 1,

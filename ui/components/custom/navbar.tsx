@@ -29,9 +29,9 @@ export interface NavbarProps {
 }
 
 export const Navbar = ({ children }: NavbarProps) => {
-  const { doc: zodula__WebsiteSetting } = useDocAll({
-    doctype: "zodula__Global Setting",
-    id: "zodula__Global Setting"
+  const { doc: WebsiteSetting } = useDocAll({
+    doctype: "Global Setting",
+    id: "Global Setting"
   });
   const { org } = useParams();
   const [searchTerm, setSearchTerm] = useState<string>("");
@@ -42,11 +42,11 @@ export const Navbar = ({ children }: NavbarProps) => {
 
   // Fetch all doctypes and pages with persistent caching, then filter client-side
   const { docs: allDoctypes } = useDocListAll({
-    doctype: "zodula__Doctype"
+    doctype: "Doctype"
   });
 
   const { docs: allPages } = useDocListAll({
-    doctype: "zodula__Page"
+    doctype: "Page"
   });
 
   // Filter doctypes and sort
@@ -119,7 +119,6 @@ export const Navbar = ({ children }: NavbarProps) => {
         label: translatedLabel,
         value: `/desk/${org}/doctypes/${doc.name}/list`,
         icon: "BookIcon",
-        subtitle: t(doc.app || ""),
       });
     });
 
@@ -190,12 +189,12 @@ export const Navbar = ({ children }: NavbarProps) => {
             >
               <img
                 src={
-                  !!zodula__WebsiteSetting?.logo
+                  !!WebsiteSetting?.logo
                     ? zodula.utils.getDoctypeFileUrl(
-                        "zodula__Global Setting",
-                        zodula__WebsiteSetting?.id || "",
+                        "Global Setting",
+                        WebsiteSetting?.id || "",
                         "logo",
-                        (zodula__WebsiteSetting?.logo as string) || "",
+                        (WebsiteSetting?.logo as string) || "",
                         "System Panel"
                       ) + "?w=40&h=40"
                     : "/public/zodula/zodula-logo.png"
@@ -247,7 +246,7 @@ export const Navbar = ({ children }: NavbarProps) => {
                     </span>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem href={`/desk/${org}/doctypes/zodula__Organization/form/${org}`}>
+                  <DropdownMenuItem href={`/desk/${org}/doctypes/Organization/form/${org}`}>
                     {t("Organization Setting")}
                   </DropdownMenuItem>
 

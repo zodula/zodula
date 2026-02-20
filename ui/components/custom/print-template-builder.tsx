@@ -42,7 +42,7 @@ export interface PrintTemplateElement {
   verticalAlign?: "top" | "middle" | "bottom";
   fields?: string[]; // For Reference Table and Extend: child fields to display
   // For reference element type
-  referenceDoctype?: string; // Doctype to fetch from (e.g., "zodula__Organization")
+  referenceDoctype?: string; // Doctype to fetch from (e.g., "Organization")
   referenceIdFilter?: string; // ID filter expression (e.g., "{{session.organization}}")
   referenceField?: string; // Field to fetch (e.g., "name")
   // Label support for field and reference
@@ -147,7 +147,7 @@ function TableCustomizationPanel({
 }: {
   element: PrintTemplateElement;
   id: string;
-  childFields: Zodula.SelectDoctype<"zodula__Field">[];
+  childFields: Zodula.SelectDoctype<"Field">[];
   handleUpdateElement: (id: string, updates: Partial<PrintTemplateElement>) => void;
   t: (key: string) => string;
   selectedFieldConfig?: Zodula.Field | null;
@@ -315,7 +315,7 @@ function TableCustomizationPanel({
               <div className="zd:space-y-2 zd:pb-4 zd:border-b zd:border-border">
                 <label className="zd:text-sm zd:font-medium">{t("Child Fields")}</label>
                 <div className="zd:max-h-48 zd:overflow-y-auto zd:border zd:border-border zd:rounded zd:p-2 zd:space-y-1">
-                  {childFields.map((field: Zodula.SelectDoctype<"zodula__Field">) => (
+                  {childFields.map((field: Zodula.SelectDoctype<"Field">) => (
                     <Checkbox
                       key={field.id}
                       checked={element.fields?.includes(field.name || "") || false}
@@ -562,7 +562,7 @@ function SettingsPanel({
             field={{
               type: "File",
               name: "guided_background",
-              doctype: d.isLetterHead ? "zodula__Letter Head" : "zodula__Print Template",
+              doctype: d.isLetterHead ? "Letter Head" : "Print Template",
               accept: "image/*",
             }}
             fieldKey="guided_background"
@@ -629,7 +629,7 @@ export function PrintTemplateBuilder({
   
   // Fetch doctype configuration for template generation
   const { doc: doctypeDoc } = useDoc({
-    doctype: "zodula__Doctype",
+    doctype: "Doctype",
     id: doctype || "",
     fields: ["tabs", "label"],
   }, [doctype]);
@@ -749,11 +749,11 @@ export function PrintTemplateBuilder({
 
   // Get organization fields for easy access
   const { docs: organizationFields } = useDocList({
-    doctype: "zodula__Field",
+    doctype: "Field",
     limit: 10000,
     sort: "idx",
     order: "asc",
-    filters: [["doctype", "=", "zodula__Organization"]],
+    filters: [["doctype", "=", "Organization"]],
   }, []);
 
   const fieldOptions = useMemo(() => {
@@ -763,7 +763,7 @@ export function PrintTemplateBuilder({
     }));
     
     // Add organization fields with "organization." prefix
-    const orgFields = organizationFields.map((field: Zodula.SelectDoctype<"zodula__Field">) => ({
+    const orgFields = organizationFields.map((field: Zodula.SelectDoctype<"Field">) => ({
       value: `organization.${field.name}`,
       label: `Organization: ${field.label || field.name}`,
     }));
@@ -773,14 +773,14 @@ export function PrintTemplateBuilder({
 
   // Get doctypes for reference element
   const { docs: doctypes } = useDocList({
-    doctype: "zodula__Doctype",
+    doctype: "Doctype",
     limit: 10000,
     sort: "name",
     order: "asc",
   });
 
   const doctypeOptions = useMemo(() => {
-    return doctypes.map((dt: Zodula.SelectDoctype<"zodula__Doctype">) => ({
+    return doctypes.map((dt: Zodula.SelectDoctype<"Doctype">) => ({
       value: dt.name || "",
       label: dt.label || dt.name || "",
     }));
@@ -794,7 +794,7 @@ export function PrintTemplateBuilder({
   }, [layout, selectedElements]);
 
   const { docs: referenceFields } = useDocList({
-    doctype: "zodula__Field",
+    doctype: "Field",
     limit: 10000,
     sort: "idx",
     order: "asc",
@@ -804,7 +804,7 @@ export function PrintTemplateBuilder({
   }, [selectedReferenceElement?.referenceDoctype]);
 
   const referenceFieldOptions = useMemo(() => {
-    return referenceFields.map((field: Zodula.SelectDoctype<"zodula__Field">) => ({
+    return referenceFields.map((field: Zodula.SelectDoctype<"Field">) => ({
       value: field.name || "",
       label: field.label || field.name || "",
     }));
@@ -823,7 +823,7 @@ export function PrintTemplateBuilder({
   }, [selectedFieldElement, fields]);
 
   const { docs: childFields } = useDocList({
-    doctype: "zodula__Field",
+    doctype: "Field",
     limit: 10000,
     sort: "idx",
     order: "asc",
@@ -910,14 +910,14 @@ export function PrintTemplateBuilder({
         }
         
         try {
-          // The reference doctype name should be used as-is (may contain spaces like "zerp__Invoice Item")
+          // The reference doctype name should be used as-is (may contain spaces like "Invoice Item")
           // Build filter query parameters in the format the API expects: filters[0][0]=doctype&filters[0][1]==&filters[0][2]=referenceDoctype
           const filterParams = new URLSearchParams();
           filterParams.append('filters[0][0]', 'doctype');
           filterParams.append('filters[0][1]', '=');
           filterParams.append('filters[0][2]', referenceDoctype);
           
-          const url = `${BASE_URL}/api/resources/zodula__Field?${filterParams.toString()}&sort=idx&order=asc&limit=10000`;
+          const url = `${BASE_URL}/api/resources/Field?${filterParams.toString()}&sort=idx&order=asc&limit=10000`;
           
           const response = await fetch(url);
           
@@ -2292,7 +2292,7 @@ export function PrintTemplateBuilder({
                           }
                           
                           // Check if this child field is Image Preview type
-                          // childFields from useDocList returns docs as Zodula.SelectDoctype<"zodula__Field">[]
+                          // childFields from useDocList returns docs as Zodula.SelectDoctype<"Field">[]
                           const childFieldConfig = (childFields as any[]).find((f: any) => f && typeof f === 'object' && 'name' in f && f.name === col.field)
                           const isImagePreviewChild = childFieldConfig && childFieldConfig.type === "Image Preview"
                           
@@ -2480,7 +2480,7 @@ export function PrintTemplateBuilder({
             imageUrl = imageValue;
           } else {
             // Construct file URL - assuming it's a file path from the item
-            const urlPrefix = [BASE_URL, "files", "zodula__Print Template Item", element.id || "temp", "image", ""].join("/");
+            const urlPrefix = [BASE_URL, "files", "Print Template Item", element.id || "temp", "image", ""].join("/");
             imageUrl = `${urlPrefix}${imageValue}`;
           }
         }
@@ -4515,7 +4515,7 @@ export function PrintTemplateBuilder({
                       field={{
                         type: "File",
                         name: "image",
-                        doctype: "zodula__Print Template Item",
+                        doctype: "Print Template Item",
                         accept: "image/*",
                       }}
                       fieldKey="image"

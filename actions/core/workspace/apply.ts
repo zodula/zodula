@@ -118,12 +118,12 @@ export default $action(async (ctx) => {
 
         // Delete workspace items first (they reference workspaces)
         for (const itemId of itemToDelete) {
-            await $zodula.doctype("zodula__Workspace Item").delete(itemId).bypass(true)
+            await $zodula.doctype("Workspace Item").delete(itemId).bypass(true)
         }
 
         // Delete workspaces
         for (const workspaceId of workspaceToDelete) {
-            await $zodula.doctype("zodula__Workspace").delete(workspaceId).bypass(true)
+            await $zodula.doctype("Workspace").delete(workspaceId).bypass(true)
         }
 
         // Create new workspaces
@@ -140,7 +140,7 @@ export default $action(async (ctx) => {
             // Try to match with temp workspace by index
             const tempId = idx < tempWorkspaces.length ? tempWorkspaces[idx]?.id : undefined
             
-            const created = await $zodula.doctype("zodula__Workspace").insert({
+            const created = await $zodula.doctype("Workspace").insert({
                 name: workspaceData.name,
                 idx: workspaceData.idx ?? 0,
                 workspace_parent: workspaceData.workspace_parent || null,
@@ -161,7 +161,7 @@ export default $action(async (ctx) => {
         const createdItems: string[] = []
         for (const itemData of itemToCreate) {
             const workspaceId = workspaceIdMap.get(itemData.workspaceId) || itemData.workspaceId
-            const created = await $zodula.doctype("zodula__Workspace Item").insert({
+            const created = await $zodula.doctype("Workspace Item").insert({
                 idx: itemData.idx ?? 0,
                 type: (itemData.type as any) || null,
                 value: itemData.value || null,
@@ -175,7 +175,7 @@ export default $action(async (ctx) => {
 
         // Update workspaces
         for (const { id, data } of workspaceToUpdate) {
-            await $zodula.doctype("zodula__Workspace").update(id, {
+            await $zodula.doctype("Workspace").update(id, {
                 name: data.name,
                 idx: data.idx ?? 0,
                 workspace_parent: data.workspace_parent || null,
@@ -187,7 +187,7 @@ export default $action(async (ctx) => {
 
         // Update workspace items
         for (const { id, data } of itemToUpdate) {
-            await $zodula.doctype("zodula__Workspace Item").update(id, {
+            await $zodula.doctype("Workspace Item").update(id, {
                 idx: data.idx ?? 0,
                 type: (data.type as any) || null,
                 value: data.value || null,
@@ -222,7 +222,7 @@ export default $action(async (ctx) => {
                             ...ctx,
                             body: {
                                 app: "zodula",
-                                doctype: "zodula__Workspace",
+                                doctype: "Workspace",
                                 ids: allWorkspaceIds,
                                 fields: workspaceFields
                             }
@@ -237,7 +237,7 @@ export default $action(async (ctx) => {
                             ...ctx,
                             body: {
                                 app: "zodula",
-                                doctype: "zodula__Workspace Item",
+                                doctype: "Workspace Item",
                                 ids: allItemIds,
                                 fields: itemFields
                             }

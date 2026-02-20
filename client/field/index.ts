@@ -2,7 +2,7 @@ export const standardFields = {
     organization: {
         type: "Reference",
         label: "Organization",
-        reference: "zodula__Organization",
+        reference: "Organization",
         allow_on_submit: 1,
         in_list_view: 1,
         no_print: 1,
@@ -25,7 +25,7 @@ export const standardFields = {
     owner: {
         type: "Reference",
         label: "Owner",
-        reference: "zodula__User",
+        reference: "User",
         allow_on_submit: 1,
         no_print: 1,
     },
@@ -47,14 +47,14 @@ export const standardFields = {
     },
     created_by: {
         type: "Reference",
-        reference: "zodula__User",
+        reference: "User",
         label: "Created By",
         allow_on_submit: 1,
         no_print: 1,
     },
     updated_by: {
         type: "Reference",
-        reference: "zodula__User",
+        reference: "User",
         label: "Updated By",
         allow_on_submit: 1,
         no_print: 1,
@@ -130,11 +130,11 @@ export class ClientFieldHelper {
      * @returns Map of field name to permission record
      */
     static getFieldLevelPermissions(
-        doctypePermissions: Zodula.SelectDoctype<"zodula__Doctype Permission">[],
+        doctypePermissions: Zodula.SelectDoctype<"Doctype Permission">[],
         fields: Array<{ name: string; perm_level?: string | number }>,
         userRoles: string[]
-    ): Map<string, Zodula.SelectDoctype<"zodula__Doctype Permission">> {
-        const fieldMap = new Map<string, Zodula.SelectDoctype<"zodula__Doctype Permission">>();
+    ): Map<string, Zodula.SelectDoctype<"Doctype Permission">> {
+        const fieldMap = new Map<string, Zodula.SelectDoctype<"Doctype Permission">>();
 
         // Filter permissions for user's roles
         const userPermissions = doctypePermissions.filter((perm) =>
@@ -174,7 +174,7 @@ export class ClientFieldHelper {
      * @returns Object with canGet and canUpdate boolean flags
      */
     static checkPermLevelForField(
-        fieldPermissions: Map<string, Zodula.SelectDoctype<"zodula__Doctype Permission">>,
+        fieldPermissions: Map<string, Zodula.SelectDoctype<"Doctype Permission">>,
         fieldName: string,
         fieldPermLevel: number | string | undefined,
         isOwn: boolean = false,

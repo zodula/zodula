@@ -1,21 +1,21 @@
-export default $doctype<"zodula__Organization Role">({
+export default $doctype<"Organization Role">({
     userId: {
         type: "Reference",
         label: "User",
-        reference: "zodula__User",
+        reference: "User",
         required: 1
     },
     organizationId: {
         type: "Reference",
         label: "Organization",
-        reference: "zodula__Organization",
+        reference: "Organization",
         in_list_view: 1,
         required: 1,
     },
     roleId: {
         type: "Reference",
         label: "Role",
-        reference: "zodula__Role",
+        reference: "Role",
         required: 1,
         filters: JSON.stringify([
             ["is_system", "=", "0"],

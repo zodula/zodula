@@ -176,12 +176,12 @@ export const extendPage = async () => {
     });
     const websiteSetting = (await db
       .select()
-      .from("zodula__Global Setting" as Zodula.DoctypeName)
-      .where("id", "=", "zodula__Global Setting")
+      .from("Global Setting" as Zodula.DoctypeName)
+      .where("id", "=", "Global Setting")
       .first()
       .catch(
         () => null
-      )) as Zodula.SelectDoctype<"zodula__Global Setting"> | null;
+      )) as Zodula.SelectDoctype<"Global Setting"> | null;
     const homepage = websiteSetting?.homepage;
     if (!!homepage && homepage !== "/") {
       return ctx.redirect(homepage);
@@ -219,12 +219,12 @@ export const extendPage = async () => {
       });
       const websiteSetting = (await db
         .select()
-        .from("zodula__Global Setting" as Zodula.DoctypeName)
-        .where("id", "=", "zodula__Global Setting")
+        .from("Global Setting" as Zodula.DoctypeName)
+        .where("id", "=", "Global Setting")
         .first()
         .catch(
           () => null
-        )) as Zodula.SelectDoctype<"zodula__Global Setting"> | null;
+        )) as Zodula.SelectDoctype<"Global Setting"> | null;
       const pathname = new URL(ctx.request.url).pathname;
       let pageMetadata =
         (await page?.generateMetadata?.(ctx)) || ({} as Metadata);

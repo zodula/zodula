@@ -563,8 +563,8 @@ export const useWorkspaceEdit = create<
 
       // Trigger reload of workspaces and workspace items
       const docListAllStore = useDocListAllStore.getState();
-      docListAllStore.triggerReload("zodula__Workspace");
-      docListAllStore.triggerReload("zodula__Workspace Item");
+      docListAllStore.triggerReload("Workspace");
+      docListAllStore.triggerReload("Workspace Item");
     } catch (error) {
       console.error("Failed to save workspace changes:", error);
       const errorMessage =
@@ -588,8 +588,8 @@ export const useWorkspaceEdit = create<
     // Trigger reload of workspaces and workspace items
     // This ensures we have the latest data after discarding changes
     const docListAllStore = useDocListAllStore.getState();
-    docListAllStore.triggerReload("zodula__Workspace");
-    docListAllStore.triggerReload("zodula__Workspace Item");
+    docListAllStore.triggerReload("Workspace");
+    docListAllStore.triggerReload("Workspace Item");
   },
 
   hasChanges: () => {
@@ -645,7 +645,7 @@ export const useWorkspaceEdit = create<
       try {
         // Fetch workspaces
         const workspacesResponse = await zodula.doc.select_docs(
-          "zodula__Workspace",
+          "Workspace",
           {
             limit: 100000,
             filters: [],
@@ -657,7 +657,7 @@ export const useWorkspaceEdit = create<
 
         // Fetch workspace items
         const workspaceItemsResponse = await zodula.doc.select_docs(
-          "zodula__Workspace Item",
+          "Workspace Item",
           {
             limit: 100000,
             filters: [],
@@ -1178,7 +1178,7 @@ export const useWorkspace = () => {
     error: workspacesError,
     reload: reloadWorkspaces,
   } = useDocListAll({
-    doctype: "zodula__Workspace",
+    doctype: "Workspace",
   });
 
   const {
@@ -1187,7 +1187,7 @@ export const useWorkspace = () => {
     error: itemsError,
     reload: reloadWorkspaceItems,
   } = useDocListAll({
-    doctype: "zodula__Workspace Item",
+    doctype: "Workspace Item",
   });
 
   // Filter and sort workspaces based on organization

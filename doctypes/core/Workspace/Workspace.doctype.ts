@@ -1,4 +1,4 @@
-export default $doctype<"zodula__Workspace">({
+export default $doctype<"Workspace">({
     name: $f.Data({
         label: "Name",
         required: 1
@@ -11,7 +11,7 @@ export default $doctype<"zodula__Workspace">({
     workspace_parent: {
         type: "Virtual Reference",
         label: "Workspace Parent",
-        reference: "zodula__Workspace"
+        reference: "Workspace"
     },
     icon: {
         type: "Text",
@@ -20,7 +20,7 @@ export default $doctype<"zodula__Workspace">({
     app: {
         type: "Reference",
         label: "App",
-        reference: "zodula__App",
+        reference: "App",
         required: 1
     },
     is_system: {
@@ -31,7 +31,7 @@ export default $doctype<"zodula__Workspace">({
     workspace_items: {
         type: "Reference Table",
         label: "Workspace Items",
-        reference: "zodula__Workspace Item",
+        reference: "Workspace Item",
         required: 0
     }
 }, {

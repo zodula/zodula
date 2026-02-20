@@ -645,7 +645,7 @@ function TemplateElementRenderer({
       if (imagePath) {
         const imageUrl = imagePath.startsWith("http") || imagePath.startsWith("data:")
           ? imagePath
-          : `/files/zodula__Print Template Item/${element.id}/image/${imagePath}`;
+          : `/files/Print Template Item/${element.id}/image/${imagePath}`;
         content = <img src={imageUrl} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />;
       }
       break;
@@ -957,7 +957,7 @@ export function PrintPreviewRenderer({
 
   // Fetch organization document if org is provided
   const { doc: organizationDoc } = useDoc({
-    doctype: "zodula__Organization",
+    doctype: "Organization",
     id: org || "",
   }, [org]);
 
@@ -995,7 +995,7 @@ export function PrintPreviewRenderer({
       setPrintTemplateError(null);
       try {
         const { zodula } = await import("@/zodula/client");
-        const result = await zodula?.doc?.get_doc("zodula__Print Template", printTemplateId, {
+        const result = await zodula?.doc?.get_doc("Print Template", printTemplateId, {
           fields: ["*", "items", "fixed_position_items", "guided_background", "organization"],
         });
         setPrintTemplate(result || null);
@@ -1024,7 +1024,7 @@ export function PrintPreviewRenderer({
       setLetterHeadError(null);
       try {
         const { zodula } = await import("@/zodula/client");
-        const result = await zodula?.doc?.get_doc("zodula__Letter Head", letterHeadId);
+        const result = await zodula?.doc?.get_doc("Letter Head", letterHeadId);
         setLetterHead(result || null);
         setLetterHeadError(null);
       } catch (e: any) {
@@ -1040,12 +1040,12 @@ export function PrintPreviewRenderer({
 
   // Fetch all fields
   const { docs: allFields } = useDocListAll({
-    doctype: "zodula__Field",
+    doctype: "Field",
   });
 
   // Fetch doctype
   const { doc: doctypeDoc } = useDoc({
-    doctype: "zodula__Doctype",
+    doctype: "Doctype",
     id: doctype,
   }, [doctype]);
 
@@ -1128,7 +1128,7 @@ export function PrintPreviewRenderer({
             // Try Approach 2: Direct query by parentid + parentfield (only the correct table)
             if (templateItems.length === 0) {
               try {
-                const result = await zodula?.doc?.select_docs("zodula__Print Template Item", {
+                const result = await zodula?.doc?.select_docs("Print Template Item", {
                   limit: 1000,
                   filters: [
                     ["parentid" as any, "=", printTemplateId],
@@ -1200,7 +1200,7 @@ export function PrintPreviewRenderer({
               }));
 
             const fetchChildFields = async (referenceDoctype: string, parentDoctype?: string): Promise<any[]> => {
-              const { docs: childFieldDocs } = await zodula?.doc?.select_docs("zodula__Field", {
+              const { docs: childFieldDocs } = await zodula?.doc?.select_docs("Field", {
                 limit: 1000,
                 filters: [["doctype", "=", referenceDoctype]],
                 sort: "idx",
@@ -1269,7 +1269,7 @@ export function PrintPreviewRenderer({
 
         // Load letter head items
         if (letterHeadId && letterHead) {
-          const { docs: letterHeadItems } = await zodula?.doc?.select_docs("zodula__Letter Head Item", {
+          const { docs: letterHeadItems } = await zodula?.doc?.select_docs("Letter Head Item", {
             limit: 1000,
             filters: [["letter_head", "=", letterHeadId]],
             sort: "idx",
@@ -1331,7 +1331,7 @@ export function PrintPreviewRenderer({
   const hasGuidedBackground = guidedBackgroundFilename !== "" && printTemplateId;
   const guidedBackgroundUrl =
     hasGuidedBackground && organization
-      ? `${BASE_URL}/files/${organization}/zodula__Print Template/${printTemplateId}/guided_background/${guidedBackgroundFilename}`
+      ? `${BASE_URL}/files/${organization}/Print Template/${printTemplateId}/guided_background/${guidedBackgroundFilename}`
       : null;
   const guidedBackgroundUrlEncoded = guidedBackgroundUrl ? encodeURI(guidedBackgroundUrl) : null;
 

@@ -2,7 +2,7 @@ import { z } from "bxo"
 
 export default $action(async ctx => {
     const { ids } = ctx.body
-    const { docs: users } = await $zodula.doctype("zodula__User").select().where("id", "IN", ids).unsafe(true).bypass(true)
+    const { docs: users } = await $zodula.doctype("User").select().where("id", "IN", ids).unsafe(true).bypass(true)
     return ctx.json({
         users: users.map((user: any) => ({
             id: user.id,

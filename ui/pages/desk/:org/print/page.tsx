@@ -55,7 +55,7 @@ export default function PrintPage() {
 
   const { docs: printTemplates, loading: templatesLoading } = useDocList(
     {
-      doctype: "zodula__Print Template",
+      doctype: "Print Template",
       limit: 1000,
       filters: doctype ? [["doctype", "=", doctype]] : [],
       sort: "is_default",
@@ -98,7 +98,7 @@ export default function PrintPage() {
       setTemplateError(null);
       try {
         const { zodula } = await import("@/zodula/client");
-        const result = await zodula?.doc?.get_doc("zodula__Print Template", effectiveTemplateId);
+        const result = await zodula?.doc?.get_doc("Print Template", effectiveTemplateId);
         setTemplate(result || null);
         const defaultLh = result?.default_letter_head ?? null;
         const defaultLang = result?.default_lang ?? null;
@@ -251,14 +251,14 @@ export default function PrintPage() {
   }, [pdfPageOptions]);
 
   const { docs: languages } = useDocList({
-    doctype: "zodula__Language",
+    doctype: "Language",
     limit: 500,
     sort: "name",
     order: "asc",
   });
 
   const { docs: letterHeads, loading: letterHeadsLoading } = useDocList({
-    doctype: "zodula__Letter Head",
+    doctype: "Letter Head",
     limit: 1000,
     filters: [["disabled", "!=", 1]],
     sort: "is_default",

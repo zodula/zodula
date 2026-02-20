@@ -37,8 +37,8 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
   const [isSaving, setIsSaving] = useState(false);
   
   const isPrintTemplate = type === "print_template";
-  const doctype = isPrintTemplate ? "zodula__Print Template" : "zodula__Letter Head";
-  const itemDoctype = isPrintTemplate ? "zodula__Print Template Item" : "zodula__Letter Head Item";
+  const doctype = isPrintTemplate ? "Print Template" : "Letter Head";
+  const itemDoctype = isPrintTemplate ? "Print Template Item" : "Letter Head Item";
   const listPath = `/desk/${org}/doctypes/${doctype}/list`;
   
   // Load doc if editing
@@ -92,7 +92,7 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
   
   // Get doctypes for selection (only for Print Template)
   const { docs: doctypes } = useDocList({
-    doctype: "zodula__Doctype",
+    doctype: "Doctype",
     limit: 10000,
     sort: "name",
     order: "asc",
@@ -105,14 +105,14 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
       type: "Reference",
       name: "doctype",
       label: t("Doctype"),
-      reference: "zodula__Doctype",
+      reference: "Doctype",
       required: 1,
     };
   }, [isPrintTemplate, t]);
 
   // Get fields for selected doctype (only for Print Template)
   const { docs: fields } = useDocList({
-    doctype: "zodula__Field",
+    doctype: "Field",
     limit: 10000,
     sort: "idx",
     order: "asc",
@@ -596,7 +596,7 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
                             type: "Reference",
                             name: "default_lang",
                             label: t("Default Language"),
-                            reference: "zodula__Language",
+                            reference: "Language",
                             description: "Default language to use when printing with this template",
                           }}
                           fieldKey="default_lang"
@@ -612,7 +612,7 @@ export function PrintTemplateFormView({ type, docId, onSave }: PrintTemplateForm
                             type: "Reference",
                             name: "default_letter_head",
                             label: t("Default Letter Head"),
-                            reference: "zodula__Letter Head",
+                            reference: "Letter Head",
                             description: "Default letter head to use when printing with this template",
                           }}
                           fieldKey="default_letter_head"

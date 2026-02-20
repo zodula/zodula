@@ -66,7 +66,7 @@ export function FilterContent({
   const { t } = useTranslation();
 
   const { docs: allFields } = useDocList(
-    { doctype: "zodula__Field" as Zodula.DoctypeName, limit: -1, sort: "idx", order: "asc" },
+    { doctype: "Field" as Zodula.DoctypeName, limit: -1, sort: "idx", order: "asc" },
     [doctype]
   );
 

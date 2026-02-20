@@ -1,11 +1,11 @@
-export default $doctype<"zodula__Print Template">({
+export default $doctype<"Print Template">({
     name: {
         type: "Text",
         required: 1
     },
     doctype: {
         type: "Reference",
-        reference: "zodula__Doctype",
+        reference: "Doctype",
         required: 1
     },
     is_default: {
@@ -62,13 +62,13 @@ export default $doctype<"zodula__Print Template">({
     },
     default_lang: {
         type: "Reference",
-        reference: "zodula__Language",
+        reference: "Language",
         label: "Default Language",
         description: "Default language to use when printing with this template"
     },
     default_letter_head: {
         type: "Reference",
-        reference: "zodula__Letter Head",
+        reference: "Letter Head",
         label: "Default Letter Head",
         default: "",
         description: "Default letter head to use when printing with this template"
@@ -81,14 +81,14 @@ export default $doctype<"zodula__Print Template">({
     items: {
         type: "Reference Table",
         label: "Items (Non-Fixed Position)",
-        reference: "zodula__Print Template Item",
+        reference: "Print Template Item",
         required: 0,
         description: "Items for non-fixed position layout (when is_fixed_position is false)"
     },
     fixed_position_items: {
         type: "Reference Table",
         label: "Items (Fixed Position)",
-        reference: "zodula__Print Template Item",
+        reference: "Print Template Item",
         required: 0,
         description: "Items for fixed position layout (when is_fixed_position is true)"
     }
@@ -100,9 +100,9 @@ export default $doctype<"zodula__Print Template">({
 })
     .on("after_change", async ({ doc, old, input }) => {
         if (doc.is_default) {
-            const { docs: other_is_defaults } = await $zodula.doctype("zodula__Print Template").select().where("doctype", "=", doc.doctype).where("is_default", "=", 1).where("id", "!=", doc.id)
+            const { docs: other_is_defaults } = await $zodula.doctype("Print Template").select().where("doctype", "=", doc.doctype).where("is_default", "=", 1).where("id", "!=", doc.id)
             for (const other_default of other_is_defaults) {
-                await $zodula.doctype("zodula__Print Template").update(other_default.id, {
+                await $zodula.doctype("Print Template").update(other_default.id, {
                     is_default: 0
                 })
             }

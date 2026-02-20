@@ -28,13 +28,13 @@ export const zod = <DN extends Zodula.DoctypeName>(doctype: DN) => {
 
 export const getUserFromSid = async (sid: string) => {
     const db = Database("main")
-    const session = await db.select("*").from("zodula__Session" as Zodula.DoctypeName).where("id", "=", sid)
+    const session = await db.select("*").from("Session" as Zodula.DoctypeName).where("id", "=", sid)
         .where("expires_at", ">", new Date().toISOString())
-        .first() as Zodula.SelectDoctype<"zodula__Session">
+        .first() as Zodula.SelectDoctype<"Session">
     if (!session) {
         return null
     }
-    const user = await db.select("*").from("zodula__User" as Zodula.DoctypeName).where("id", "=", session.user).first() as Zodula.SelectDoctype<"zodula__User">
+    const user = await db.select("*").from("User" as Zodula.DoctypeName).where("id", "=", session.user).first() as Zodula.SelectDoctype<"User">
     return user
 }
 

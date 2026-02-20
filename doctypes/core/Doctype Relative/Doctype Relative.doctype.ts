@@ -1,17 +1,17 @@
 export default $doctype({
     parent_doctype: $f.VirtualReference({
         label: "Parent Doctype",
-        reference: "zodula__Doctype",
+        reference: "Doctype",
         required: 1
     }),
     child_doctype: $f.VirtualReference({
         label: "Child Doctype",
-        reference: "zodula__Doctype",
+        reference: "Doctype",
         required: 1
     }),
     child_field_name: $f.VirtualReference({
         label: "Child Field Name",
-        reference: "zodula__Field",
+        reference: "Field",
         required: 1
     }),
 }, {

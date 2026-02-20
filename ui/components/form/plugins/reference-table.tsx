@@ -121,13 +121,13 @@ export const ReferenceTablePlugin = new FormPlugin({
     types: ["Reference Table"],
     render: (props) => {
         const { doc: doctypeDoc } = useDoc({
-            doctype: "zodula__Doctype",
+            doctype: "Doctype",
             id: props.fieldOptions.reference as any
         }, [props.fieldOptions.reference]);
 
         // Get fields for the reference doctype
         const { docs: fields } = useDocList({
-            doctype: "zodula__Field",
+            doctype: "Field",
             limit: -1,
             sort: "idx",
             order: "asc",

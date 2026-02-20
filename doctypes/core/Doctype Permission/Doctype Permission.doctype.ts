@@ -2,7 +2,7 @@ export default $doctype({
     doctype: {
         type: "Reference",
         label: "Doctype",
-        reference: "zodula__Doctype",
+        reference: "Doctype",
         required: 1,
         unique: 1,
         group: "doctype-permission",
@@ -11,7 +11,7 @@ export default $doctype({
     role: {
         type: "Reference",
         label: "Role",
-        reference: "zodula__Role",
+        reference: "Role",
         required: 1,
         unique: 1,
         group: "doctype-permission",
@@ -112,7 +112,7 @@ export default $doctype({
     app: {
         type: "Reference",
         label: "App",
-        reference: "zodula__App",
+        reference: "App",
         required: 1,
         on_delete: "CASCADE"
     }

@@ -19,7 +19,7 @@ export default $doctype({
     workspaceId: {
         type: "Reference",
         label: "Workspace",
-        reference: "zodula__Workspace",
+        reference: "Workspace",
         below_field: "name",
         on_delete: "CASCADE",   
         required: 1,

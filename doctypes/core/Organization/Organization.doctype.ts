@@ -1,4 +1,4 @@
-export default $doctype<"zodula__Organization">({
+export default $doctype<"Organization">({
     name: {
         type: "Text",
         label: "Name",
@@ -57,7 +57,7 @@ export default $doctype<"zodula__Organization">({
     organization_roles: {
         type: "Reference Table",
         label: "Organization Roles",
-        reference: "zodula__Organization Role",
+        reference: "Organization Role",
         perm_level: "1",
     },
 }, {

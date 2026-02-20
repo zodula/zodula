@@ -83,7 +83,7 @@ async function upsertFieldsBatch(
   let fieldIdx = startIdx;
 
   // Prepare all field payloads
-  const fieldPayloads: Required<Zodula.SelectDoctype<"zodula__Field">>[] = [];
+  const fieldPayloads: Required<Zodula.SelectDoctype<"Field">>[] = [];
   const fieldIds: string[] = [];
 
   for (const [fieldName, fieldSchema] of Object.entries(fields)) {
@@ -139,7 +139,7 @@ async function upsertFieldsBatch(
       no_translate: fieldSchema.no_translate ? 1 : 0 || null,
       organization_abbr: "SYS",
       ...basePayload,
-    } satisfies Required<Zodula.SelectDoctype<"zodula__Field">>;
+    } satisfies Required<Zodula.SelectDoctype<"Field">>;
 
     fieldPayloads.push(fieldPayload);
   }
@@ -153,16 +153,16 @@ async function upsertFieldsBatch(
     // Check which fields already exist
     const existingFields = await trx
       .select("id")
-      .from("zodula__Field")
+      .from("Field")
       .where("id", "IN", fieldIds)
       .execute();
 
     const existingIds = new Set(existingFields.map((f) => f.id));
 
     // Separate payloads for insert vs update
-    const insertPayloads: Required<Zodula.SelectDoctype<"zodula__Field">>[] =
+    const insertPayloads: Required<Zodula.SelectDoctype<"Field">>[] =
       [];
-    const updatePayloads: Required<Zodula.SelectDoctype<"zodula__Field">>[] =
+    const updatePayloads: Required<Zodula.SelectDoctype<"Field">>[] =
       [];
 
     for (const payload of fieldPayloads) {
@@ -175,14 +175,14 @@ async function upsertFieldsBatch(
 
     // Batch insert new fields
     if (insertPayloads.length > 0) {
-      await trx.insert("zodula__Field").values(insertPayloads).execute();
+      await trx.insert("Field").values(insertPayloads).execute();
     }
 
     // Batch update existing fields
     if (updatePayloads.length > 0) {
       for (const payload of updatePayloads) {
         await trx
-          .update("zodula__Field")
+          .update("Field")
           .set(payload)
           .where("id", "=", payload.id)
           .execute();
@@ -222,7 +222,7 @@ async function upsertRelativesBatch(
 
   // Prepare all relative payloads
   const relativePayloads: Required<
-    Zodula.SelectDoctype<"zodula__Doctype Relative">
+    Zodula.SelectDoctype<"Doctype Relative">
   >[] = [];
   const relativeIds: string[] = [];
 
@@ -243,7 +243,7 @@ async function upsertRelativesBatch(
       organization: "System Panel",
       organization_abbr: "SYS",
       ...basePayload,
-    } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype Relative">>;
+    } satisfies Required<Zodula.SelectDoctype<"Doctype Relative">>;
 
     relativePayloads.push(relativePayload);
   }
@@ -257,7 +257,7 @@ async function upsertRelativesBatch(
     // Check which relatives already exist
     const existingRelatives = await trx
       .select("id")
-      .from("zodula__Doctype Relative")
+      .from("Doctype Relative")
       .where("id", "IN", relativeIds)
       .execute();
 
@@ -265,10 +265,10 @@ async function upsertRelativesBatch(
 
     // Separate payloads for insert vs update
     const insertPayloads: Required<
-      Zodula.SelectDoctype<"zodula__Doctype Relative">
+      Zodula.SelectDoctype<"Doctype Relative">
     >[] = [];
     const updatePayloads: Required<
-      Zodula.SelectDoctype<"zodula__Doctype Relative">
+      Zodula.SelectDoctype<"Doctype Relative">
     >[] = [];
 
     for (const payload of relativePayloads) {
@@ -282,7 +282,7 @@ async function upsertRelativesBatch(
     // Batch insert new relatives
     if (insertPayloads.length > 0) {
       await trx
-        .insert("zodula__Doctype Relative")
+        .insert("Doctype Relative")
         .values(insertPayloads)
         .execute();
     }
@@ -291,7 +291,7 @@ async function upsertRelativesBatch(
     if (updatePayloads.length > 0) {
       for (const payload of updatePayloads) {
         await trx
-          .update("zodula__Doctype Relative")
+          .update("Doctype Relative")
           .set(payload)
           .where("id", "=", payload.id)
           .execute();
@@ -318,7 +318,7 @@ async function upsertChildrenBatch(
 
   // Prepare all child payloads
   const childPayloads: Required<
-    Zodula.SelectDoctype<"zodula__Doctype Children">
+    Zodula.SelectDoctype<"Doctype Children">
   >[] = [];
   const childIds: string[] = [];
 
@@ -340,7 +340,7 @@ async function upsertChildrenBatch(
       organization: "System Panel",
       organization_abbr: "SYS",
       ...basePayload,
-    } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype Children">>;
+    } satisfies Required<Zodula.SelectDoctype<"Doctype Children">>;
 
     childPayloads.push(childPayload);
   }
@@ -354,7 +354,7 @@ async function upsertChildrenBatch(
     // Check which children already exist
     const existingChildren = await trx
       .select("id")
-      .from("zodula__Doctype Children")
+      .from("Doctype Children")
       .where("id", "IN", childIds)
       .execute();
 
@@ -362,10 +362,10 @@ async function upsertChildrenBatch(
 
     // Separate payloads for insert vs update
     const insertPayloads: Required<
-      Zodula.SelectDoctype<"zodula__Doctype Children">
+      Zodula.SelectDoctype<"Doctype Children">
     >[] = [];
     const updatePayloads: Required<
-      Zodula.SelectDoctype<"zodula__Doctype Children">
+      Zodula.SelectDoctype<"Doctype Children">
     >[] = [];
 
     for (const payload of childPayloads) {
@@ -379,7 +379,7 @@ async function upsertChildrenBatch(
     // Batch insert new children
     if (insertPayloads.length > 0) {
       await trx
-        .insert("zodula__Doctype Children")
+        .insert("Doctype Children")
         .values(insertPayloads)
         .execute();
     }
@@ -388,7 +388,7 @@ async function upsertChildrenBatch(
     if (updatePayloads.length > 0) {
       for (const payload of updatePayloads) {
         await trx
-          .update("zodula__Doctype Children")
+          .update("Doctype Children")
           .set(payload)
           .where("id", "=", payload.id)
           .execute();
@@ -441,22 +441,22 @@ async function upsertApp(
       organization: "System Panel",
       organization_abbr: "SYS",
       ...basePayload,
-    } satisfies Required<Zodula.SelectDoctype<"zodula__App">>;
+    } satisfies Required<Zodula.SelectDoctype<"App">>;
 
     const isExist = await trx
       .select("*")
-      .from("zodula__App")
+      .from("App")
       .where("name", "=", app.packageName)
       .first();
 
     if (isExist) {
       await trx
-        .update("zodula__App")
+        .update("App")
         .set(appPayload)
         .where("name", "=", app.packageName)
         .execute();
     } else {
-      await trx.insert("zodula__App").values(appPayload).execute();
+      await trx.insert("App").values(appPayload).execute();
     }
 
     return { success: true };
@@ -497,7 +497,7 @@ async function cleanupOrphanedEntities(
     // Remove orphaned doctypes
     if (processedEntities.doctypes.length > 0) {
       await trx
-        .delete("zodula__Doctype")
+        .delete("Doctype")
         .where("id", "NOT IN", processedEntities.doctypes)
         .execute();
     }
@@ -505,7 +505,7 @@ async function cleanupOrphanedEntities(
     // Remove orphaned fields
     if (processedEntities.fields.length > 0) {
       await trx
-        .delete("zodula__Field")
+        .delete("Field")
         .where("id", "NOT IN", processedEntities.fields)
         .execute();
     }
@@ -513,7 +513,7 @@ async function cleanupOrphanedEntities(
     // Remove orphaned relatives
     if (processedEntities.relatives.length > 0) {
       await trx
-        .delete("zodula__Doctype Relative")
+        .delete("Doctype Relative")
         .where("id", "NOT IN", processedEntities.relatives)
         .execute();
     }
@@ -521,7 +521,7 @@ async function cleanupOrphanedEntities(
     // Remove orphaned children
     if (processedEntities.children.length > 0) {
       await trx
-        .delete("zodula__Doctype Children")
+        .delete("Doctype Children")
         .where("id", "NOT IN", processedEntities.children)
         .execute();
     }
@@ -529,7 +529,7 @@ async function cleanupOrphanedEntities(
     // Remove orphaned apps
     if (processedEntities.apps.length > 0) {
       await trx
-        .delete("zodula__App")
+        .delete("App")
         .where("name", "NOT IN", processedEntities.apps)
         .execute();
     }
@@ -576,22 +576,22 @@ async function upsertDoctype(
       organization: "System Panel",
       organization_abbr: "SYS",
       ...basePayload,
-    } satisfies Required<Zodula.SelectDoctype<"zodula__Doctype">>;
+    } satisfies Required<Zodula.SelectDoctype<"Doctype">>;
 
     const isExist = await trx
       .select("*")
-      .from("zodula__Doctype")
+      .from("Doctype")
       .where("id", "=", doctype.name)
       .first();
 
     if (isExist) {
       await trx
-        .update("zodula__Doctype")
+        .update("Doctype")
         .set(doctypePayload)
         .where("id", "=", doctype.name)
         .execute();
     } else {
-      await trx.insert("zodula__Doctype").values(doctypePayload).execute();
+      await trx.insert("Doctype").values(doctypePayload).execute();
     }
 
     return { success: true };

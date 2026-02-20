@@ -68,8 +68,8 @@ export const buildIndexJs = async () => {
 
 export const prepareIndexHtml = async () => {
     const db = Database("main")
-    const websiteSetting = await db.select().from("zodula__Global Setting" as Zodula.DoctypeName).where("id", "=", "zodula__Global Setting").first().catch(() => null) as Zodula.SelectDoctype<"zodula__Global Setting"> | null
-    const faviconUrl = ["..", "..", ".zodula_data", "files", "System Panel", "zodula__Global Setting", "zodula__Global Setting", "favicon", websiteSetting?.favicon as string || ""].join("/")
+    const websiteSetting = await db.select().from("Global Setting" as Zodula.DoctypeName).where("id", "=", "Global Setting").first().catch(() => null) as Zodula.SelectDoctype<"Global Setting"> | null
+    const faviconUrl = ["..", "..", ".zodula_data", "files", "System Panel", "Global Setting", "Global Setting", "favicon", websiteSetting?.favicon as string || ""].join("/")
     const description = websiteSetting?.description || "An open-source fullstack web framework for building modern web applications."
     Bun.write(path.join(process.cwd(), ".zodula", "ui", "index.html"), `
     <!DOCTYPE html>

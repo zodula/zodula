@@ -61,7 +61,7 @@ export class ZodulaDoctypeUpdate<
       .unsafe();
 
     this.input.organization = isGlobal ? "System Panel" : old?.organization;
-    const organization = await zodula.doctype("zodula__Organization").get(this.input.organization || "System Panel").bypass(true).fields(["abbr", "name"])
+    const organization = await zodula.doctype("Organization").get(this.input.organization || "System Panel").bypass(true).fields(["abbr", "name"])
     this.input.organization_abbr = organization?.abbr || "";
     if (old?.organization !== this.input.organization) {
       throw new ErrorWithCode("Cannot change organization through update api", {
@@ -411,7 +411,7 @@ export class ZodulaDoctypeUpdate<
     }
 
     // update audit trail
-    await db.run(`UPDATE 'zodula__Audit Trail' SET doctype_id = ? WHERE doctype_id = ? AND doctype = ?`, [newId, oldId, this.doctypeName]);
+    await db.run(`UPDATE 'Audit Trail' SET doctype_id = ? WHERE doctype_id = ? AND doctype = ?`, [newId, oldId, this.doctypeName]);
 
     // Fields have changed, so generate new ID based on updated field values
 

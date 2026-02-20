@@ -1,7 +1,7 @@
 export default $doctype({
     language: $f.VirtualReference({
         label: "Language",
-        reference: "zodula__Language",
+        reference: "Language",
         required: 1
     }),
     key: {
@@ -17,7 +17,7 @@ export default $doctype({
     app: {
         type: "Reference",
         label: "App",
-        reference: "zodula__App",
+        reference: "App",
         on_delete: "CASCADE",
         required: 1
     },

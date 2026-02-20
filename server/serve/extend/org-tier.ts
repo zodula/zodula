@@ -8,10 +8,10 @@ export const OrgTier = () => {
   bxo.beforeRequest(async (ctx: any) => {
     const org = ctx.headers?.get("x-organization");
     if (!!org) {
-      let orgDoc = await zodula.doctype("zodula__Organization").get(org).bypass(true);
+      let orgDoc = await zodula.doctype("Organization").get(org).bypass(true);
       let tierLevel = Number(orgDoc?.tier_level || '0') || 0;
       if(!orgDoc.tier_level){
-        orgDoc = await zodula.doctype("zodula__Organization").update(org, {
+        orgDoc = await zodula.doctype("Organization").update(org, {
           tier_level: "0",
         }).bypass(true);
         tierLevel = 0;
@@ -20,7 +20,7 @@ export const OrgTier = () => {
         const tierExpiresAt = zodula.utils.parseDate(orgDoc.tier_expires_at);
         if (!!tierExpiresAt && tierExpiresAt! < new Date()) {
         await zodula
-            .doctype("zodula__Organization")
+            .doctype("Organization")
             .update(org, {
               tier_expires_at: null,
               tier_level: "0",

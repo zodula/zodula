@@ -59,7 +59,7 @@ export function PrintTemplatePreview({
 
   // Get letter heads
   const { docs: letterHeads } = useDocList({
-    doctype: "zodula__Letter Head",
+    doctype: "Letter Head",
     limit: 1000,
     filters: [["disabled", "!=", 1]],
     sort: "is_default",

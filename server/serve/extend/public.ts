@@ -47,8 +47,8 @@ export const extendPublic = () => {
 
   bxo.get("/favicon.ico", async (ctx) => {
     const filePath = await zodula
-      .doctype("zodula__Global Setting")
-      .get_file_url("zodula__Global Setting", "favicon")
+      .doctype("Global Setting")
+      .get_file_url("Global Setting", "favicon")
       .catch(() => null);
     if (!filePath) {
       return Bun.file(

@@ -60,7 +60,7 @@ export const applyFixtures = async () => {
       // Check if doctype has only_fixtures = 1
       const doctypeDoc = await db
         .select()
-        .from("zodula__Doctype")
+        .from("Doctype")
         .where("id", "=", fixture.name)
         .first();
       

@@ -177,12 +177,12 @@ export class ZodulaDoctypeHelper {
 
     static async getPermissions(doctype: Zodula.DoctypeName, roles: string[]) {
         const db = Database("main")
-        const permissions = await db.select("*").from("zodula__Doctype Permission" as Zodula.DoctypeName).where("doctype", "=", doctype).where("role", "IN", roles).execute()
+        const permissions = await db.select("*").from("Doctype Permission" as Zodula.DoctypeName).where("doctype", "=", doctype).where("role", "IN", roles).execute()
         return permissions
     }
 
 
-    static async can(doctype: Zodula.DoctypeName, action: keyof Zodula.SelectDoctype<"zodula__Doctype Permission">, isOwn: boolean, roles: string[], bypass: boolean) {
+    static async can(doctype: Zodula.DoctypeName, action: keyof Zodula.SelectDoctype<"Doctype Permission">, isOwn: boolean, roles: string[], bypass: boolean) {
         const db = Database("main")
         const _roles = [
             ...roles,
@@ -190,13 +190,13 @@ export class ZodulaDoctypeHelper {
         if (roles.includes("System Admin") || bypass) {
             return true
         }
-        const permissions = await db.select("*").from("zodula__Doctype Permission" as Zodula.DoctypeName).where("doctype", "=", doctype).where("role", "IN", _roles).where("perm_level", "=", 0).execute()
+        const permissions = await db.select("*").from("Doctype Permission" as Zodula.DoctypeName).where("doctype", "=", doctype).where("role", "IN", _roles).where("perm_level", "=", 0).execute()
         const permission = permissions[0]
         if (!permission) {
             return false
         }
-        const { can_create, can_get, can_select, can_update, can_delete, can_submit, can_cancel } = permission as Zodula.SelectDoctype<"zodula__Doctype Permission">
-        const { can_own_create, can_own_get, can_own_select, can_own_update, can_own_delete, can_own_submit, can_own_cancel } = permission as Zodula.SelectDoctype<"zodula__Doctype Permission">
+        const { can_create, can_get, can_select, can_update, can_delete, can_submit, can_cancel } = permission as Zodula.SelectDoctype<"Doctype Permission">
+        const { can_own_create, can_own_get, can_own_select, can_own_update, can_own_delete, can_own_submit, can_own_cancel } = permission as Zodula.SelectDoctype<"Doctype Permission">
         if (action === "can_create") {
             return can_create === 1 || (can_own_create === 1)
         }
@@ -223,7 +223,7 @@ export class ZodulaDoctypeHelper {
 
     static async checkPermission<TN extends Zodula.DoctypeName>(
         doctypeName: TN,
-        action: keyof Zodula.SelectDoctype<"zodula__Doctype Permission">,
+        action: keyof Zodula.SelectDoctype<"Doctype Permission">,
         data: Zodula.SelectDoctype<TN>,
         options: {
             bypass: boolean
@@ -247,7 +247,7 @@ export class ZodulaDoctypeHelper {
             if(userRoles.includes("System Admin")) {
                 can = true
             }
-            if(doctype?.name === "zodula__Organization" && data?.organization === "System Panel") {
+            if(doctype?.name === "Organization" && data?.organization === "System Panel") {
                 can = true
             }
         }
@@ -487,7 +487,7 @@ export class ZodulaDoctypeHelper {
             }
 
             // Insert audit trail record
-            await zodula.doctype("zodula__Audit Trail").insert(auditTrailData).bypass(true)
+            await zodula.doctype("Audit Trail").insert(auditTrailData).bypass(true)
         } catch (error) {
             // Log error but don't fail the operation
             console.error("Failed to create audit trail:", error)
@@ -602,7 +602,7 @@ export class ZodulaDoctypeHelper {
     static async getFieldLevelPermissions<TN extends Zodula.DoctypeName>(
         doctypeName: TN,
         roles: string[]
-    ): Promise<Map<string, Zodula.SelectDoctype<"zodula__Doctype Permission">>> {
+    ): Promise<Map<string, Zodula.SelectDoctype<"Doctype Permission">>> {
         const db = Database("main");
         const isAuthenticated = await zodula.session.isAuthenticated();
         const _roles = [
@@ -614,17 +614,17 @@ export class ZodulaDoctypeHelper {
         // Get all doctype permissions
         const doctypePermissions = await db
             .select("*")
-            .from("zodula__Doctype Permission" as Zodula.DoctypeName)
+            .from("Doctype Permission" as Zodula.DoctypeName)
             .where("doctype", "=", doctypeName)
             .where("role", "IN", _roles)
-            .execute() as Zodula.SelectDoctype<"zodula__Doctype Permission">[];
+            .execute() as Zodula.SelectDoctype<"Doctype Permission">[];
 
         // Get Field records to get perm_level for each field
         const fieldRecords = await db
             .select("*")
-            .from("zodula__Field" as Zodula.DoctypeName)
+            .from("Field" as Zodula.DoctypeName)
             .where("doctype", "=", doctypeName)
-            .execute() as Zodula.SelectDoctype<"zodula__Field">[];
+            .execute() as Zodula.SelectDoctype<"Field">[];
 
         // Use ClientFieldHelper to map permissions based on field's perm_level
         return ClientFieldHelper.getFieldLevelPermissions(
@@ -667,9 +667,9 @@ export class ZodulaDoctypeHelper {
         // Get Field records to get perm_level for each field
         const fieldRecords = await db
             .select("*")
-            .from("zodula__Field" as Zodula.DoctypeName)
+            .from("Field" as Zodula.DoctypeName)
             .where("doctype", "=", doctypeName)
-            .execute() as Zodula.SelectDoctype<"zodula__Field">[];
+            .execute() as Zodula.SelectDoctype<"Field">[];
 
         // Create a map of field name to perm_level
         const fieldPermLevelMap = new Map<string, number>();
@@ -751,9 +751,9 @@ export class ZodulaDoctypeHelper {
         // Get Field records to get perm_level for each field
         const fieldRecords = await db
             .select("*")
-            .from("zodula__Field" as Zodula.DoctypeName)
+            .from("Field" as Zodula.DoctypeName)
             .where("doctype", "=", doctypeName)
-            .execute() as Zodula.SelectDoctype<"zodula__Field">[];
+            .execute() as Zodula.SelectDoctype<"Field">[];
 
         // Create a map of field name to perm_level
         const fieldPermLevelMap = new Map<string, number>();

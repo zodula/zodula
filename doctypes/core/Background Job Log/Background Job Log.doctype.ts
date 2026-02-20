@@ -1,4 +1,4 @@
-export default $doctype<"zodula__Background Job Log">({
+export default $doctype<"Background Job Log">({
     job_id: {
         type: "Text",
         required: 1,
@@ -14,7 +14,7 @@ export default $doctype<"zodula__Background Job Log">({
     },
     requester: {
         type: "Reference",
-        reference: "zodula__User",
+        reference: "User",
         required: 0,
         in_list_view: 1,
         label: "Requester"

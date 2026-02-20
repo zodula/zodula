@@ -5,8 +5,8 @@ export function elementToItemPayload(
   element: PrintTemplateElement,
   printTemplateId: string,
   idx: number
-): Zodula.InsertDoctype<"zodula__Print Template Item"> {
-  const payload: Zodula.InsertDoctype<"zodula__Print Template Item"> = {
+): Zodula.InsertDoctype<"Print Template Item"> {
+  const payload: Zodula.InsertDoctype<"Print Template Item"> = {
     // Note: print_template field removed - parentid, parenttype, parentfield will be auto-populated
     type: element.type,
     value: typeof element.value === "string" ? element.value : "",
@@ -95,8 +95,8 @@ export function elementToLetterHeadItemPayload(
   element: PrintTemplateElement,
   letterHeadId: string,
   idx: number
-): Zodula.InsertDoctype<"zodula__Letter Head Item"> {
-  const payload: Zodula.InsertDoctype<"zodula__Letter Head Item"> = {
+): Zodula.InsertDoctype<"Letter Head Item"> {
+  const payload: Zodula.InsertDoctype<"Letter Head Item"> = {
     letter_head: letterHeadId,
     type: element.type as any,
     value: typeof element.value === "string" ? element.value : "",
@@ -182,7 +182,7 @@ export function elementToLetterHeadItemPayload(
 
 // Convert Print Template Item to PrintTemplateElement
 export function itemToElement(
-  item: Zodula.SelectDoctype<"zodula__Print Template Item">
+  item: Zodula.SelectDoctype<"Print Template Item">
 ): PrintTemplateElement {
   // For image type, use image field; for field type, use field_name; otherwise use value
   let value: string | File = item.value || "";
@@ -316,7 +316,7 @@ export function itemToElement(
 
 // Convert Letter Head Item to PrintTemplateElement (same structure as Print Template Item)
 export function letterHeadItemToElement(
-  item: Zodula.SelectDoctype<"zodula__Letter Head Item">
+  item: Zodula.SelectDoctype<"Letter Head Item">
 ): PrintTemplateElement {
   // For image type, use image field; for field type, use field_name; otherwise use value
   let value: string | File = item.value || "";

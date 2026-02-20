@@ -40,7 +40,7 @@ export const Breadcrumb = ({ className = "", items, showHome = true }: Breadcrum
 
             // Add doctype breadcrumb
             breadcrumbItems.push({
-                label: t(decodeURIComponent(doctype?.split("__")?.[1] || "")),
+                label: t(decodeURIComponent(doctype || "")),
                 href: `/desk/${org}/doctypes/${doctype}`
             })
 

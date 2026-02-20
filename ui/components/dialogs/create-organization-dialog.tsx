@@ -29,7 +29,7 @@ export function CreateOrganizationDialog({
     setError(null);
 
     try {
-      const created = await zodula.doc.create_doc("zodula__Organization", {
+      const created = await zodula.doc.create_doc("Organization", {
         name: name.trim(),
         tier_level: "0",
       });

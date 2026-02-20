@@ -53,7 +53,7 @@ const UserLink = ({ userId, name }: { userId: string; name: string }) => {
   const { org } = useParams();
   return (
     <Link
-      to={`/desk/${org}/doctypes/zodula__User/form/${userId}`}
+      to={`/desk/${org}/doctypes/User/form/${userId}`}
       className="zd:hover:text-primary zd:transition-colors zd:text-sm"
     >
       {name}
@@ -131,7 +131,7 @@ export function DocFormView({
 
   // ===== DOCTYPE & DOC DATA =====
   const { doc: doctypeDoc } = useDocAll({
-    doctype: "zodula__Doctype",
+    doctype: "Doctype",
     id: doctype
   });
 
@@ -227,7 +227,7 @@ export function DocFormView({
   // ===== FIELDS =====
   // Fetch all fields with persistent caching, then filter client-side
   const { docs: allFields, reload: reloadFields } = useDocListAll({
-    doctype: "zodula__Field"
+    doctype: "Field"
   });
 
   // Filter fields by doctype and sort by idx
@@ -240,7 +240,7 @@ export function DocFormView({
   // ===== FIELD-LEVEL PERMISSIONS =====
   const { docs: doctypePermissions } = useDocList(
     {
-      doctype: "zodula__Doctype Permission",
+      doctype: "Doctype Permission",
       limit: -1,
       filters: [["doctype", "=", doctype]],
     },
@@ -250,7 +250,7 @@ export function DocFormView({
   // Map field-level permissions: field name -> permission record
   const fieldPermissions = useMemo(() => {
     if (!doctypePermissions || !fields || !roles) {
-      return new Map<string, Zodula.SelectDoctype<"zodula__Doctype Permission">>();
+      return new Map<string, Zodula.SelectDoctype<"Doctype Permission">>();
     }
 
     // Include Authenticated and Anonymous roles (matching server-side logic)
@@ -433,7 +433,7 @@ export function DocFormView({
   );
   const { docs: childFieldDocs } = useDocList(
     {
-      doctype: "zodula__Field" as Zodula.DoctypeName,
+      doctype: "Field" as Zodula.DoctypeName,
       limit: -1,
       filters: refTableRefs.length > 0 ? (["doctype", "in", refTableRefs] as any) : [],
       sort: "idx",

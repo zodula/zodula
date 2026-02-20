@@ -77,7 +77,7 @@ export function ListView({
   const { t } = useTranslation();
   // Get doctype schema to determine columns
   const { doc: doctypeDoc, loading: doctypeLoading } = useDoc({
-    doctype: "zodula__Doctype",
+    doctype: "Doctype",
     id: doctype,
   });
 

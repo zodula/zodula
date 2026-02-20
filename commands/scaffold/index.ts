@@ -432,7 +432,7 @@ async function scaffoldDoctype() {
 
   // Create doctype file
   const doctypeContent = `
-export default $doctype<"${appName}__${doctypeName}">({
+export default $doctype<"${doctypeName}">({
     name: {
         type: "text",
         label: "Name",
@@ -675,7 +675,7 @@ async function scaffoldExtend() {
     prompts.push({
       type: "input",
       name: "doctypeName",
-      message: "Doctype name to extend (e.g., zodula__User):",
+      message: "Doctype name to extend (e.g., User):",
       validate: (input: string) => {
         if (!input.trim()) return "Doctype name is required";
         return true;

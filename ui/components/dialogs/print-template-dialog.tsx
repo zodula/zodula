@@ -34,7 +34,7 @@ export function PrintTemplateDialog({
   // Fetch print templates for the current doctype
   const { docs: printTemplates, loading } = useDocList(
     {
-      doctype: "zodula__Print Template",
+      doctype: "Print Template",
       limit: 1000,
       filters: initialData?.doctype
         ? [["doctype", "=", initialData.doctype]]
@@ -47,7 +47,7 @@ export function PrintTemplateDialog({
 
   // Fetch letter heads
   const { docs: letterHeads, loading: letterHeadsLoading } = useDocList({
-    doctype: "zodula__Letter Head",
+    doctype: "Letter Head",
     limit: 1000,
     filters: [["disabled", "!=", 1]],
     sort: "is_default",
@@ -100,7 +100,7 @@ export function PrintTemplateDialog({
             type="Text"
             field={{
               type: "Reference",
-              reference: "zodula__Language",
+              reference: "Language",
               default: "en",
             }}
             value={lang}
@@ -114,7 +114,7 @@ export function PrintTemplateDialog({
             fieldKey="print_template"
             field={{
               type: "Reference",
-              reference: "zodula__Print Template",
+              reference: "Print Template",
               filters: JSON.stringify([["doctype", "=", initialData?.doctype]]),
             }}
             onChange={(fieldName, value) => {
@@ -128,7 +128,7 @@ export function PrintTemplateDialog({
             fieldKey="letter_head"
             field={{
               type: "Reference",
-              reference: "zodula__Letter Head",
+              reference: "Letter Head",
               filters: JSON.stringify([["disabled", "!=", 1]]),
             }}
             onChange={(fieldName, value) => {

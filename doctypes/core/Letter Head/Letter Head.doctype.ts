@@ -1,4 +1,4 @@
-export default $doctype<"zodula__Letter Head">({
+export default $doctype<"Letter Head">({
     name: {
         type: "Text",
         required: 1
@@ -64,7 +64,7 @@ export default $doctype<"zodula__Letter Head">({
     items: {
         type: "Reference Table",
         label: "Items",
-        reference: "zodula__Letter Head Item",
+        reference: "Letter Head Item",
         required: 0
     }
 }, {
@@ -75,10 +75,10 @@ export default $doctype<"zodula__Letter Head">({
 })
     .on("after_change", async ({ doc, old, input }) => {
         if (doc.is_default) {
-            const { docs: other_is_defaults } = await $zodula.doctype("zodula__Letter Head").select().where("is_default", "=", 1).where("id", "!=", doc.id)
+            const { docs: other_is_defaults } = await $zodula.doctype("Letter Head").select().where("is_default", "=", 1).where("id", "!=", doc.id)
             for (const other_default of other_is_defaults) {
                 console.log("other_default", other_default)
-                await $zodula.doctype("zodula__Letter Head").update(other_default.id, {
+                await $zodula.doctype("Letter Head").update(other_default.id, {
                     is_default: 0
                 })
             }

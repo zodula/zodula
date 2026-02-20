@@ -19,7 +19,7 @@ interface useDocResult<TDoc extends Zodula.SelectDoctype<Zodula.DoctypeName> = Z
     reload: () => Promise<TDoc | null>;
     relativeLoading: boolean;
     relativeError: string | null;
-    relatives: Zodula.SelectDoctype<"zodula__Doctype Relative">[];
+    relatives: Zodula.SelectDoctype<"Doctype Relative">[];
     reloadRelatives: () => void;
 }
 
@@ -38,7 +38,7 @@ export function useDoc<DT extends Zodula.DoctypeName = Zodula.DoctypeName, TDoc 
 
     // Fetch all doctype relatives with persistent caching, then filter client-side
     const { docs: allRelatives, loading: relativeLoading, error: relativeError, reload: reloadRelatives } = useDocListAll({
-        doctype: "zodula__Doctype Relative"
+        doctype: "Doctype Relative"
     });
 
     // Filter relatives by parent_doctype

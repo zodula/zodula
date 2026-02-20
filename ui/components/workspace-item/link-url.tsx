@@ -41,7 +41,7 @@ export const LinkUrlPlugin = new BaseWorkspaceItemPlugin(
             }}
             value={props.value || ""}
             fieldKey="value"
-            helperText={`Example: "https://www.google.com" or internal link like "/desk/:org/doctypes/zodula__Doctype/list"`}
+            helperText={`Example: "https://www.google.com" or internal link like "/desk/:org/doctypes/Doctype/list"`}
             onChange={(fieldKey, value) => props.onChange(value)}
         />
     ),

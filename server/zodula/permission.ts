@@ -11,14 +11,14 @@ export class ZodulaPermission {
         tableName: Zodula.DoctypeName,
         userRoles: string[],
         isUserOwn: boolean,
-        type: Omit<keyof Zodula.SelectDoctype<"zodula__Doctype Permission">, keyof Zodula.StandardFields>
+        type: Omit<keyof Zodula.SelectDoctype<"Doctype Permission">, keyof Zodula.StandardFields>
     }) {
         return true;
     }
 
     static async validateUserAccess(
         tableName: Zodula.DoctypeName,
-        permissionType: Omit<keyof Zodula.SelectDoctype<"zodula__Doctype Permission">, keyof Zodula.StandardFields>,
+        permissionType: Omit<keyof Zodula.SelectDoctype<"Doctype Permission">, keyof Zodula.StandardFields>,
         doc?: any,
         bypass?: boolean,
     ) {

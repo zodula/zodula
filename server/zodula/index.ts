@@ -143,12 +143,12 @@ export class ZodulaSDK {
             const db = Database("main");
             const existing = await db
                 .select("*")
-                .from("zodula__Background Job Log" as Zodula.DoctypeName)
+                .from("Background Job Log" as Zodula.DoctypeName)
                 .where("job_id", "=", jobId)
                 .first();
             
             if (existing) {
-                await zodula.doctype("zodula__Background Job Log")
+                await zodula.doctype("Background Job Log")
                     .update(existing.id, updates as any)
                     .bypass(true);
             }
@@ -237,7 +237,7 @@ export class ZodulaSDK {
                 global: { bypass: true }
             });
             
-            await zodula.doctype("zodula__Background Job Log").insert({
+            await zodula.doctype("Background Job Log").insert({
                 job_id: jobId,
                 background_path: backgroundPath,
                 requester: requester || null,

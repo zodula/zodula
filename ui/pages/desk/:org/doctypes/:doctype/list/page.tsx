@@ -60,7 +60,7 @@ export default function DoctypeListPage() {
 
     // Fetch all fields with persistent caching, then filter client-side
     const { docs: allFields, reload: reloadFields } = useDocListAll({
-        doctype: "zodula__Field"
+        doctype: "Field"
     });
 
     // Filter fields by doctype and sort by idx
@@ -72,7 +72,7 @@ export default function DoctypeListPage() {
 
     // Get doctype metadata to check if it's submittable
     const { doc: doctypeDoc, reload: reloadDoctype } = useDocAll({
-        doctype: "zodula__Doctype",
+        doctype: "Doctype",
         id: doctype
     });
 
