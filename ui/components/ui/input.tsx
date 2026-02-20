@@ -110,7 +110,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         />
 
         {suffix && (
-          <div className="zd:right-3 zd:text-muted-foreground">{suffix}</div>
+          <div className="zd:absolute zd:right-3 zd:text-muted-foreground">{suffix}</div>
         )}
 
         {/* Show type-specific icon if no custom suffix */}

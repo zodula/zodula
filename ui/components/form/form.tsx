@@ -59,7 +59,7 @@ export const Form = <T extends Record<string, Zodula.Field>>(
     [props.onChange]
   );
 
-  const { tabs, sectionsByTab, hasTabFields } = useMemo(() => {
+  const { tabs, sectionsByTab, hasTabFields, tabHasRequired } = useMemo(() => {
     const tabs: string[] = [];
     const sectionsByTab: Record<
       string,
@@ -227,10 +227,22 @@ export const Form = <T extends Record<string, Zodula.Field>>(
         }
       }
 
+      const filteredTabs = tabs.filter((tab) => (sectionsByTab[tab]?.length || 0) > 0);
+      const tabHasRequired: Record<string, boolean> = {};
+      filteredTabs.forEach((tab) => {
+        const sections = sectionsByTab[tab] || [];
+        tabHasRequired[tab] = sections.some((section) =>
+          section.rows.some((row) =>
+            row.fields.some(({ field }) => field.required === 1)
+          )
+        );
+      });
+
       return {
-        tabs: tabs.filter((tab) => (sectionsByTab[tab]?.length || 0) > 0),
+        tabs: filteredTabs,
         sectionsByTab,
         hasTabFields: 1,
+        tabHasRequired,
       };
     }
 
@@ -239,6 +251,7 @@ export const Form = <T extends Record<string, Zodula.Field>>(
       field,
     }));
 
+    const mainHasRequired = allFields.some(({ field }) => field.required === 1);
     return {
       tabs: ["Main"],
       sectionsByTab: {
@@ -257,6 +270,7 @@ export const Form = <T extends Record<string, Zodula.Field>>(
         ],
       },
       hasTabFields: 0,
+      tabHasRequired: { Main: mainHasRequired },
     };
   }, [props.fields, tabsToUse, t]);
 
@@ -290,6 +304,7 @@ export const Form = <T extends Record<string, Zodula.Field>>(
           tabs={tabs}
           activeTab={activeTab}
           onTabChange={handleTabChange}
+          tabHasRequired={tabHasRequired}
         />
       )}
 

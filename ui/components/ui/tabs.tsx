@@ -6,9 +6,11 @@ interface TabsProps {
     activeTab: string;
     onTabChange: (tab: string) => void;
     translate?: boolean;
+    /** Tab labels that contain required fields get a red asterisk */
+    tabHasRequired?: Record<string, boolean>;
 }
 
-export const Tabs: React.FC<TabsProps> = ({ tabs, activeTab, onTabChange, translate = false }) => {
+export const Tabs: React.FC<TabsProps> = ({ tabs, activeTab, onTabChange, translate = false, tabHasRequired }) => {
     const { t } = useTranslation();
 
     const translateText = useCallback((text: string) => {
@@ -31,6 +33,9 @@ export const Tabs: React.FC<TabsProps> = ({ tabs, activeTab, onTabChange, transl
                         `}
                     >
                         {translateText(tab)}
+                        {tab !== tabs[0] && tabHasRequired?.[tab] && (
+                            <span className="zd:text-destructive zd:ml-0.5" aria-hidden> *</span>
+                        )}
                     </button>
                 ))}
             </nav>

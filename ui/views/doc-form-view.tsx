@@ -1009,11 +1009,11 @@ export function DocFormView({
   // ===== FORM EFFECTS =====
   // Track previous doc ID to prevent unnecessary updates
   const prevDocIdRef = React.useRef<string | undefined>(undefined);
-  
+
   React.useEffect(() => {
-    if (mode === "edit" && doc) {
+    if (doc) {
       const currentDocId = doc.id;
-      
+
       // Only update form values if doc ID changed (new document loaded)
       // This prevents overwriting user input while typing
       if (prevDocIdRef.current !== currentDocId) {
@@ -1021,11 +1021,15 @@ export function DocFormView({
         if (prefill) {
           Object.assign(valuesToSet, prefill);
         }
-        setValues(valuesToSet);
+        for (const [key, value] of Object.entries(valuesToSet)) {
+          setValue(key as keyof typeof valuesToSet, value);
+        }
         prevDocIdRef.current = currentDocId;
+        // Reset so hydrate effect runs with new formData and triggers fetch_from
+        fieldHydratedRef.current = null;
       }
     }
-  }, [doc?.id, setValues, prefill, mode]);
+  }, [doc?.id, setValue, prefill, mode]);
 
   // Note: Default values and prefill for create mode are now handled in handleResetForm
   // This ensures proper sequencing: reset -> defaults -> prefill -> refresh script
@@ -1081,6 +1085,8 @@ export function DocFormView({
 
       // Step 4: Set all values at once (defaults + prefill)
       setValues(defaultValues);
+      // Reset so hydrate effect runs with new formData and triggers fetch_from for prefill/defaults
+      fieldHydratedRef.current = null;
 
       // Step 4.5: Wait for form state to update and verify values are set
       // Use a longer delay to ensure React has fully processed the state update
@@ -1463,7 +1469,6 @@ export function DocFormView({
           clearFormValues(doctype, org);
         }
         
-        setValues(createdDoc as Record<string, any>);
         if (cbUrl) {
           let obj = fromDoc || {};
           if (fromField) {
@@ -1474,12 +1479,17 @@ export function DocFormView({
               obj[fromField] = createdDoc.id;
             }
           }
+          for(const [key, value] of Object.entries(obj)) {
+            if(value === null || value === undefined) {
+              delete obj[key];
+            }
+          }
+          handleResetForm();
           replace(cbUrl, {
             state: {
               prefill: obj,
             },
           });
-          handleResetForm();
         } else {
           handleResetForm();
           replace(`/desk/${org}/doctypes/${doctype}/form/${createdDoc.id}`);
@@ -1928,7 +1938,7 @@ export function DocFormView({
         }
       >
         {/* Form Content */}
-        <div className="zd:flex zd:flex-col zd:gap-8">
+        <div className="zd:flex zd:flex-col zd:gap-8 zd:border zd:rounded zd:p-4">
           <Form
             translate
             debug={roles?.includes("System Admin") || false}

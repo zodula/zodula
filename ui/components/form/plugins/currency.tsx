@@ -1,13 +1,15 @@
 import React from "react";
 import { FormPlugin } from "../plugin";
 import { Input } from "../../ui/input";
-import { useOrganization } from "@/zodula/ui/hooks/use-organization";
+import { useOrganization, useOrganizationById } from "@/zodula/ui/hooks/use-organization";
 
 export const CurrencyPlugin = new FormPlugin({
     types: ["Currency"],
     supportOperators: ["=", "!=", ">", ">=", "<", "<=", "IS NULL", "IS NOT NULL"],
     render: (props) => {
-    const { organization } = useOrganization();
+    const { organization: currentOrganization } = useOrganization();
+    const { organization: formOrganization } = useOrganizationById(props.formData?.organization);
+    const organization = formOrganization ?? currentOrganization;
     return (
         <Input
             placeholder="0.00"

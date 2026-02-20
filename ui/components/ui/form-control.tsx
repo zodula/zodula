@@ -142,7 +142,7 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
         ref={ref}
       >
         {label && (
-          <div className="zd:flex zd:items-center zd:gap-1.5 zd:mb-2 zd:text-sm">
+          <div className="zd:font-medium zd:flex zd:items-center zd:gap-1.5 zd:mb-2 zd:text-sm">
             <label className="zd:text-muted-foreground zd:flex zd:items-center">
               {label}
               {!!required && (

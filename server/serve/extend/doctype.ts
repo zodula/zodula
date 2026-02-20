@@ -248,23 +248,29 @@ export const extendDoctype = () => {
           );
         }
       },
-      DoctypeAPIHelper.getSingleRouteConfig(doctypeMeta)
+      // DoctypeAPIHelper.getSingleRouteConfig(doctypeMeta)
     );
 
     // single create doc
     server.post(
       `/api/resources/${doctypeMeta.name}/new`,
-      async (ctx) => {
+      async (ctx: any) => {
         try {
           ctxContext.enterWith({
             ctx: ctx as any,
           });
-          const input = await ctx.body;
-          const result = await zodula
-            .doctype(doctypeMeta.name)
-            .insert(input)
-            .fields(ctx.query.fields || (["*"] as any[]));
-          return ctx.json(result);
+          const db = Database("main");
+          return await db.transaction(async (trx) => {
+            dbcontext.enterWith({
+              trx: trx,
+            });
+            const input = await ctx.body;
+            const result = await zodula
+              .doctype(doctypeMeta.name)
+              .insert(input)
+              .fields(ctx.query.fields || (["*"] as any[]));
+            return ctx.json(result);
+          });
         } catch (error: any) {
           return ctx.json(
             {
@@ -274,13 +280,13 @@ export const extendDoctype = () => {
           );
         }
       },
-      DoctypeAPIHelper.getCreateRouteConfig(doctypeMeta)
+      // DoctypeAPIHelper.getCreateRouteConfig(doctypeMeta)
     );
 
     // update doc
     server.put(
       `/api/resources/${doctypeMeta.name}/:id`,
-      async (ctx) => {
+      async (ctx: any) => {
         try {
           ctxContext.enterWith({
             ctx: ctx as any,
@@ -323,13 +329,13 @@ export const extendDoctype = () => {
           );
         }
       },
-      DoctypeAPIHelper.getUpdateRouteConfig(doctypeMeta)
+      // DoctypeAPIHelper.getUpdateRouteConfig(doctypeMeta)
     );
 
     // delete doc
     server.delete(
       `/api/resources/${doctypeMeta.name}/:id`,
-      async (ctx) => {
+      async (ctx: any) => {
         try {
           ctxContext.enterWith({
             ctx: ctx as any,
@@ -354,13 +360,13 @@ export const extendDoctype = () => {
           );
         }
       },
-      DoctypeAPIHelper.getDeleteRouteConfig(doctypeMeta)
+      // DoctypeAPIHelper.getDeleteRouteConfig(doctypeMeta)
     );
 
     // list docs
     server.get(
       `/api/resources/${doctypeMeta.name}`,
-      async (ctx) => {
+      async (ctx: any) => {
         try {
           const {
             limit = "20",
@@ -430,6 +436,7 @@ export const extendDoctype = () => {
             dbcontext.enterWith({
               trx: trx,
             });
+            console.log("is Transaction", trx.isTransaction);
             const input = await ctx.body;
             let result: Zodula.SelectDoctype<typeof doctypeMeta.name>[] = [];
             for (const item of input.docs || []) {
@@ -450,13 +457,13 @@ export const extendDoctype = () => {
           );
         }
       },
-      DoctypeAPIHelper.getBulkCreateRouteConfig(doctypeMeta)
+      // DoctypeAPIHelper.getBulkCreateRouteConfig(doctypeMeta)
     );
 
     // bulk delete docs
     server.delete(
       `/api/resources/${doctypeMeta.name}`,
-      async (ctx) => {
+      async (ctx: any) => {
         try {
           ctxContext.enterWith({
             ctx: ctx as any,
@@ -483,7 +490,7 @@ export const extendDoctype = () => {
           );
         }
       },
-      DoctypeAPIHelper.getBulkDeleteRouteConfig(doctypeMeta)
+      // DoctypeAPIHelper.getBulkDeleteRouteConfig(doctypeMeta)
     );
   }
   return server;

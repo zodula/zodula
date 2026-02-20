@@ -1,9 +1,9 @@
 import { format as dateFormat, formatDistanceToNow, isValid, parse, addDays as dateFnsAddDays, subDays } from "date-fns"
 import { ClientFieldHelper } from "./field"
 
-export let BASE_URL = "http://localhost:3000"
+export let BASE_URL = ""
 if (typeof window !== "undefined") {
-    BASE_URL = process.env.NODE_ENV === "development" ? "http://localhost:3000" : window.location.origin
+    BASE_URL = window.location.origin
 }
 
 export const format = (data: Date | string, format: "date" | "datetime" | "time" = "datetime") => {

@@ -35,7 +35,7 @@
     "axios": "^1.11.0",
     "binba": "^0.0.6",
     "bun-plugin-tailwind": "^0.0.15",
-    "bunely": "^0.0.6",
+    "bunely": "0.0.7",
     "bunmq": "^0.0.3-dev.2",
     "bunql": "^1.0.1-dev.5",
     "bxo": "^0.0.10-dev.9",

@@ -99,7 +99,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
             setSelectedDate(null);
             setSelectedRange({ start: null, end: null });
             setIsRangeMode(false);
-            
+
             // Set default time to now for DateTime type when no value is provided
             if (type === 'DateTime') {
                 const now = new Date();
@@ -325,13 +325,13 @@ const DatePicker: React.FC<DatePickerProps> = ({
         } else {
             // Single date mode
             let finalDate = date;
-            
+
             // For DateTime type, preserve the selected time
             if (type === 'DateTime') {
                 finalDate = new Date(date);
                 finalDate.setHours(selectedTime.hours, selectedTime.minutes, selectedTime.seconds);
             }
-            
+
             setSelectedDate(finalDate);
             setCurrentDate(finalDate);
             setIsRangeMode(false);
@@ -596,251 +596,252 @@ const DatePicker: React.FC<DatePickerProps> = ({
 
     return (
         <div className={cn("zd:relative", className ?? "")}>
-            <Popover open={isOpen && !readOnly} onOpenChange={(open) => {
-                if (!readOnly) {
-                    setIsOpen(open);
-                    // Initialize time picker with current time when opening for Time or DateTime type
-                    // But don't trigger onChange - only set the internal state
-                    if (open && (type === 'Time' || type === 'DateTime') && !selectedDate) {
-                        const now = new Date();
-                        setSelectedTime({
-                            hours: now.getHours(),
-                            minutes: now.getMinutes(),
-                            seconds: now.getSeconds()
-                        });
-                    }
-                }
-            }}>
-                <PopoverTrigger asChild>
-                    <div className="zd:relative zd:flex-1">
-                        <div onBlur={handleInputBlur}>
-                            <Input
-                                ref={inputRef}
-                                value={inputValue}
-                                onChange={handleInputChange}
-                                placeholder={placeholder}
-                                readOnly={readOnly}
-                                className="zd:pr-10"
-                                disabled={disabled}
-                            />
-                        </div>
-                        {!readOnly && (
-                            <Button
-                                variant="ghost"
-                                className="zd:absolute zd:right-0 zd:top-0 zd:h-full zd:px-3 zd:hover:bg-transparent"
-                                onClick={() => !disabled && setIsOpen(true)}
-                                disabled={disabled}
-                            >
-                                {type === 'Time' ? (
-                                    <Clock className="zd:h-4 zd:w-4" />
-                                ) : (
-                                    <Calendar className="zd:h-4 zd:w-4" />
-                                )}
-                            </Button>
-                        )}
-                    </div>
-                </PopoverTrigger>
-                <PopoverContent className="zd:p-0" align="start">
-                    <div className="zd:p-3">
-                        {type !== "Time" && (
-                            <>
-                                {/* Header */}
-                                <div className="zd:flex zd:items-center zd:justify-between zd:mb-4 zd:w-full">
-                                    <Button
-                                        variant="ghost"
-                                        onClick={() => navigateMonth('prev')}
-                                    >
-                                        <ChevronLeft className="zd:h-4 zd:w-4" />
-                                    </Button>
-
-                                    <div className="zd:flex zd:items-center zd:space-x-1">
-                                        {/* Month Picker */}
-                                        <Popover open={showMonthPicker} onOpenChange={setShowMonthPicker}>
-                                            <PopoverTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
-                                                    className="zd:px-2 zd:py-1 zd:text-sm zd:font-medium zd:hover:bg-accent"
-                                                >
-                                                    {currentDate.toLocaleDateString('en-US', { month: 'long' })}
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="zd:w-48 zd:p-2" align="center">
-                                                <div className="zd:grid zd:grid-cols-3 zd:gap-0.5">
-                                                    {monthNames.map((month, index) => (
-                                                        <Button
-                                                            key={month}
-                                                            variant="ghost"
-                                                            className={cn(
-                                                                "zd:text-xs",
-                                                                currentDate.getMonth() === index ? "zd:bg-primary zd:text-primary-foreground" : ""
-                                                            )}
-                                                            onClick={() => handleMonthSelect(index)}
-                                                        >
-                                                            {month.substring(0, 3)}
-                                                        </Button>
-                                                    ))}
-                                                </div>
-                                            </PopoverContent>
-                                        </Popover>
-
-                                        {/* Year Picker */}
-                                        <Popover open={showYearPicker} onOpenChange={setShowYearPicker}>
-                                            <PopoverTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
-                                                    className="zd:px-2 zd:py-1 zd:text-sm zd:font-medium zd:hover:bg-accent"
-                                                >
-                                                    {currentDate.getFullYear()}
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="zd:w-48 zd:p-2 zd:overflow-y-auto" align="center">
-                                                <div className="zd:grid zd:grid-cols-3 zd:gap-1 zd:max-h-48">
-                                                    {generateYears().map((year) => (
-                                                        <Button
-                                                            key={year}
-                                                            variant="ghost"
-                                                            className={cn(
-                                                                "zd:text-xs",
-                                                                currentDate.getFullYear() === year ? "zd:bg-primary zd:text-primary-foreground" : ""
-                                                            )}
-                                                            onClick={() => handleYearSelect(year)}
-                                                        >
-                                                            {year}
-                                                        </Button>
-                                                    ))}
-                                                </div>
-                                            </PopoverContent>
-                                        </Popover>
-                                    </div>
-
-                                    <Button
-                                        variant="ghost"
-                                        onClick={() => navigateMonth('next')}
-                                    >
-                                        <ChevronLeft className="zd:h-4 zd:w-4 zd:rotate-180" />
-                                    </Button>
-                                </div>
-
-                                {/* Calendar Grid */}
-                                {/* Day headers */}
-                                <div className="zd:grid zd:grid-cols-7 zd:gap-0 zd:mb-2">
-                                    {['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'].map(day => (
-                                        <div key={day} className="zd:w-full zd:h-6 zd:w-6 zd:text-center zd:font-medium zd:text-muted-foreground zd:py-1">
-                                            {day}
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Calendar days */}
-                                <div className="zd:grid zd:grid-cols-7 zd:gap-0">
-                                    {calendarDays.map((date, index) => {
-                                        const isSelected = isDateSelected(date);
-                                        const isDisabled = isDateDisabled(date);
-                                        const isStartDate = selectedRange.start &&
-                                            date.getDate() === selectedRange.start.getDate() &&
-                                            date.getMonth() === selectedRange.start.getMonth() &&
-                                            date.getFullYear() === selectedRange.start.getFullYear();
-                                        const isEndDate = selectedRange.end &&
-                                            date.getDate() === selectedRange.end.getDate() &&
-                                            date.getMonth() === selectedRange.end.getMonth() &&
-                                            date.getFullYear() === selectedRange.end.getFullYear();
-                                        const isInRange = range && selectedRange.start && selectedRange.end && isSelected && !isStartDate && !isEndDate;
-
-                                        return (
-                                            <button
-                                                key={index}
-                                                onClick={() => !isDisabled && handleDateSelect(date)}
-                                                onMouseEnter={() => setHoveredDate(date)}
-                                                onMouseLeave={() => setHoveredDate(null)}
-                                                disabled={isDisabled}
-                                                className={cn(
-                                                    "zd:flex zd:!h-8 zd:!w-full zd:justify-center zd:items-center zd:transition-colors zd:relative",
-                                                    "zd:hover:text-accent-foreground",
-                                                    isStartDate ? "zd:bg-primary zd:text-primary-foreground zd:font-bold" : "",
-                                                    isEndDate ? "zd:bg-primary zd:text-primary-foreground zd:font-bold" : "",
-                                                    isDateHovered(date) ? "zd:bg-primary/10 zd:text-primary" : "",
-                                                    !isCurrentMonth(date) ? "zd:text-muted-foreground/50" : "",
-                                                    isSelected ? "zd:bg-primary zd:text-primary-foreground" : "",
-                                                    isInRange ? "zd:bg-primary/20 zd:text-primary" : "",
-                                                    isToday(date) ? "zd:font-bold" : "",
-                                                    isDisabled ? "zd:text-muted-foreground/30 zd:cursor-not-allowed" : "",
-                                                    !isDisabled ? "zd:hover:bg-accent" : "",
-                                                )}
-                                                title={`${date.toDateString()} ${isSelected ? '(Selected)' : ''} ${isStartDate ? '(Start)' : ''} ${isEndDate ? '(End)' : ''} ${isDisabled ? '(Disabled)' : ''}`}
-                                            >
-                                                {date.getDate()}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-
-                                {/* Action buttons */}
-                                <div className="zd:flex zd:justify-between zd:mt-2 zd:pt-2 zd:border-t">
-                                    <Button variant="ghost" onClick={clearSelection}>
-                                        Clear
-                                    </Button>
-                                    {!range && (
-                                        <Button variant="ghost" onClick={handleTodayClick}>
-                                            Today
+            <div onBlur={handleInputBlur}>
+                <Input
+                    ref={inputRef}
+                    value={inputValue}
+                    onChange={handleInputChange}
+                    placeholder={placeholder}
+                    readOnly={readOnly}
+                    disabled={disabled}
+                    suffix={
+                        <Popover open={isOpen && !readOnly} onOpenChange={(open) => {
+                            if (!readOnly) {
+                                setIsOpen(open);
+                                // Initialize time picker with current time when opening for Time or DateTime type
+                                // But don't trigger onChange - only set the internal state
+                                if (open && (type === 'Time' || type === 'DateTime') && !selectedDate) {
+                                    const now = new Date();
+                                    setSelectedTime({
+                                        hours: now.getHours(),
+                                        minutes: now.getMinutes(),
+                                        seconds: now.getSeconds()
+                                    });
+                                }
+                            }
+                        }}>
+                            <PopoverTrigger asChild>
+                                <div className="zd:flex-1 zd:w-full">
+                                    {!readOnly && (
+                                        <Button
+                                            variant="ghost"
+                                            className="zd:h-full zd:px-0 zd:p-1"
+                                            onClick={() => !disabled && setIsOpen(true)}
+                                            disabled={disabled}
+                                        >
+                                            {type === 'Time' ? (
+                                                <Clock className="zd:h-4 zd:w-4" />
+                                            ) : (
+                                                <Calendar className="zd:h-4 zd:w-4" />
+                                            )}
                                         </Button>
                                     )}
                                 </div>
-                            </>
-                        )}
+                            </PopoverTrigger>
+                            <PopoverContent className="zd:p-0" align="start">
+                                <div className="zd:p-3">
+                                    {type !== "Time" && (
+                                        <>
+                                            {/* Header */}
+                                            <div className="zd:flex zd:items-center zd:justify-between zd:mb-4 zd:w-full">
+                                                <Button
+                                                    variant="ghost"
+                                                    onClick={() => navigateMonth('prev')}
+                                                >
+                                                    <ChevronLeft className="zd:h-4 zd:w-4" />
+                                                </Button>
 
-                        {/* Time picker for datetime and time fields */}
-                        {(type === 'DateTime' || type === 'Time') && (
-                            <div className="mt-4">
-                                <div className="zd:grid zd:grid-cols-3 zd:gap-2">
-                                    <div>
-                                        <label className="zd:text-muted-foreground zd:text-sm zd:mb-1 zd:block">Hours</label>
-                                        <Select
-                                            options={hoursOptions}
-                                            value={String(selectedTime.hours).padStart(2, '0')}
-                                            onChange={(value) => handleTimeSelect(Number(value), selectedTime.minutes, selectedTime.seconds)}
-                                            allowFreeText={true}
-                                            placeholder="00"
-                                            className="zd:w-full"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="zd:text-muted-foreground zd:text-sm zd:mb-1 zd:block">Minutes</label>
-                                        <Select
-                                            options={minutesOptions}
-                                            value={String(selectedTime.minutes).padStart(2, '0')}
-                                            onChange={(value) => handleTimeSelect(selectedTime.hours, Number(value), selectedTime.seconds)}
-                                            allowFreeText={true}
-                                            placeholder="00"
-                                            className="zd:w-full"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="zd:text-muted-foreground zd:text-sm zd:mb-1 zd:block">Seconds</label>
-                                        <Select
-                                            options={secondsOptions}
-                                            value={String(selectedTime.seconds).padStart(2, '0')}
-                                            onChange={(value) => handleTimeSelect(selectedTime.hours, selectedTime.minutes, Number(value))}
-                                            allowFreeText={true}
-                                            placeholder="00"
-                                            className="zd:w-full"
-                                        />
-                                    </div>
+                                                <div className="zd:flex zd:items-center zd:space-x-1">
+                                                    {/* Month Picker */}
+                                                    <Popover open={showMonthPicker} onOpenChange={setShowMonthPicker}>
+                                                        <PopoverTrigger asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                className="zd:px-2 zd:py-1 zd:text-sm zd:font-medium zd:hover:bg-accent"
+                                                            >
+                                                                {currentDate.toLocaleDateString('en-US', { month: 'long' })}
+                                                            </Button>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="zd:w-48 zd:p-2" align="center">
+                                                            <div className="zd:grid zd:grid-cols-3 zd:gap-0.5">
+                                                                {monthNames.map((month, index) => (
+                                                                    <Button
+                                                                        key={month}
+                                                                        variant="ghost"
+                                                                        className={cn(
+                                                                            "zd:text-xs",
+                                                                            currentDate.getMonth() === index ? "zd:bg-primary zd:text-primary-foreground" : ""
+                                                                        )}
+                                                                        onClick={() => handleMonthSelect(index)}
+                                                                    >
+                                                                        {month.substring(0, 3)}
+                                                                    </Button>
+                                                                ))}
+                                                            </div>
+                                                        </PopoverContent>
+                                                    </Popover>
+
+                                                    {/* Year Picker */}
+                                                    <Popover open={showYearPicker} onOpenChange={setShowYearPicker}>
+                                                        <PopoverTrigger asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                className="zd:px-2 zd:py-1 zd:text-sm zd:font-medium zd:hover:bg-accent"
+                                                            >
+                                                                {currentDate.getFullYear()}
+                                                            </Button>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="zd:w-48 zd:p-2 zd:overflow-y-auto" align="center">
+                                                            <div className="zd:grid zd:grid-cols-3 zd:gap-1 zd:max-h-48">
+                                                                {generateYears().map((year) => (
+                                                                    <Button
+                                                                        key={year}
+                                                                        variant="ghost"
+                                                                        className={cn(
+                                                                            "zd:text-xs",
+                                                                            currentDate.getFullYear() === year ? "zd:bg-primary zd:text-primary-foreground" : ""
+                                                                        )}
+                                                                        onClick={() => handleYearSelect(year)}
+                                                                    >
+                                                                        {year}
+                                                                    </Button>
+                                                                ))}
+                                                            </div>
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                </div>
+
+                                                <Button
+                                                    variant="ghost"
+                                                    onClick={() => navigateMonth('next')}
+                                                >
+                                                    <ChevronLeft className="zd:h-4 zd:w-4 zd:rotate-180" />
+                                                </Button>
+                                            </div>
+
+                                            {/* Calendar Grid */}
+                                            {/* Day headers */}
+                                            <div className="zd:grid zd:grid-cols-7 zd:gap-0 zd:mb-2">
+                                                {['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'].map(day => (
+                                                    <div key={day} className="zd:w-full zd:h-6 zd:w-6 zd:text-center zd:font-medium zd:text-muted-foreground zd:py-1">
+                                                        {day}
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {/* Calendar days */}
+                                            <div className="zd:grid zd:grid-cols-7 zd:gap-0">
+                                                {calendarDays.map((date, index) => {
+                                                    const isSelected = isDateSelected(date);
+                                                    const isDisabled = isDateDisabled(date);
+                                                    const isStartDate = selectedRange.start &&
+                                                        date.getDate() === selectedRange.start.getDate() &&
+                                                        date.getMonth() === selectedRange.start.getMonth() &&
+                                                        date.getFullYear() === selectedRange.start.getFullYear();
+                                                    const isEndDate = selectedRange.end &&
+                                                        date.getDate() === selectedRange.end.getDate() &&
+                                                        date.getMonth() === selectedRange.end.getMonth() &&
+                                                        date.getFullYear() === selectedRange.end.getFullYear();
+                                                    const isInRange = range && selectedRange.start && selectedRange.end && isSelected && !isStartDate && !isEndDate;
+
+                                                    return (
+                                                        <button
+                                                            key={index}
+                                                            onClick={() => !isDisabled && handleDateSelect(date)}
+                                                            onMouseEnter={() => setHoveredDate(date)}
+                                                            onMouseLeave={() => setHoveredDate(null)}
+                                                            disabled={isDisabled}
+                                                            className={cn(
+                                                                "zd:flex zd:!h-8 zd:!w-full zd:justify-center zd:items-center zd:transition-colors zd:relative",
+                                                                "zd:hover:text-accent-foreground",
+                                                                isStartDate ? "zd:bg-primary zd:text-primary-foreground zd:font-bold" : "",
+                                                                isEndDate ? "zd:bg-primary zd:text-primary-foreground zd:font-bold" : "",
+                                                                isDateHovered(date) ? "zd:bg-primary/10 zd:text-primary" : "",
+                                                                !isCurrentMonth(date) ? "zd:text-muted-foreground/50" : "",
+                                                                isSelected ? "zd:bg-primary zd:text-primary-foreground" : "",
+                                                                isInRange ? "zd:bg-primary/20 zd:text-primary" : "",
+                                                                isToday(date) ? "zd:font-bold" : "",
+                                                                isDisabled ? "zd:text-muted-foreground/30 zd:cursor-not-allowed" : "",
+                                                                !isDisabled ? "zd:hover:bg-accent" : "",
+                                                            )}
+                                                            title={`${date.toDateString()} ${isSelected ? '(Selected)' : ''} ${isStartDate ? '(Start)' : ''} ${isEndDate ? '(End)' : ''} ${isDisabled ? '(Disabled)' : ''}`}
+                                                        >
+                                                            {date.getDate()}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {/* Action buttons */}
+                                            <div className="zd:flex zd:justify-between zd:mt-2 zd:pt-2 zd:border-t">
+                                                <Button variant="ghost" onClick={clearSelection}>
+                                                    Clear
+                                                </Button>
+                                                {!range && (
+                                                    <Button variant="ghost" onClick={handleTodayClick}>
+                                                        Today
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {/* Time picker for datetime and time fields */}
+                                    {(type === 'DateTime' || type === 'Time') && (
+                                        <div className="mt-4">
+                                            <div className="zd:grid zd:grid-cols-3 zd:gap-2">
+                                                <div>
+                                                    <label className="zd:text-muted-foreground zd:text-sm zd:mb-1 zd:block">Hours</label>
+                                                    <Select
+                                                        options={hoursOptions}
+                                                        value={String(selectedTime.hours).padStart(2, '0')}
+                                                        onChange={(value) => handleTimeSelect(Number(value), selectedTime.minutes, selectedTime.seconds)}
+                                                        allowFreeText={true}
+                                                        placeholder="00"
+                                                        className="zd:w-full"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="zd:text-muted-foreground zd:text-sm zd:mb-1 zd:block">Minutes</label>
+                                                    <Select
+                                                        options={minutesOptions}
+                                                        value={String(selectedTime.minutes).padStart(2, '0')}
+                                                        onChange={(value) => handleTimeSelect(selectedTime.hours, Number(value), selectedTime.seconds)}
+                                                        allowFreeText={true}
+                                                        placeholder="00"
+                                                        className="zd:w-full"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="zd:text-muted-foreground zd:text-sm zd:mb-1 zd:block">Seconds</label>
+                                                    <Select
+                                                        options={secondsOptions}
+                                                        value={String(selectedTime.seconds).padStart(2, '0')}
+                                                        onChange={(value) => handleTimeSelect(selectedTime.hours, selectedTime.minutes, Number(value))}
+                                                        allowFreeText={true}
+                                                        placeholder="00"
+                                                        className="zd:w-full"
+                                                    />
+                                                </div>
+                                            </div>
+                                            {type === 'Time' && (
+                                                <div className="zd:flex zd:justify-between zd:mt-2 zd:pt-2 zd:border-t">
+                                                    <Button variant="ghost" onClick={clearSelection}>
+                                                        Clear
+                                                    </Button>
+                                                    <Button variant="ghost" onClick={handleTodayClick}>
+                                                        Now
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
-                                {type === 'Time' && (
-                                    <div className="zd:flex zd:justify-between zd:mt-2 zd:pt-2 zd:border-t">
-                                        <Button variant="ghost" onClick={clearSelection}>
-                                            Clear
-                                        </Button>
-                                        <Button variant="ghost" onClick={handleTodayClick}>
-                                            Now
-                                        </Button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </PopoverContent>
-            </Popover>
+                            </PopoverContent>
+                        </Popover>
+                    }
+                />
+            </div>
         </div>
     );
 };
