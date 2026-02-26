@@ -180,14 +180,12 @@ const Select = ({
           // In multiple mode, search based on the last value after comma
           const lastValue = searchValue.split(",").pop()?.trim() || "";
           return (
-            option.label.toLowerCase().includes(lastValue.toLowerCase()) ||
-            option.value.toLowerCase().includes(lastValue.toLowerCase())
+            option.label.toLowerCase().includes(lastValue.toLowerCase())
           );
         } else {
           // Single mode or no comma - search the entire value
           return (
-            option.label.toLowerCase().includes(searchValue.toLowerCase()) ||
-            option.value.toLowerCase().includes(searchValue.toLowerCase())
+            option.label.toLowerCase().includes(searchValue.toLowerCase())
           );
         }
       })
