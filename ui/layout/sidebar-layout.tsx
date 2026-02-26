@@ -115,6 +115,11 @@ export const SidebarLayout = ({
         id="action-section"
         className="zd:flex zd:items-center zd:gap-2 no-print zd:justify-end zd:flex-1"
       >
+        {actionSection && (
+          <div className="no-print zd:flex zd:items-center zd:gap-2">
+            {actionSection}
+          </div>
+        )}
         {primaryActions.map((action, index) => (
           <Button
             key={index}
@@ -127,14 +132,6 @@ export const SidebarLayout = ({
             {action.label}
           </Button>
         ))}
-        {actionSection && (
-          <div
-            id="action-section"
-            className="no-print zd:flex zd:items-center zd:gap-2"
-          >
-            {actionSection}
-          </div>
-        )}
         {actions.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -168,7 +165,7 @@ export const SidebarLayout = ({
   };
 
   return (
-    <div className="zd:flex zd:flex-col zd:h-full zd:gap-4">
+    <div className="zd:flex zd:flex-col zd:h-full zd:gap-4 zd:w-full zd:flex-grow">
       <div className="zd:flex zd:items-center zd:justify-between zd:flex-wrap zd:gap-2">
         <div className="zd:flex zd:items-center zd:gap-4">
           <Button
@@ -191,14 +188,14 @@ export const SidebarLayout = ({
       </div>
       <div
         className={cn(
-          "zd:flex zd:bg-background",
+          "zd:flex zd:bg-background zd:flex-grow",
           sidebarOpen ? "zd:gap-4" : "zd:gap-0"
         )}
       >
         {/* Sidebar */}
         <div
           className={`zd:flex zd:flex-col zd:transition-all zd:duration-300 ${
-            sidebarOpen ? "zd:w-80" : "zd:w-0 zd:overflow-hidden"
+            sidebarOpen ? "zd:min-w-80" : "zd:min-w-0 zd:w-0 zd:overflow-hidden"
           }`}
         >
           {sidebarOpen && (
@@ -212,9 +209,9 @@ export const SidebarLayout = ({
         </div>
 
         {/* Main Content */}
-        <div className="zd:flex-1 zd:flex zd:flex-col zd:gap-4 zd:w-full">
+        <div className="zd:flex-1 zd:flex zd:flex-col zd:gap-4 zd:w-full zd:flex-grow">
           {/* Main Content Area */}
-          <div className="zd:flex-1">{children}</div>
+          <div className="zd:flex-1 zd:flex-grow">{children}</div>
         </div>
       </div>
     </div>

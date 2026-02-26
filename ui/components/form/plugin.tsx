@@ -49,12 +49,14 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
         fieldOptions,
         value,
         onChange,
-        operator
+        operator,
+        placeholder
     }: {
         fieldOptions: Zodula.Field;
         value?: any;
         onChange?: (value: any) => void;
         operator?: string;
+        placeholder?: string;
     }) => React.ReactNode;
 
     constructor(ctx: {
@@ -71,7 +73,8 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
             formData,
             docId,
             fieldPath,
-            doctype
+            doctype,
+            placeholder
         }: {
             fieldOptions: Zodula.Field;
             model?: any;
@@ -85,6 +88,7 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
             docId: string;
             fieldPath?: string;
             doctype?: Zodula.DoctypeConfig;
+            placeholder?: string;
         }) => React.ReactNode;
         cellRender?: ({
             fieldOptions,
@@ -101,12 +105,14 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
             fieldOptions,
             value,
             onChange,
-            operator
+            operator,
+            placeholder
         }: {
             fieldOptions: Zodula.Field;
             value?: any;
             onChange?: (value: any) => void;
             operator?: string;
+            placeholder?: string;
         }) => React.ReactNode;
         supportOperators?: IOperator[];
     }) {
@@ -117,7 +123,7 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
             // Default cell render: show string value or dash if empty
             return value != null ? String(value) : <span className="zd:text-muted-foreground zd:italic">-</span>;
         });
-        this.renderFilter = ctx.renderFilter || (({ value, onChange, operator }) => {
+        this.renderFilter = ctx.renderFilter || (({ value, onChange, operator, placeholder }) => {
             // Default filter render: simple input for most field types
             if (["IS NULL", "IS NOT NULL"].includes(operator || "")) {
                 return null; // No input needed for null checks
@@ -127,7 +133,7 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
                     type="text"
                     value={value || ""}
                     onChange={(e) => onChange?.(e.target.value)}
-                    placeholder="Enter Value"
+                    placeholder={placeholder || ""}
                 />
             );
         });

@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
-import { PlusIcon, UserIcon, InfoIcon, FileIcon, BookIcon } from "lucide-react";
+import { PlusIcon, UserIcon, InfoIcon, FileIcon, BookIcon, Loader2 } from "lucide-react";
 import { useAuth } from "../../hooks/use-auth";
 import { useDocAll } from "../../hooks/use-doc-all";
 import { useDocListAll } from "../../hooks/use-doc-list-all";
@@ -23,6 +23,7 @@ import { useNavbar } from "../../hooks/use-navbar";
 import { cn } from "../../lib/utils";
 import { LanguageSelection } from "./language-selection";
 import { Breadcrumb } from "./breadcrumb";
+import { useOrganizationById } from "../../hooks/use-organization";
 
 export interface NavbarProps {
   children?: React.ReactNode;
@@ -111,7 +112,7 @@ export const Navbar = ({ children }: NavbarProps) => {
 
     // Add doctype results
     doctypeResults.docs.forEach((doc) => {
-      if(doc.is_global === 1 && org !== "System Panel") {
+      if (doc.is_global === 1 && org !== "System Panel") {
         return;
       }
       const translatedLabel = t(doc.label || doc.name);
@@ -171,9 +172,11 @@ export const Navbar = ({ children }: NavbarProps) => {
     });
   };
 
+  const { organization: orgDoc, loading: orgLoading, error: orgError } = useOrganizationById(org);
+
   return (
     <>
-    {/* blur background for nav */}
+      {/* blur background for nav */}
       <div className="zd:sticky zd:top-0 zd:z-10 zd:flex zd:w-full zd:items-center zd:justify-center no-print zd:backdrop-blur zd:bg-background/80">
         <div
           className={cn(
@@ -188,21 +191,21 @@ export const Navbar = ({ children }: NavbarProps) => {
                 "zd:text-xl zd:font-bold zd:flex zd:items-center zd:gap-2  zd:w-10 zd:h-10"
               )}
             >
-              <img
+              {orgLoading ? <></> : <img
                 src={
-                  !!WebsiteSetting?.logo
+                  !!orgDoc?.logo
                     ? zodula.utils.getDoctypeFileUrl(
-                        "Global Setting",
-                        WebsiteSetting?.id || "",
-                        "logo",
-                        (WebsiteSetting?.logo as string) || "",
-                        "System Panel"
-                      ) + "?w=40&h=40"
+                      "Organization",
+                      orgDoc?.id || "",
+                      "logo",
+                      (orgDoc?.logo as string) || "",
+                      "System Panel"
+                    ) + "?w=40&h=40"
                     : "/public/zodula/zodula-logo.png"
                 }
                 alt="Logo"
                 className={cn("zd:rounded")}
-              />
+              />}
             </Link>
             <Breadcrumb showHome={true} className="zd:w-full zd:ml-2 zd:max-md:hidden" />
           </div>

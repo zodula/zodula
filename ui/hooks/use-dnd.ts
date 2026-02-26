@@ -39,6 +39,7 @@ export interface UseDndReturn {
   dragOverIndex: number | null
   dragOverPosition: 'before' | 'after' | null
   isDragging: boolean
+  resetDragState: () => void
 
   // Utility functions
   getDropZoneProps: (index: number, item: WorkspaceItem) => {
@@ -244,6 +245,7 @@ export const useDnd = ({
     dragOverIndex,
     dragOverPosition,
     isDragging,
+    resetDragState,
     getDropZoneProps,
     getDragProps
   }

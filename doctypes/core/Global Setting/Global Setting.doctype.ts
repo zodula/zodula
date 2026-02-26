@@ -1,5 +1,3 @@
-import { prepareIndexHtml, prepareTsxPage } from "@/zodula/server/prepare/tsxPage"
-
 export default $doctype({
     website_name: {
         type: "Text",
@@ -31,6 +29,4 @@ export default $doctype({
     label: "Global Setting",
     is_single: 1,
     is_global: 1,
-}).on("after_save", async (doc) => {
-    await prepareIndexHtml()
 })

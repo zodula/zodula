@@ -192,8 +192,9 @@ export const extendPage = async () => {
         .find((page) => page.path === "/")
         ?.generateMetadata?.(ctx)) || ({} as Metadata);
     let metadata = await mergeShellMetadata(pageMetadata, shells, ctx);
-    const websiteName = websiteSetting?.website_name || "Zodula Admin";
-    metadata["website-name"] = websiteName;
+    const websiteName = websiteSetting?.website_name || "Zodula Framework";
+    !metadata["title"] && (metadata["title"] = websiteName);
+    !metadata["description"] && (metadata["description"] = websiteSetting?.description || "An open-source fullstack web framework for building modern web applications.");
     const AppPath = `${path.join(process.cwd(), ".zodula", "ui", "App.tsx")}`;
     const App = (await import(AppPath)).default;
     const html = await renderToReadableStream(
@@ -229,8 +230,9 @@ export const extendPage = async () => {
       let pageMetadata =
         (await page?.generateMetadata?.(ctx)) || ({} as Metadata);
       let metadata = await mergeShellMetadata(pageMetadata, shells, ctx);
-      const websiteName = websiteSetting?.website_name || "Zodula Admin";
-      metadata["website-name"] = websiteName;
+      const websiteName = websiteSetting?.website_name || "Zodula Framework";
+      !metadata["title"] && (metadata["title"] = websiteName);
+      !metadata["description"] && (metadata["description"] = websiteSetting?.description || "An open-source fullstack web framework for building modern web applications.");
       const html = await renderToReadableStream(
         <AppShell pathname={pathname} metadata={metadata} App={App} />,
         {

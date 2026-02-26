@@ -16,8 +16,6 @@ import { useDoc } from "../hooks/use-doc";
 
 export const generateMetadata: GenerateMetadata = async (ctx) => {
     return {
-        title: "Zodula Framework",
-        description: "Zodula Framework",
         fonts: [
             {
                 family: "IBM Plex Sans Thai",

@@ -138,6 +138,7 @@ async function upsertFieldsBatch(
       only_once: fieldSchema.only_once ? 1 : 0 || null,
       no_translate: fieldSchema.no_translate ? 1 : 0 || null,
       organization_abbr: "SYS",
+      is_quick_filter: fieldSchema.is_quick_filter ? 1 : 0 || null,
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"Field">>;
 

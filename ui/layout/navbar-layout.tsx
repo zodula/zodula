@@ -21,11 +21,11 @@ export const NavbarLayout = ({
   
 
   return (
-      <div className={cn("zd:flex zd:flex-col zd:items-center", className)}>
+      <div className={cn("zd:flex zd:flex-col zd:items-center zd:w-full zd:min-h-screen", className)}>
         {router.pathname.startsWith("/desk") && !hideNavbar && <Navbar />}
         <div
           className={cn(
-            "zd:flex zd:flex-col zd:gap-4 zd:w-full zd:max-w-8xl zd:p-4 zd:overflow-visible zd:transition-all zd:duration-200 zd:ease-out",
+            "zd:flex zd:flex-col zd:gap-4 zd:w-full zd:max-w-8xl zd:p-4 zd:overflow-visible zd:transition-all zd:duration-200 zd:ease-out zd:flex-grow",
             (fullWidth || hideNavbar) ? "zd:max-w-screen" : "",
             contentClassName || ""
           )}

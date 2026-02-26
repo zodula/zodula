@@ -2,8 +2,10 @@ import React, { useMemo, useState, useEffect, useRef } from "react";
 import { useDocList } from "../../hooks/use-doc-list";
 import { useDoc } from "../../hooks/use-doc";
 import { ListToolbar } from "./ListToolbar";
+import { QuickFilterBar } from "./QuickFilterBar";
 import { ListTable, type ListColumn } from "./ListTable";
 import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 import { Select } from "../ui/select";
 import { useRouter } from "../router";
 import { useParams } from "react-router";
@@ -435,6 +437,31 @@ export function ListView({
         hasCustomColumns={hasCustomColumns}
         allFields={fields}
         doctype={doctype as any}
+        quickFilterBar={
+          <QuickFilterBar
+            fields={fields}
+            filters={filters ?? []}
+            onApplyFilters={onApplyFilters}
+            doctype={doctype as any}
+            fallback={
+              <Input
+                placeholder={
+                  t(`Search By`) +
+                  " " +
+                  t(
+                    `${!searchFieldsLabels.length ? "ID" : searchFieldsLabels.join(", ")}`
+                  )
+                }
+                className="zd:w-full"
+                value={searchInput ?? ""}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") onSearch(searchInput);
+                }}
+              />
+            }
+          />
+        }
       />
 
       {error ? (

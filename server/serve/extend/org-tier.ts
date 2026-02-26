@@ -10,7 +10,10 @@ export const OrgTier = () => {
     if (!!org) {
       let orgDoc = await zodula.doctype("Organization").get(org).bypass(true);
       let tierLevel = Number(orgDoc?.tier_level || '0') || 0;
-      if(!orgDoc.tier_level){
+      if(!orgDoc){
+        return ctx;
+      }
+      if(!orgDoc?.tier_level){
         orgDoc = await zodula.doctype("Organization").update(org, {
           tier_level: "0",
         }).bypass(true);

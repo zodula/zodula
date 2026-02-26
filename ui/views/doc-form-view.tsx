@@ -1013,6 +1013,12 @@ export function DocFormView({
   React.useEffect(() => {
     if (doc) {
       const currentDocId = doc.id;
+      if(!checked){
+        for (const [key, value] of Object.entries(doc)) {
+          setValue(key as keyof typeof doc, value);
+        }
+        checked = true;
+      }
 
       // Only update form values if doc ID changed (new document loaded)
       // This prevents overwriting user input while typing
@@ -1712,7 +1718,7 @@ export function DocFormView({
 
     if(isSingle) {
       return (
-        <Button onClick={handleSave} className="zd:h-8" disabled={isDirty}>
+        <Button onClick={handleSave} className="zd:h-8" disabled={!isDirty}>
           <SaveIcon />
           {t("Save")}{" "}
         </Button>

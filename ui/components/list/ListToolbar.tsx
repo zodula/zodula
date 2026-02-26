@@ -3,6 +3,7 @@ import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Select } from "../ui/select";
 import { FilterPopup } from "./FilterPopup";
+import { QuickFilterBar } from "./QuickFilterBar";
 import { Filter, ArrowUpDown, X, ArrowUp, ArrowDown, SortDescIcon, SortAscIcon, MoreHorizontal, Settings, FilterXIcon, Columns3CogIcon } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import type { IFilter, IOperator } from "@/zodula/server/zodula/type";
@@ -15,6 +16,8 @@ interface ListToolbarProps {
     searchPlaceholder?: string;
     onSearchChange?: (value: string) => void;
     onSearch?: (query: string) => void;
+    /** Quick filter bar - shown in place of search when provided; search is used as fallback when no quick filter fields */
+    quickFilterBar?: React.ReactNode;
     sortFields?: Zodula.Field[];
     sortValue?: string;
     onSortChange?: (value: string) => void;
@@ -59,24 +62,26 @@ export function ListToolbar({
     allFields = [],
     doctype,
     filterApplyImmediately = false,
+    quickFilterBar,
 }: ListToolbarProps) {
     const { t } = useTranslation()
     return (
         <div className="zd:flex zd:items-center zd:justify-between zd:gap-3 zd:w-full">
-            {/* Left side - ID search field */}
-            <div className="zd:flex zd:items-center zd:gap-2">
-                <Input
-                    // placeholder is search from display fields
-                    placeholder={searchPlaceholder || `Search By ${t("ID")}`}
-                    className="zd:w-full"
-                    value={searchValue}
-                    onChange={(e) => onSearchChange?.(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                            onSearch?.(searchValue);
-                        }
-                    }}
-                />
+            {/* Left side - QuickFilterBar (replaces search) or search input as fallback */}
+            <div className="zd:flex zd:flex-1 zd:items-center zd:gap-2 zd:min-w-0">
+                {quickFilterBar ?? (
+                    <Input
+                        placeholder={searchPlaceholder || `Search By ${t("ID")}`}
+                        className="zd:w-full"
+                        value={searchValue}
+                        onChange={(e) => onSearchChange?.(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                onSearch?.(searchValue);
+                            }
+                        }}
+                    />
+                )}
             </div>
 
             {/* Right side - Filter, Sort, and Last Updated controls */}

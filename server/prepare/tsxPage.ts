@@ -52,8 +52,6 @@ if (document.readyState === "loading") {
 }
 
     `)
-
-    await prepareIndexHtml()
 }
 
 export const buildIndexJs = async () => {
@@ -64,29 +62,4 @@ export const buildIndexJs = async () => {
             tailwindcss
         ]
     })
-}
-
-export const prepareIndexHtml = async () => {
-    const db = Database("main")
-    const websiteSetting = await db.select().from("Global Setting" as Zodula.DoctypeName).where("id", "=", "Global Setting").first().catch(() => null) as Zodula.SelectDoctype<"Global Setting"> | null
-    const faviconUrl = ["..", "..", ".zodula_data", "files", "System Panel", "Global Setting", "Global Setting", "favicon", websiteSetting?.favicon as string || ""].join("/")
-    const description = websiteSetting?.description || "An open-source fullstack web framework for building modern web applications."
-    Bun.write(path.join(process.cwd(), ".zodula", "ui", "index.html"), `
-    <!DOCTYPE html>
-    <html lang="en">
-        <head>
-            <meta charset="UTF-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <script type="module" src="index.tsx"></script>
-        <title>${websiteSetting?.website_name || "Zodula"}</title>
-        <meta name="description" content="${description}" />
-        <link rel="icon" href="${websiteSetting?.favicon as string ? faviconUrl : "../../apps/zodula/public/favicon.ico"}" />
-    </head>
-    <body>
-        <div id="root"></div>
-    </body>
-    </html>
-    `)
-
-    await buildIndexJs()
 }

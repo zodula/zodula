@@ -302,8 +302,12 @@ function CustomDialog({
   const { Component, options, initialData } = dialog.data
   const showCloseButton = options?.showCloseButton ?? true
   const w = options?.width
+  const mw = options?.maxWidth
   const hasWidth = w != null
-  const widthStyle = hasWidth ? { width: typeof w === "number" ? `${w}px` : w } : undefined
+  const hasMaxWidth = mw != null
+  const sizeStyle: React.CSSProperties = {}
+  if (hasWidth) sizeStyle.width = typeof w === "number" ? `${w}px` : w
+  if (hasMaxWidth) sizeStyle.maxWidth = typeof mw === "number" ? `${mw}px` : mw
 
   return (
     <Dialog open={dialog.isOpen} onClose={() => onClose()}>
@@ -312,9 +316,9 @@ function CustomDialog({
         <DialogContent
           className={cn(
             "zd:rounded zd:bg-background zd:shadow-lg zd:animate-in zd:fade-in-0 zd:zoom-in-95 zd:duration-200 zd:max-h-[90vh] zd:flex zd:flex-col",
-            !hasWidth && "zd:max-w-4xl zd:w-fit"
+            !hasWidth && !hasMaxWidth && "zd:max-w-4xl zd:w-fit"
           )}
-          style={widthStyle ?? undefined}
+          style={Object.keys(sizeStyle).length > 0 ? sizeStyle : undefined}
         >
           {(options?.title || options?.description) && (
             <div className="zd:flex-shrink-0 zd:p-6 zd:pb-4">
@@ -486,6 +490,8 @@ function popup<T = any, I = any>(
     showCloseButton?: boolean
     /** Dialog width: number (px) or CSS value (e.g. "80vw", "600px") */
     width?: number | string
+    /** Dialog max-width: number (px) or CSS value (e.g. "90vw", "1200px") */
+    maxWidth?: number | string
   },
   initialData?: I
 ): Promise<T | null> {

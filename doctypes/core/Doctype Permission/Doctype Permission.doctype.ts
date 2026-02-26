@@ -7,6 +7,7 @@ export default $doctype({
         unique: 1,
         group: "doctype-permission",
         on_delete: "CASCADE",
+        is_quick_filter: 1
     },
     role: {
         type: "Reference",

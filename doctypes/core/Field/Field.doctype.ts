@@ -156,6 +156,10 @@ export default $doctype({
     no_translate: {
         type: "Check",
         label: "No Translate"
+    },
+    is_quick_filter: {
+        type: "Check",
+        label: "Is Quick Filter"
     }
 
 }, {

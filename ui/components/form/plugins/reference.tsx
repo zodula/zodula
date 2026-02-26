@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import { FormPlugin } from "../plugin";
 import { Select, type SelectAction } from "../../ui/select";
 import { ArrowRight, FilterIcon, PlusIcon, ArrowUpDown } from "lucide-react";
@@ -26,6 +27,7 @@ const ReferenceInput = (props: {
   autocomplete?: "on" | "off";
   org?: string;
   doctype?: Zodula.DoctypeConfig;
+  placeholder?: string;
 }) => {
   const router = useRouter();
   const { org } = router.params;
@@ -36,6 +38,8 @@ const ReferenceInput = (props: {
   const [doctype, setDoctype] =
     useState<Zodula.SelectDoctype<"Doctype"> | null>(null);
   const [isFocused, setIsFocused] = useState(false);
+  // Temp value while focused - avoids triggering onChange (and thus doc fetch) until blur
+  const [tempValue, setTempValue] = useState<string | undefined>(undefined);
   const isVirtual = props.fieldOptions.type === "Virtual Reference";
 
   const referenceDoctype = useMemo(() => {
@@ -198,9 +202,34 @@ const ReferenceInput = (props: {
     if (previousValues) {
       return `${previousValues},${newValue}`;
     }
-    // If no previous values, just return the new value
+    // No previous values, just return the new value
     return newValue;
   };
+
+  // When selecting in multiple mode: append new option, or replace last part only if it's a search term
+  const appendOrReplaceOnSelect = useCallback(
+    (currentValue: string, newId: string): string => {
+      if (!props.multiple) return newId;
+      if (!currentValue || !currentValue.trim()) return newId;
+      if (currentValue.endsWith(",")) return `${currentValue}${newId}`;
+
+      const optionIds = new Set(options.map((o) => o.id));
+      const parts = currentValue.split(",").map((p) => p.trim()).filter(Boolean);
+      const lastPart = parts[parts.length - 1] ?? "";
+
+      // Last part is a search term (user typed to filter) if it's not a valid option id
+      const isLastPartSearchTerm = lastPart && !optionIds.has(lastPart);
+      if (isLastPartSearchTerm) {
+        const previous = parts.slice(0, -1).join(",");
+        return previous ? `${previous},${newId}` : newId;
+      }
+      // Append: add new id, avoid duplicate
+      const ids = new Set(parts);
+      if (ids.has(newId)) return currentValue;
+      return `${currentValue},${newId}`;
+    },
+    [props.multiple, options]
+  );
 
   // Helper function to get nested value from formData using dot notation path
   const getNestedValue = (formData: any, path: string): any => {
@@ -462,11 +491,16 @@ const ReferenceInput = (props: {
       }))
     );
   }
+  const valueForSearch = isFocused && tempValue !== undefined ? tempValue : props.value;
   useEffect(() => {
     if (!isFocused) return;
-    search(props.value || "");
-  }, [props.value, isFocused, doctype, filters]);
+    search(valueForSearch || "");
+  }, [valueForSearch, isFocused, doctype, filters]);
 
+  useEffect(() => {
+    setTempValue(props.value);
+    setIsFocused(false);
+  }, [props.value]);
   const actions = useMemo(() => {
     let _actions: SelectAction[] = [];
     if (filters?.length > 0) {
@@ -574,56 +608,90 @@ const ReferenceInput = (props: {
     </span>
   }
 
+  // When focused: show temp value (no onChange = no parent doc fetch). On blur: sync via onChange.
+  const displayValue = isFocused && tempValue !== undefined ? tempValue : props.value;
+  const effectiveValue = displayValue ?? "";
+
   return (
     <Select
       autocomplete={props.autocomplete}
       actions={actions}
-      placeholder={""}
-      value={props.value}
+      placeholder={props.placeholder || ""}
+      value={effectiveValue}
       options={options.map((option) => ({
         label: option.title,
         value: option.id,
         subtitle: option.subtitle,
       }))}
       onChange={(value) => {
-        // Don't allow changes if readonly
-        if (!props.readonly) {
-          // In multiple mode, allow free text typing
-          // The onSelect handler will handle appending when an option is selected
+        if (props.readonly) return;
+        if (isFocused) {
+          // Flush immediately so Select shows new value before dropdown closes (avoids flash of old value)
+          flushSync(() => setTempValue(value));
+        } else {
           props.onChange?.(value);
         }
       }}
       onSelect={(option) => {
-        // When selecting an option in multiple mode, replace the last part with the selected value
+        if (props.readonly) return;
         if (props.multiple && option) {
-          const newValue = appendValue(props.value || "", option.value);
+          // Compute append in Reference: tempValue is pre-selection (before Select's onChange)
+          const currentValue = tempValue ?? props.value ?? "";
+          const newValue = appendOrReplaceOnSelect(currentValue, option.value);
           props.onChange?.(newValue);
-        } else if (!props.multiple) {
+          setTempValue(newValue);
+        } else if (!props.multiple && option) {
+          setTempValue(option.value);
           props.onChange?.(option.value);
         }
       }}
+      onBlur={async (opts) => {
+        // When blur is caused by selection (Enter or click), we already committed via onSelect
+        if (opts?.reason !== 'blur') {
+          setIsFocused(false);
+          return;
+        }
+
+        const currentValue = (tempValue ?? props.value ?? "").trim();
+        const isMultiple = props.multiple;
+
+        // Commit value synchronously BEFORE setIsFocused to ensure form receives it on first blur
+        if (isMultiple) {
+          props.onChange?.(currentValue);
+          props.onBlur?.(currentValue);
+          setIsFocused(false);
+          return;
+        }
+
+        if (!currentValue || !referenceDoctype) {
+          props.onChange?.("");
+          props.onBlur?.("");
+          setIsFocused(false);
+          return;
+        }
+
+        setIsFocused(false);
+        try {
+          await zodula.doc.get_doc(referenceDoctype as any, currentValue, {});
+          props.onChange?.(currentValue);
+          props.onBlur?.(currentValue);
+        } catch {
+          props.onChange?.("");
+          props.onBlur?.("");
+        }
+      }}
       onFocus={() => {
+        setTempValue(props.value ?? "");
         setIsFocused(true);
         if (!doctype) return;
         if (!props.value || options.length === 0) {
           search(props.value || "");
         }
       }}
-      // onSelect={(option) => {
-      //     props.onChange?.(option.value);
-      // }}
       className={className}
-      onBlur={async () => {
-        // Clear value if it doesn't match any existing option
-        if (props.value && options.length <= 0 && !!referenceDoctype) {
-          props.onChange?.("");
-        }
-        props.onBlur?.(props.value);
-        setIsFocused(false);
-      }}
       allowFreeText
       readOnly={props.readonly}
-      clearable={true}
+      clearable={false}
       hideChevron={true}
       suffix={
         <>

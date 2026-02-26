@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 import Editor from '@monaco-editor/react';
+import { cn } from '../../lib/utils';
 
 export type MyEditorProps = {
     value?: string | object | null;
@@ -35,7 +36,10 @@ export default function MyEditor({
     }, [onChange]);
 
     return (
-        <div className={`zd:rounded-xl zd:border zd:border-border zd:bg-[#0b1220] zd:overflow-hidden zd:shadow-sm ${className}`}>
+        <div className={cn(
+            "zd:rounded-xl zd:border zd:border-border zd:bg-[#0b1220] zd:overflow-hidden zd:shadow-sm",
+            className
+        )}>
             <Editor
                 value={editorValue}
                 defaultLanguage={language}

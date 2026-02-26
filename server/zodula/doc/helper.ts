@@ -142,6 +142,13 @@ export class ZodulaDoctypeHelper {
             if (config.type === "Password" as FieldType) {
                 (result as any)[fieldName] = "****"
             }
+            if(config?.type === "Check"){
+                if(fieldValue === null || fieldValue === undefined || fieldValue === "" || fieldValue === "0" || fieldValue === 0){
+                    (result as any)[fieldName] = 0
+                }else{
+                    (result as any)[fieldName] = 1
+                }
+            }
         }
         return result
     }

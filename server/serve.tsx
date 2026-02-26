@@ -19,8 +19,12 @@ import { OrgTier } from "./serve/extend/org-tier";
 async function startServer() {
     await startup()
     const server = new BXO()
+    .beforeRequest((ctx) => {
+        const time = new Date().toISOString().split("T")[1]?.split(".")[0]
+        logger.debug(`[${time}] ${ctx.url}`)
+        return ctx
+    })
     .onError((error) => {
-        console.error(error)
         return new Response(JSON.stringify({
             error: error.message
         }), {

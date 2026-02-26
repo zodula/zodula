@@ -62,7 +62,8 @@ export interface SelectProps {
   maxHeight?: string;
   actions?: SelectAction[];
   onFocus?: () => void;
-  onBlur?: () => void;
+  /** Called when input blurs. reason: 'selection' = blur caused by selecting an option (Enter or click); 'blur' = normal blur (tab/click outside) */
+  onBlur?: (opts?: { reason: 'selection' | 'blur' }) => void;
   allowFreeText?: boolean;
   validate?: boolean;
   displayMode?: "label" | "value" | "key";
@@ -112,6 +113,7 @@ const Select = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const blurReasonRef = useRef<'selection' | 'blur' | null>(null);
 
   // Parse multiple values from comma-separated string
   const selectedValues =
@@ -284,6 +286,9 @@ const Select = ({
   // Handle input focus
   const handleInputFocus = () => {
     if (!disabled && !readOnly) {
+      if (searchable && multiple && allowFreeText && value) {
+        setSearchValue(value);
+      }
       calculateDropdownPosition();
       setIsOpen(true);
       setFocusedIndex(-1);
@@ -292,10 +297,10 @@ const Select = ({
   };
 
   // Handle input blur
-  const handleInputBlur = (e: React.FocusEvent) => {
-    // Don't close immediately - let the click outside handler manage closing
-    // This prevents premature closing when clicking on dropdown options
-    onBlur?.();
+  const handleInputBlur = () => {
+    const reason = blurReasonRef.current ?? 'blur';
+    blurReasonRef.current = null;
+    onBlur?.({ reason });
   };
 
   // Handle closing dropdown and validation
@@ -330,40 +335,38 @@ const Select = ({
     }
   };
 
-  // Handle option selection
+  // Handle option selection (Enter or click)
   const handleOptionSelect = (option: SelectOption) => {
     if (option.disabled) return;
 
     if (multiple) {
-      // For multiple mode, handle comma-separated input
+      // For allowFreeText: consumer (e.g. Reference) handles append via onSelect
+      // For non-allowFreeText or when searchValue has comma: do replace or toggle here
       if (searchValue.includes(",")) {
-        // Replace the last part after comma with the selected option
         const parts = searchValue.split(",");
-        parts.pop(); // Remove the last part (the search term)
+        parts.pop();
         const newValues = [
           ...parts.map((p) => p.trim()).filter(Boolean),
           option.value,
         ];
-        const newValue = newValues.join(",");
-        onChange?.(newValue);
+        onChange?.(newValues.join(","));
       } else {
-        // No comma - toggle the option
         const newValues = selectedValues.includes(option.value)
           ? selectedValues.filter((v) => v !== option.value)
           : [...selectedValues, option.value];
-
-        const newValue = newValues.join(",");
-        onChange?.(newValue);
+        onChange?.(newValues.join(","));
       }
 
       // Call onSelect callback with the selected option
       onSelect?.(option);
 
-      // Clear search and close dropdown
+      // Clear search and close dropdown (no blur in multiple - user can select more)
       setSearchValue("");
       handleDropdownClose();
+      blurReasonRef.current = null; // Clear so next blur gets 'blur' not stale 'selection'
     } else {
-      // For single mode
+      // For single mode - blur after selection
+      blurReasonRef.current = 'selection';
       if (allowFreeText) {
         // For free text mode, set the label as the value
         onChange?.(option.value);
@@ -489,6 +492,7 @@ const Select = ({
         dropdownRef.current && !dropdownRef.current.contains(target);
 
       if (isOutsideContainer && isOutsideDropdown) {
+        blurReasonRef.current = 'blur'; // Ensure next blur (from focus move) gets correct reason
         handleDropdownClose();
       }
     };

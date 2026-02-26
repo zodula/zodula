@@ -232,6 +232,12 @@ export default function DoctypeListPage() {
         push(`/desk/${org}/doctypes/${doctype}/sheet${location.search}`);
     };
 
+    const handlePrint = () => {
+        if (selected.size === 0) return;
+        const ids = JSON.stringify(Array.from(selected));
+        push(`/desk/${org}/print?doctype=${encodeURIComponent(doctype)}&ids=${encodeURIComponent(ids)}`);
+    };
+
     const primaryActions: PrimaryAction[] = [
         {
             label: t("Create"),
@@ -248,6 +254,12 @@ export default function DoctypeListPage() {
     ];
 
     const actions: ActionItem[] = [
+        {
+            id: "print",
+            label: t("Print"),
+            icon: <Printer className="zd:h-4 zd:w-4" />,
+            onClick: handlePrint
+        },
         {
             id: "export-csv",
             label: t("Export CSV"),

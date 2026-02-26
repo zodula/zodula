@@ -6,7 +6,7 @@ import { prepareApp, prepareTsxPage } from "@/zodula/server/prepare/tsxPage";
 let proc: Bun.Subprocess | null = null
 let debounceTimer: NodeJS.Timeout | null = null
 
-const DEBOUNCE_DELAY = 300 // ms
+const DEBOUNCE_DELAY = 20 // ms
 
 function restartServer() {
     if (proc) {
