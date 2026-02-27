@@ -40,7 +40,7 @@ export const applyFixtures = async () => {
             .set({
               ...data,
               id: data?.id,
-              doc_status: data?.doc_status || 0,
+              doc_status: data?.doc_status || "Draft",
               organization: data?.organization || "System Panel",
             })
             .where("id", "=", data.id)
@@ -50,7 +50,7 @@ export const applyFixtures = async () => {
             .insert(fixture.name as Zodula.DoctypeName)
             .values({
               ...data,
-              doc_status: data?.doc_status || 0,
+              doc_status: data?.doc_status || "Draft",
               organization: data?.organization || "System Panel",
             })
             .execute();

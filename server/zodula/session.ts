@@ -14,7 +14,7 @@ export class ZodulaSession {
       updated_at: "2021-01-01",
       created_by: "1",
       updated_by: "1",
-      doc_status: 1,
+      doc_status: "Submitted",
       owner: "1",
       organization: "System Panel",
     } satisfies Zodula.SelectDoctype<"User">;

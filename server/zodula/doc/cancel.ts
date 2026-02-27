@@ -92,13 +92,13 @@ export class ZodulaDoctypeCancel<
     if (!old) {
       throw new Error(`Document with id ${this.id} not found`, { cause: 404 });
     }
-    if (old.doc_status === 0) {
+    if (old.doc_status === "Draft") {
       throw new ErrorWithCode(
         `Document with id ${this.id} is not submitted and cannot be cancelled`,
         { status: 400 }
       );
     }
-    if (old.doc_status === 2) {
+    if (old.doc_status === "Cancelled") {
       throw new ErrorWithCode(
         `Document with id ${this.id} is already cancelled`,
         { status: 400 }
@@ -120,7 +120,7 @@ export class ZodulaDoctypeCancel<
   ): Promise<Zodula.SelectDoctype<TN>> {
     const prepared = {
       ...old,
-      doc_status: 2,
+      doc_status: "Cancelled",
       updated_by: user.id || null,
       updated_at: zodula.utils.format(new Date(), "datetime"),
     } as Zodula.SelectDoctype<TN>;
@@ -188,7 +188,7 @@ export class ZodulaDoctypeCancel<
       const results = await q
       const ids = [] as string[]
       for (const result of results.docs) {
-        if (result.doc_status === 1) {
+        if (result.doc_status === "Submitted" || result.doc_status === "Cancelled") {
           ids.push(result.id)
         }
       }

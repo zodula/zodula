@@ -60,7 +60,8 @@ export const standardFields = {
         no_print: 1,
     },
     doc_status: {
-        type: "Integer",
+        type: "Select",
+        options: "Draft\nSubmitted\nCancelled",
         required: 1,
         default: "0",
         label: "Document Status",

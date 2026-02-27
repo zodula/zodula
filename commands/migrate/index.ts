@@ -25,16 +25,6 @@ export const doMigrate = async (
   const orphanedElements = await migrator.detectOrphanedElements(schema);
   migrator.logOrphanedWarnings(orphanedElements);
 
-  // Apply migrations, predefine, and translations in transaction
-  await db.transaction(async (trx) => {
-    dbcontext.enterWith({
-      trx: trx,
-    });
-    await applyMigrations(schema);
-    await applyPredefine();
-    await applyTranslation();
-  });
-
   // Sync database schema - outside transaction
   if (applyDestructive) {
     logger.info("Syncing database schema (including destructive operations)");
@@ -48,6 +38,16 @@ export const doMigrate = async (
   await migrator.apply(schema, diff, applyDestructive);
   logger.success("Applied schema sync");
 
+
+  // Apply migrations, predefine, and translations in transaction
+  await db.transaction(async (trx) => {
+    dbcontext.enterWith({
+      trx: trx,
+    });
+    await applyMigrations(schema);
+    await applyPredefine();
+    await applyTranslation();
+  });
   // DatabaseHelper.delete("__temp__apply_migration")
 };
 

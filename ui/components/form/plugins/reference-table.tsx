@@ -32,7 +32,7 @@ const InlineFieldEditor = ({ field, value, onChange, formData, docId, readonly, 
     childFieldName?: string; // The child field name (e.g., "invoice_items")
 }) => {
     // Get doc_status from parent document (formData contains parent form data)
-    const docStatus = formData?.doc_status ?? 0;
+    const docStatus = formData?.doc_status ?? "Draft";
     
     // Check doc_status based readonly conditions for this field
     let statusBasedReadonly = false;
@@ -43,15 +43,15 @@ const InlineFieldEditor = ({ field, value, onChange, formData, docId, readonly, 
     const onlyOnce = (field as any).config?.only_once ?? field.only_once;
     
     // Condition 1: doc_status == 1 && field.config.allow_on_submit !== 1
-    if (docStatus === 1 && allowOnSubmit !== 1) {
+    if (docStatus === "Submitted" && allowOnSubmit !== 1) {
         statusBasedReadonly = true;
     }
     // Condition 2: doc_status == 0 && field.config.only_once == 1
-    else if (docStatus === 0 && onlyOnce === 1) {
+    else if (docStatus === "Draft" && onlyOnce === 1) {
         statusBasedReadonly = true;
     }
     // Condition 3: doc_status !== 1 && doc_status !== 0
-    else if (docStatus !== 1 && docStatus !== 0) {
+    else if (docStatus !== "Submitted" && docStatus !== "Draft") {
         statusBasedReadonly = true;
     }
     
@@ -559,7 +559,7 @@ export const ReferenceTablePlugin = new FormPlugin({
                     const processedFields: Record<string, any> = {};
                     
                     // Get doc_status from parent document
-                    const docStatus = props.formData?.doc_status ?? 0;
+                    const docStatus = props.formData?.doc_status ?? "Draft";
 
                     fields.forEach((field) => {
                         if (field.doctype === doctypeDoc?.id && field.reference !== props.fieldOptions.doctype) {
@@ -574,15 +574,15 @@ export const ReferenceTablePlugin = new FormPlugin({
                             const onlyOnce = (field as any).config?.only_once ?? field.only_once;
                             
                             // Condition 1: doc_status == 1 && field.config.allow_on_submit !== 1
-                            if (docStatus === 1 && allowOnSubmit !== 1) {
+                            if (docStatus === "Submitted" && allowOnSubmit !== 1) {
                                 statusBasedReadonly = true;
                             }
                             // Condition 2: doc_status == 0 && field.config.only_once == 1
-                            else if (docStatus === 0 && onlyOnce === 1) {
+                            else if (docStatus === "Draft" && onlyOnce === 1) {
                                 statusBasedReadonly = true;
                             }
                             // Condition 3: doc_status !== 1 && doc_status !== 0
-                            else if (docStatus !== 1 && docStatus !== 0) {
+                            else if (docStatus !== "Submitted" && docStatus !== "Draft") {
                                 statusBasedReadonly = true;
                             }
                             

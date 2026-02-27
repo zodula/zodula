@@ -103,7 +103,7 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
                 status: 403
             })
         }
-        if (prepared?.doc_status === 1) {
+        if (prepared?.doc_status === "Submitted") {
             throw new ErrorWithCode("You cannot delete a submitted document", {
                 status: 403
             })

@@ -23,7 +23,6 @@ export interface SMTPConfig {
 
 export class ZodulaEmail {
     private sdk: any;
-    private transporter: Transporter | null = null;
 
     constructor(sdk: any) {
         this.sdk = sdk;
@@ -73,9 +72,8 @@ export class ZodulaEmail {
         }
     }
 
-    private getTransporter(config: SMTPConfig): Transporter {
-        if (this.transporter) return this.transporter;
-        this.transporter = nodemailer.createTransport({
+    private createTransporter(config: SMTPConfig): Transporter {
+        return nodemailer.createTransport({
             host: config.host,
             port: config.port,
             secure: config.secure ?? config.port === 465,
@@ -84,7 +82,6 @@ export class ZodulaEmail {
                     ? { user: config.user, pass: config.pass }
                     : undefined,
         });
-        return this.transporter;
     }
 
     /**
@@ -98,7 +95,7 @@ export class ZodulaEmail {
             );
         }
 
-        const transporter = this.getTransporter(config);
+        const transporter = this.createTransporter(config);
         const from =
             options.from ||
             config.fromEmail ||
@@ -122,15 +119,7 @@ export class ZodulaEmail {
      * Test SMTP connection with given config (e.g. from form before save)
      */
     async testConnection(config: SMTPConfig): Promise<void> {
-        const transporter = nodemailer.createTransport({
-            host: config.host,
-            port: config.port,
-            secure: config.secure ?? config.port === 465,
-            auth:
-                config.user && config.pass
-                    ? { user: config.user, pass: config.pass }
-                    : undefined,
-        });
+        const transporter = this.createTransporter(config);
         await transporter.verify();
     }
 

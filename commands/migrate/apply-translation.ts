@@ -34,7 +34,7 @@ function createBasePayload(): {
   updated_by: null;
   created_at: string;
   updated_at: string;
-  doc_status: 0;
+  doc_status: "Draft" | "Submitted" | "Cancelled";
 } {
   const timestamp = createTimestamp();
   return {
@@ -43,7 +43,7 @@ function createBasePayload(): {
     updated_by: null,
     created_at: timestamp,
     updated_at: timestamp,
-    doc_status: 0,
+    doc_status: "Draft",
   };
 }
 

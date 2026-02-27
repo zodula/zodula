@@ -161,7 +161,7 @@ export function ListView({
         render: (doc: any) => {
           // Default: show doc_status badge
           // Custom badges can be added via UI scripts using context.addBadge("doc_status")
-          return <DocStatusBadge status={doc.doc_status || 0} />;
+          return <DocStatusBadge status={doc.doc_status || "Draft"} />;
         },
       });
     }

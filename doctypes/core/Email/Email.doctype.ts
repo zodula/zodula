@@ -22,6 +22,7 @@ export default $doctype({
         type: "Text",
         label: "SMTP User",
         description: "Username for SMTP authentication.",
+        required: 1,
     },
     password: {
         type: "Password",

@@ -140,7 +140,7 @@ export class ZodulaDoctypeInsert<
       updated_at: $zodula.utils.format(new Date(), "datetime"),
       created_by: user.id || null,
       updated_by: user.id || null,
-      doc_status: this.input.doc_status || 0,
+      doc_status: this.input.doc_status || "Draft",
     } as Zodula.SelectDoctype<TN>;
 
     // Generate new ID

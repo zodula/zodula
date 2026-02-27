@@ -214,10 +214,10 @@ export function AuditTrail({
         // Both are objects
         // Check for doc_status changes
         if (oldData?.doc_status !== undefined && newData?.doc_status !== undefined && oldData.doc_status !== newData.doc_status) {
-          const statusMap: Record<number, string> = {
-            0: "Draft",
-            1: "Submitted",
-            2: "Cancelled",
+          const statusMap: Record<string, string> = {
+            "Draft": "Draft",
+            "Submitted": "Submitted",
+            "Cancelled": "Cancelled",
           };
           const oldStatus = statusMap[oldData.doc_status] || oldData.doc_status;
           const newStatus = statusMap[newData.doc_status] || newData.doc_status;

@@ -70,10 +70,10 @@ export class ZodulaDoctypeSubmit<TN extends Zodula.DoctypeName = Zodula.DoctypeN
         if (!old) {
             throw new Error(`Document with id ${this.id} not found`, { cause: 404 })
         }
-        if (old.doc_status === 1) {
+        if (old.doc_status === "Submitted") {
             throw new ErrorWithCode(`Document with id ${this.id} is already submitted`, { status: 400 })
         }
-        if (old.doc_status === 2) {
+        if (old.doc_status === "Cancelled") {
             throw new ErrorWithCode(`Cannot submit cancelled document. Document with id ${this.id} has been cancelled.`, { status: 400 })
         }
     }
@@ -85,7 +85,7 @@ export class ZodulaDoctypeSubmit<TN extends Zodula.DoctypeName = Zodula.DoctypeN
     ): Promise<Zodula.SelectDoctype<TN>> {
         const prepared = {
             ...old,
-            doc_status: 1,
+            doc_status: "Submitted",
             updated_by: user.id || null,
             updated_at: zodula.utils.format(new Date(), "datetime")
         } as Zodula.SelectDoctype<TN>

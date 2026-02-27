@@ -46,7 +46,7 @@ export const ExtendPlugin = new FormPlugin({
         getValue: (fieldName: string) => props.value?.[fieldName],
         getValues: () => props.value || {},
         docId: props.value?.id,
-        isCreate: !props.value?.doc_status,
+        isCreate: props.value?.doc_status === "Draft",
         showToast: (message, type) => {
             console.log(`${type}: ${message}`);
         },
@@ -76,7 +76,7 @@ export const ExtendPlugin = new FormPlugin({
         const processedFields: Record<string, any> = {};
         
         // Get doc_status from parent document (props.formData) or from extend field value (props.value)
-        const docStatus = props.formData?.doc_status ?? props.value?.doc_status ?? 0;
+        const docStatus = props.formData?.doc_status ?? props.value?.doc_status ?? "Draft";
 
         fields.forEach((field) => {
             if (field.doctype === doctypeDoc?.id && field.reference !== props.fieldOptions.doctype) {
@@ -91,15 +91,15 @@ export const ExtendPlugin = new FormPlugin({
                 const onlyOnce = (field as any).config?.only_once ?? field.only_once;
                 
                 // Condition 1: doc_status == 1 && field.config.allow_on_submit !== 1
-                if (docStatus === 1 && allowOnSubmit !== 1) {
+                if (docStatus === "Submitted" && allowOnSubmit !== 1) {
                     statusBasedReadonly = true;
                 }
                 // Condition 2: doc_status == 0 && field.config.only_once == 1
-                else if (docStatus === 0 && onlyOnce === 1) {
+                else if (docStatus === "Draft" && onlyOnce === 1) {
                     statusBasedReadonly = true;
                 }
                 // Condition 3: doc_status !== 1 && doc_status !== 0
-                else if (docStatus !== 1 && docStatus !== 0) {
+                else if (docStatus !== "Submitted" && docStatus !== "Draft") {
                     statusBasedReadonly = true;
                 }
                 

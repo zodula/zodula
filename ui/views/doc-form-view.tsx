@@ -128,7 +128,7 @@ export function DocFormView({
   const { t } = useTranslation();
   // ===== FORM PERSISTENCE =====
   const { saveFormValues, getFormValues, clearFormValues } = useCreateFormPersistenceStore();
-
+  const [formOrganization, setFormOrganization] = useState<string | undefined>(undefined);
   // ===== DOCTYPE & DOC DATA =====
   const { doc: doctypeDoc } = useDocAll({
     doctype: "Doctype",
@@ -362,7 +362,7 @@ export function DocFormView({
         const fieldReadonly = !canUpdate || field.readonly === 1;
 
         // Check doc_status based readonly conditions
-        const docStatus = doc?.doc_status ?? 0;
+        const docStatus = doc?.doc_status ?? "Draft";
         let statusBasedReadonly = false;
 
         // Access field config properties (allow_on_submit and only_once are direct properties on field)
@@ -371,15 +371,15 @@ export function DocFormView({
         const onlyOnce = (field as any).config?.only_once ?? field.only_once;
 
         // Condition 1: doc_status == 1 && field.config.allow_on_submit !== 1
-        if (docStatus === 1 && allowOnSubmit !== 1) {
+        if (docStatus === "Submitted" && allowOnSubmit !== 1) {
           statusBasedReadonly = true;
         }
         // Condition 2: doc_status == 0 && field.config.only_once == 1
-        else if (docStatus === 0 && onlyOnce === 1 && mode === "edit") {
+        else if (docStatus === "Draft" && onlyOnce === 1 && mode === "edit") {
           statusBasedReadonly = true;
         }
         // Condition 3: doc_status !== 1 && doc_status !== 0
-        else if (docStatus !== 1 && docStatus !== 0) {
+        else if (docStatus !== "Submitted" && docStatus !== "Draft") {
           statusBasedReadonly = true;
         }
 
@@ -725,6 +725,7 @@ export function DocFormView({
     [getFormData, execute, setFormFieldValue, formFields]
   );
 
+  console.log("formFields", formFields);
   // Centralized field change handler: fetch_from + scripts + form store update
   const handleFieldChange = useCallback(
     async (fieldName: keyof typeof formFields, value: any) => {
@@ -1467,8 +1468,7 @@ export function DocFormView({
 
       // When in System Panel, require organization to be selected
       if (org === "System Panel") {
-        const organization = latestFormData?.organization;
-        if (!organization || organization === "System Panel") {
+        if (!formOrganization) {
           await alert({
             title: "Organization Required",
             message: "Please select an Organization before creating this document.",
@@ -1484,7 +1484,10 @@ export function DocFormView({
 
       const createdDoc = await zodula.doc.create_doc(
         doctype as Zodula.DoctypeName,
-        normalizedFormData
+        {
+          ...normalizedFormData,
+          organization: formOrganization,
+        }
       );
       if (createdDoc) {
         // Clear saved form values after successful creation
@@ -1514,6 +1517,7 @@ export function DocFormView({
             },
           });
         } else {
+          console.log("createdDoc", createdDoc);
           handleResetForm();
           replace(`/desk/${org}/doctypes/${doctype}/form/${createdDoc.id}`);
         }
@@ -1742,21 +1746,21 @@ export function DocFormView({
       );
     }
 
-    if (doctypeDoc?.is_submittable === 1 && doc?.doc_status === 0 && !isDirty) {
+    if (doctypeDoc?.is_submittable === 1 && doc?.doc_status === "Draft" && !isDirty) {
       return (
         <Button onClick={handleSubmit} className="zd:h-8" disabled={isDirty}>
           {t("Submit")}
           <ArrowRight />
         </Button>
       );
-    } else if (doctypeDoc?.is_submittable === 1 && doc?.doc_status === 1) {
+    } else if (doctypeDoc?.is_submittable === 1 && doc?.doc_status === "Submitted") {
       return (
         <Button onClick={handleUpdate} className="zd:h-8" disabled={!isDirty}>
           <SaveIcon />
           {t("Update")}
         </Button>
       );
-    } else if (doc?.doc_status == 0) {
+    } else if (doc?.doc_status == "Draft") {
       return (
         <Button onClick={handleSave} className="zd:h-8" disabled={!isDirty}>
           <SaveIcon />
@@ -1814,7 +1818,7 @@ export function DocFormView({
 
                   // If getValue returns null, fall back to default DocStatusBadge
                   if (valueOrObj === null) {
-                    return <DocStatusBadge status={doc?.doc_status || 0} />;
+                    return <DocStatusBadge status={doc?.doc_status || "Draft"} />;
                   }
 
                   // Handle both string values and objects with status/variant
@@ -1828,7 +1832,7 @@ export function DocFormView({
                   );
                 }
                 // Default: show doc_status badge
-                return <DocStatusBadge status={doc?.doc_status || 0} />;
+                return <DocStatusBadge status={doc?.doc_status || "Draft"} />;
               })()}
             </span>
           </div>
@@ -1876,7 +1880,7 @@ export function DocFormView({
                         onClick={handleCancel}
                         className={cn(
                           "zd:text-red-600 zd:focus:text-red-600",
-                          doc?.doc_status === 1 ? "" : "zd:hidden"
+                          doc?.doc_status === "Submitted" ? "" : "zd:hidden"
                         )}
                       >
                         <Copy className="zd:w-4 zd:h-4 zd:mr-1" />
@@ -1889,7 +1893,7 @@ export function DocFormView({
                         onClick={handleDelete}
                         className={cn(
                           "zd:text-red-600 zd:focus:text-red-600",
-                          doc?.doc_status !== 1 ? "" : "zd:hidden"
+                          doc?.doc_status !== "Submitted" ? "" : "zd:hidden"
                         )}
                       >
                         <Trash2 className="zd:w-4 zd:h-4 zd:mr-1" />
@@ -1968,12 +1972,13 @@ export function DocFormView({
               placeholder="Select Organization"
               className="zd:max-w-[200px]"
               fieldKey="organization"
-              value={formData?.organization}
-              onChange={handleFieldChange}
+              value={formOrganization}
+              onChange={(fieldName, value) => {
+                setFormOrganization(value);
+              }}
               formData={formData}
               org={org}
               field={{
-                default: "System Panel",
                 type: "Reference",
                 reference: "Organization"
               }}

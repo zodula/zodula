@@ -10,7 +10,7 @@
     "updated_at": null,
     "created_by": null,
     "updated_by": null,
-    "doc_status": 0,
+    "doc_status": "Draft",
     "idx": null,
     "vector": null
   },
@@ -25,7 +25,7 @@
     "updated_at": null,
     "created_by": null,
     "updated_by": null,
-    "doc_status": 0,
+    "doc_status": "Draft",
     "idx": null,
     "vector": null
   },
@@ -40,7 +40,7 @@
     "updated_at": null,
     "created_by": null,
     "updated_by": null,
-    "doc_status": 0,
+    "doc_status": "Draft",
     "idx": null,
     "vector": null
   },
@@ -55,7 +55,7 @@
     "updated_at": null,
     "created_by": null,
     "updated_by": null,
-    "doc_status": 0,
+    "doc_status": "Draft",
     "idx": null,
     "vector": null
   },
@@ -70,7 +70,7 @@
     "updated_at": null,
     "created_by": null,
     "updated_by": null,
-    "doc_status": 0,
+    "doc_status": "Draft",
     "idx": null,
     "vector": null
   },
@@ -85,7 +85,7 @@
     "updated_at": "2026-02-07 14:18:34",
     "created_by": "jarupak.sri@gmail.com",
     "updated_by": "jarupak.sri@gmail.com",
-    "doc_status": 0,
+    "doc_status": "Draft",
     "idx": 0,
     "vector": "[]"
   }

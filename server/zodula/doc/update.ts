@@ -70,8 +70,8 @@ export class ZodulaDoctypeUpdate<
     }
 
     this.input.doc_status = this.input.doc_status
-      ? +this.input.doc_status!
-      : old?.doc_status || 0;
+      ? this.input.doc_status!
+      : old?.doc_status || "Draft";
     // Validate document exists and can be updated
     await this.validateDocument(old);
 
@@ -263,7 +263,7 @@ export class ZodulaDoctypeUpdate<
         cause: 400,
       });
     }
-    if (old.doc_status === 2) {
+    if (old.doc_status === "Cancelled") {
       throw new ErrorWithCode(
         `Cannot update cancelled document. Document with id ${this.input.id} has been cancelled.`,
         { status: 400 }
@@ -481,8 +481,8 @@ export class ZodulaDoctypeUpdate<
     prepared: Zodula.SelectDoctype<TN>
   ) {
     const isSaveAfterSubmit =
-      old?.doc_status === 1 && prepared.doc_status === 1;
-    const isDraft = old?.doc_status === 0;
+      old?.doc_status === "Submitted" && prepared.doc_status === "Submitted";
+    const isDraft = old?.doc_status === "Draft";
 
     if (isSaveAfterSubmit) {
       await loader
@@ -513,8 +513,8 @@ export class ZodulaDoctypeUpdate<
     old: Zodula.SelectDoctype<TN>,
     result: Zodula.SelectDoctype<TN>
   ) {
-    const isSaveAfterSubmit = old?.doc_status === 1 && result.doc_status === 1;
-    const isDraft = old?.doc_status === 0;
+    const isSaveAfterSubmit = old?.doc_status === "Submitted" && result.doc_status === "Submitted";
+    const isDraft = old?.doc_status === "Draft";
 
     if (isSaveAfterSubmit) {
       await loader
