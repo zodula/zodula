@@ -60,9 +60,9 @@ export default $action(async (ctx) => {
         try {
             await $zodula.email.send({
                 to: email.trim(),
-                subject: "Confirm your email address",
+                subject: `${globalSetting?.website_name || "Zodula"} - Confirm your email address`,
                 html: `
-                    <p>Hello,</p>
+                    <p>Hello from ${globalSetting?.website_name || "Zodula"},</p>
                     <p>Please confirm your email address by clicking the link below:</p>
                     <p><a href="${confirmUrl}">Confirm Email</a></p>
                     <p>Or copy and paste this URL into your browser:</p>

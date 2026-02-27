@@ -12,7 +12,7 @@ import { useTranslation } from "../../hooks/use-translation"
 
 const EXPANDED_STORAGE_KEY = 'zodula-expanded-workspaces';
 
-export const WorkspaceList = () => {
+export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
     const { t } = useTranslation()
     const { setSelectedWorkspace, selectedWorkspace, hierarchicalWorkspaces, workspaces, workspaceItems, reloadWorkspaceItems, reloadWorkspaces } = useWorkspace()
     const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(new Set())
@@ -117,7 +117,7 @@ export const WorkspaceList = () => {
     } = useWorkspaceDnd({
         workspaces: flattenedWorkspaces,
         onReorder: reorderWorkspace,
-        disabled: !isEditing,
+        disabled: readonly || !isEditing,
         maxDepth: 5
     })
 
@@ -238,7 +238,7 @@ export const WorkspaceList = () => {
                         className={cn(
                             dragProps.className,
                             "zd:flex zd:items-center zd:gap-2 zd:flex-1 zd:p-2 zd:pl-4 ",
-                            isDragging ? "zd:cursor-grabbing" : "zd:cursor-grab"
+                            !readonly && (isDragging ? "zd:cursor-grabbing" : "zd:cursor-grab")
                         )}
                         onClick={() => setSelectedWorkspace(workspace)}
                     >
@@ -257,7 +257,7 @@ export const WorkspaceList = () => {
                                 )}
                             </button>
                         )}
-                        {isEditing ? (
+                        {isEditing && !readonly ? (
                             // In editing mode, show compact icon picker
                             <WorkspaceIconPicker
                                 selectedIcon={workspace.icon || "Folder"}
@@ -276,7 +276,7 @@ export const WorkspaceList = () => {
                         )}
 
                         {/* Floating edit toolbar - only show in editing mode */}
-                        {isEditing && (
+                        {isEditing && !readonly && (
                             <div className="zd:absolute zd:right-8 zd:bottom-0.5 zd:bg-muted zd:flex zd:items-center zd:justify-center zd:w-fit zd:h-fit zd:p-1 zd:rounded zd:gap-1 zd:opacity-20 zd:group-hover:opacity-100 zd:transition-opacity">
                                 <button
                                     className="zd:cursor-pointer zd:p-2 zd:bg-muted-foreground/20 zd:rounded-lg transition-opacity"
@@ -328,7 +328,7 @@ export const WorkspaceList = () => {
     return <div className="zd:flex zd:flex-col zd:gap-1">
         <div className="zd:flex zd:items-center zd:justify-between">
             <span className="zd:text-sm zd:text-muted-foreground zd:min-h-6">Workspaces</span>
-            {(isEditing || workspacesToRender.length === 0) && (
+            {!readonly && (isEditing || workspacesToRender.length === 0) && (
                 <Button
                     variant="subtle"
                     onClick={handleAddWorkspace}
@@ -343,15 +343,19 @@ export const WorkspaceList = () => {
             <div className="zd:flex zd:flex-col zd:items-center zd:justify-center zd:py-8 zd:px-4 zd:text-center">
                 <LucideIcons.Folder className="zd:w-12 zd:h-12 zd:text-muted-foreground/50 zd:mb-4" />
                 <p className="zd:text-sm zd:text-muted-foreground zd:mb-2">No workspaces yet</p>
-                <p className="zd:text-xs zd:text-muted-foreground/70 zd:mb-4">Create your first workspace to get started</p>
-                <Button
-                    variant="outline"
-                    onClick={handleAddWorkspace}
-                    className="zd:flex zd:items-center zd:gap-2"
-                >
-                    <LucideIcons.Plus className="zd:w-4 zd:h-4" />
-                    Create Workspace
-                </Button>
+                <p className="zd:text-xs zd:text-muted-foreground/70 zd:mb-4">
+                    {readonly ? "No workspaces in this organization" : "Create your first workspace to get started"}
+                </p>
+                {!readonly && (
+                    <Button
+                        variant="outline"
+                        onClick={handleAddWorkspace}
+                        className="zd:flex zd:items-center zd:gap-2"
+                    >
+                        <LucideIcons.Plus className="zd:w-4 zd:h-4" />
+                        Create Workspace
+                    </Button>
+                )}
             </div>
         ) : (
             workspacesToRender.map(workspace => renderWorkspace(workspace, 0))

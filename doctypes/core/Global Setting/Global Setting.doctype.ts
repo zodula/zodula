@@ -37,9 +37,11 @@ export default $doctype({
         type: "Text",
         label: "Description"
     },
-    currency_symbol: {
-        type: "Text",
-        label: "Currency Symbol"
+    max_free_org_per_user: {
+        type: "Integer",
+        label: "Max Free Organization Per User",
+        default: "1",
+        description: "Maximum number of free organizations a user can create."
     }
 }, {
     label: "Global Setting",

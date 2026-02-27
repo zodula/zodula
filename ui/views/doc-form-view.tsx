@@ -129,6 +129,7 @@ export function DocFormView({
   // ===== FORM PERSISTENCE =====
   const { saveFormValues, getFormValues, clearFormValues } = useCreateFormPersistenceStore();
   const [formOrganization, setFormOrganization] = useState<string | undefined>(undefined);
+
   // ===== DOCTYPE & DOC DATA =====
   const { doc: doctypeDoc } = useDocAll({
     doctype: "Doctype",
@@ -142,6 +143,12 @@ export function DocFormView({
     },
     [mode]
   );
+
+  useEffect(() => {
+    if (doc && mode === "edit") {
+      setFormOrganization(doc?.organization || "");
+    }
+  }, [doc, mode]);
 
   // ===== USER NAMES =====
   const userIds = useMemo(() => {

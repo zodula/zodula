@@ -1,6 +1,7 @@
 import React from "react";
 import { Button } from "../components/ui/button";
-import { Menu, X, MoreHorizontal } from "lucide-react";
+import { Drawer } from "../components/ui/drawer";
+import { Menu, MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,6 +12,7 @@ import {
 import { cn } from "../lib/utils";
 import { create } from "zustand";
 import { useRouter } from "../components/router";
+import { useIsTabletOrUp } from "../hooks/use-media-query";
 
 export interface ActionItem {
   id: string;
@@ -102,6 +104,7 @@ export const SidebarLayout = ({
 }: SidebarLayoutProps) => {
   const { pathname } = useRouter();
   const { sidebarOpen, setSidebarOpen, toggleSidebar } = useSidebarStore(pathname, defaultOpen);
+  const isTabletOrUp = useIsTabletOrUp();
 
   const renderActions = () => {
     const primaryActions = Array.isArray(primaryAction)
@@ -186,30 +189,44 @@ export const SidebarLayout = ({
         </div>
         {renderActions()}
       </div>
+      {/* Drawer for mobile (< tablet) */}
+      {!isTabletOrUp && sidebarContent && (
+        <Drawer
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          side="left"
+          width="min(320px, 85vw)"
+        >
+          <div className="zd:p-4">{sidebarContent}</div>
+        </Drawer>
+      )}
+
       <div
         className={cn(
           "zd:flex zd:bg-background zd:flex-grow",
-          sidebarOpen ? "zd:gap-4" : "zd:gap-0"
+          sidebarOpen && isTabletOrUp ? "zd:gap-4" : "zd:gap-0"
         )}
       >
-        {/* Sidebar */}
-        <div
-          className={`zd:flex zd:flex-col zd:transition-all zd:duration-300 ${sidebarOpen ? "zd:min-w-80" : "zd:min-w-0 zd:w-0 zd:overflow-hidden"
-            }`}
-        >
-          {sidebarOpen && (
-            <div className="zd:flex zd:flex-col zd:h-full">
-              {/* Sidebar Content */}
-              <div className="zd:flex-1 zd:overflow-y-auto">
-                {sidebarContent}
+        {/* Inline Sidebar (tablet and up) */}
+        {isTabletOrUp && (
+          <div
+            className={cn(
+              "zd:flex zd:flex-col zd:transition-all zd:duration-300",
+              sidebarOpen ? "zd:min-w-80" : "zd:min-w-0 zd:w-0 zd:overflow-hidden"
+            )}
+          >
+            {sidebarOpen && (
+              <div className="zd:flex zd:flex-col zd:h-full">
+                <div className="zd:flex-1 zd:overflow-y-auto">
+                  {sidebarContent}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         {/* Main Content */}
         <div className="zd:flex-1 zd:flex zd:flex-col zd:gap-4 zd:w-full zd:flex-grow">
-          {/* Main Content Area */}
           <div className="zd:flex-1 zd:flex-grow">{children}</div>
         </div>
       </div>

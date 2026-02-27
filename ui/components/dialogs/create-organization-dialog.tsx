@@ -35,10 +35,11 @@ export function CreateOrganizationDialog({
     setError(null);
 
     try {
-      const created = await zodula.doc.create_doc("Organization", {
-        name: name.trim(),
-        abbr: abbr.trim(),
-        tier_level: "0",
+      const created = await zodula.action("zodula.org.create", {
+        data: {
+          name: name.trim(),
+          abbr: abbr.trim(),
+        },
       });
       onClose(created);
     } catch (err: any) {

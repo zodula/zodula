@@ -66,8 +66,8 @@ export default $doctype<"Organization">({
     is_global: 1,
     tabs: JSON.stringify([
         {
-            type: "Tab", 
-            label: "Main", 
+            type: "Tab",
+            label: "Main",
             layout: [
                 { type: "section", value: "Basic Information", align: "left" },
                 [
@@ -99,11 +99,18 @@ export default $doctype<"Organization">({
         }
     ])
 })
-.on("before_insert", async ({input}) => {
-    input && (input.organization = "System Panel");
-})
-.on("before_delete", async ({doc, old, input}) => {
-    if(doc.owner !== (await $zodula.session.user()).id && !(await $zodula.session.roles()).includes("System Admin")){
-        throw new Error("You are not allowed to delete this organization");
-    }
-});
+    .on("before_insert", async ({ input }) => {
+        input && (input.organization = "System Panel");
+        const user = await $zodula.session.user();
+        const globalSetting = await $zodula.doctype("Global Setting").get("Global Setting").bypass(true);
+        const maxFreeOrgPerUser = globalSetting?.max_free_org_per_user || 1;
+        const freeOrganizations = await $zodula.doctype("Organization").select().where("owner", "=", user.id).where("tier_level", "=", "0").bypass(true);
+        if (freeOrganizations.count >= maxFreeOrgPerUser) {
+            throw new Error("You have reached the maximum number of free organizations");
+        }
+    })
+    .on("before_delete", async ({ doc, old, input }) => {
+        if (doc.owner !== (await $zodula.session.user()).id && !(await $zodula.session.roles()).includes("System Admin")) {
+            throw new Error("You are not allowed to delete this organization");
+        }
+    });

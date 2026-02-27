@@ -61,6 +61,9 @@ export class ZodulaDoctypeInsert<
       if (!this.input.organization) {
         this.input.organization = organizationName || "System Panel";
       }
+      if(!organizationName) {
+        throw new ErrorWithCode("Organization is required", { status: 400 });
+      }
       const organization = await zodula.doctype("Organization").get(this.input.organization || "System Panel").bypass(true).fields(["abbr", "name"])
       this.input.organization_abbr = organization?.abbr || "";
       if (doctype.config.is_global === 1 && organizationName !== "System Panel" && !this.options.bypass) {

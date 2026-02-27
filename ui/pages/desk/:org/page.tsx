@@ -8,12 +8,14 @@ import { cn } from "@/zodula/ui/lib/utils"
 import { confirm } from "@/zodula/ui/components/ui/popit"
 import { useMemo } from "react"
 import { useTranslation } from "@/zodula/ui/hooks/use-translation"
+import { useParams } from "react-router"
 
 export default function adminPage() {
     const { t } = useTranslation()
     const { selectedWorkspace, reloadWorkspaces, reloadWorkspaceItems } = useWorkspace()
     const { editedWorkspaceItems, editedWorkspaces, isEditing, setIsEditing, saveEdit, discardEdit, hasChanges } = useWorkspaceEdit()
-
+    const { org } = useParams();
+    const isSystemPanel = org === "System Panel";
     // Helper function to find workspace in hierarchy
     const findWorkspaceInHierarchy = (workspaces: WorkspaceWithChildren[], workspaceId: string): WorkspaceWithChildren | null => {
         for (const workspace of workspaces) {
@@ -67,17 +69,19 @@ export default function adminPage() {
         <SidebarLayout
             defaultOpen={true}
             title={t(currentWorkspace?.name || "")}
-            actionSection={<div className="zd:flex zd:items-center zd:gap-2">
-                <Button onClick={handleToggleEdit} variant="subtle">
-                    {isEditing ? t("Cancel") : t("Edit")}
-                </Button>
-                <Button onClick={saveEdit} className={cn(isEditing ? "" : "zd:hidden")}>
-                    {t("Save")}
-                </Button>
-            </div>}
+            actionSection={isSystemPanel ? (
+                <div className="zd:flex zd:items-center zd:gap-2">
+                    <Button onClick={handleToggleEdit} variant="outline">
+                        {isEditing ? t("Cancel") : t("Edit")}
+                    </Button>
+                    <Button onClick={saveEdit} className={cn(isEditing ? "" : "zd:hidden")}>
+                        {t("Save")}
+                    </Button>
+                </div>
+            ) : null}
             sidebarContent={
                 <div>
-                    <WorkspaceList />
+                    <WorkspaceList readonly={!isSystemPanel} />
                 </div>
             }>
             <WorkspaceView />
