@@ -580,6 +580,7 @@ export interface FormContext<DN extends Zodula.DoctypeName = Zodula.DoctypeName>
   idx: number | undefined;
   is_new: () => boolean;
   is_dirty: () => boolean;
+  showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 /** Merged with FormContext: use FormContext<DN> for both context and frm. Form is an alias. */

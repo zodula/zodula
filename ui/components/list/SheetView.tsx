@@ -1170,18 +1170,8 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
     <div className="zd:flex zd:flex-col zd:gap-4 zd:pb-12 zd:h-full">
       <div className="zd:flex zd:items-center zd:gap-2 zd:w-full">
         <ListToolbar
-          searchPlaceholder={
-            t(`Search By`) +
-            " " +
-            t(
-              `${!doctypeDoc?.search_fields ? "ID" : doctypeDoc?.search_fields?.split("\n").join(", ")}`
-            )
-          }
           hasActiveFilter={hasActiveFilter}
           onClearFilter={handleClearFilter}
-          searchValue={searchInput ?? ""}
-          onSearchChange={setSearchInput}
-          onSearch={onSearch}
           sortFields={sortFields}
           sortValue={sort ?? ""}
           onSortChange={onSortChange}

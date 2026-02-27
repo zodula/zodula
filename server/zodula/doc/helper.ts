@@ -72,7 +72,7 @@ export class ZodulaDoctypeHelper {
             const config = fields[fieldName as keyof typeof fields]
             if (!config) continue
             let value = doc[fieldName as keyof typeof doc] as any
-            
+
             if (config.default !== undefined && (value === undefined || value === null) && !config.plain) {
                 value = ZodulaDoctypeHelper.formatValue(config.default as string)
             }
@@ -80,7 +80,7 @@ export class ZodulaDoctypeHelper {
             // if input can parse to Date
             if (["Date", "DateTime", "Time"].includes(config.type as any) && value !== null) {
                 const fieldType = config.type
-                
+
                 if (value === "NOW()") {
                     value = format(new Date(), "yyyy-MM-dd HH:mm:ss")
                 } else if (value === "TODAY()") {
@@ -107,8 +107,8 @@ export class ZodulaDoctypeHelper {
                         default:
                             break
                     }
-                }catch(error) {
-                    if(config.required) {
+                } catch (error) {
+                    if (config.required) {
                         throw new ErrorWithCode(`Field ${fieldName} is not a valid date`, {
                             status: 400,
                         })
@@ -139,13 +139,13 @@ export class ZodulaDoctypeHelper {
         for (const [fieldName, fieldValue] of Object.entries(result)) {
             const config = doctype.fields[fieldName as keyof typeof doctype.fields]
             if (!config) continue
-            if (config.type === "Password" as FieldType) {
-                (result as any)[fieldName] = "****"
-            }
-            if(config?.type === "Check"){
-                if(fieldValue === null || fieldValue === undefined || fieldValue === "" || fieldValue === "0" || fieldValue === 0){
+            // if (config.type === "Password" as FieldType) {
+            //     (result as any)[fieldName] = "****"
+            // }
+            if (config?.type === "Check") {
+                if (fieldValue === null || fieldValue === undefined || fieldValue === "" || fieldValue === "0" || fieldValue === 0) {
                     (result as any)[fieldName] = 0
-                }else{
+                } else {
                     (result as any)[fieldName] = 1
                 }
             }
@@ -238,7 +238,7 @@ export class ZodulaDoctypeHelper {
         }
     ): Promise<{ can: boolean }> {
         const { bypass } = options
-        if(bypass) {
+        if (bypass) {
             return { can: true }
         }
         const user = await zodula.session.user(true);
@@ -247,14 +247,14 @@ export class ZodulaDoctypeHelper {
         const doctype = loader.from("doctype").get(doctypeName);
         let can = await ZodulaDoctypeHelper.can(doctypeName, action, data?.owner === user.id, userRoles, bypass)
 
-        if(can && (action !== "can_get" && action !== "can_select")) {
-            if(!userOrganizations.includes(data?.organization || "System Panel")) {
+        if (can && (action !== "can_get" && action !== "can_select")) {
+            if (!userOrganizations.includes(data?.organization || "System Panel")) {
                 can = false
             }
-            if(userRoles.includes("System Admin")) {
+            if (userRoles.includes("System Admin")) {
                 can = true
             }
-            if(doctype?.name === "Organization" && data?.organization === "System Panel") {
+            if (doctype?.name === "Organization" && data?.organization === "System Panel") {
                 can = true
             }
         }
@@ -268,7 +268,7 @@ export class ZodulaDoctypeHelper {
         const records = await Promise.all(ids.map(async (doc) => {
             return await zodula.doctype(relative.childDoctype).get(doc?.id as string).bypass(options.bypass)
         }))
-        
+
         // For relatives, return all records (they are one-way relationships)
         return options.unsafe ? records : records.map(record => ZodulaDoctypeHelper.formatDocResult(record, loader.from("doctype").get(relative.childDoctype).schema))
     }
@@ -279,10 +279,10 @@ export class ZodulaDoctypeHelper {
         const records = await Promise.all(ids.map(async (doc) => {
             return await zodula.doctype(child.childDoctype).get(doc?.id as string).bypass(options.bypass)
         }))
-        
+
         // Check child type to determine if it's Extend (single record) or Reference Table (array)
         const isExtend = child.type === "Extend"
-        
+
         if (isExtend) {
             return options.unsafe ? records[0] : ZodulaDoctypeHelper.formatDocResult(records[0] as Zodula.SelectDoctype<TN>, loader.from("doctype").get(child.childDoctype).schema)
         }
@@ -317,7 +317,7 @@ export class ZodulaDoctypeHelper {
         //     })
         // }
 
-        if(doctype.is_global == 1 && input.organization !== "System Panel") {
+        if (doctype.is_global == 1 && input.organization !== "System Panel") {
             throw new ErrorWithCode(`Global doctype can only be created in System Panel organization`, {
                 status: 400,
             })
@@ -372,7 +372,7 @@ export class ZodulaDoctypeHelper {
 
         // Validate individual unique fields
         for (const fieldName of individualUniqueFields) {
-            if(fieldName === "id"){
+            if (fieldName === "id") {
                 continue
             }
             const value = input[fieldName as keyof typeof input]
@@ -664,7 +664,7 @@ export class ZodulaDoctypeHelper {
 
         const db = Database("main");
         const doctype = loader.from("doctype").get(doctypeName);
-        
+
         // Get field-level permissions
         const fieldPermissions = await ZodulaDoctypeHelper.getFieldLevelPermissions(
             doctypeName,
@@ -693,7 +693,7 @@ export class ZodulaDoctypeHelper {
 
         for (const fieldName of fieldNames) {
             const fieldPermLevel = fieldPermLevelMap.get(fieldName) ?? 0;
-            
+
             // Use ClientFieldHelper to check permissions
             const { canGet } = ClientFieldHelper.checkPermLevelForField(
                 fieldPermissions,
@@ -789,7 +789,7 @@ export class ZodulaDoctypeHelper {
         const isSystemAdmin = roles.includes("System Admin");
         for (const fieldName of changedFields) {
             const fieldPermLevel = fieldPermLevelMap.get(fieldName) ?? 0;
-            
+
             // Use ClientFieldHelper to check if user can update this field
             const { canUpdate } = ClientFieldHelper.checkPermLevelForField(
                 fieldPermissions,

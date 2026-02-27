@@ -29,7 +29,7 @@ import {
   DropdownMenuItem,
 } from "@/zodula/ui/components/ui/dropdown-menu";
 import { zodula } from "@/zodula/client";
-import { confirm, popup } from "@/zodula/ui/components/ui/popit";
+import { alert, confirm, popup } from "@/zodula/ui/components/ui/popit";
 import { Badge } from "../components/ui/badge";
 import { cn } from "../lib/utils";
 import { useAction } from "../hooks/use-action";
@@ -41,13 +41,13 @@ import { useTranslation } from "../hooks/use-translation";
 import { useUIScriptStore } from "../zui";
 import { useUIScript } from "../hooks/use-ui-script";
 import { useDocStore } from "../hooks/use-doc-store";
-import { PrintTemplateDialog } from "../components/dialogs/print-template-dialog";
 import { MultiSelectDoctypeDialog } from "../components/dialogs/multi-select-doctype-dialog";
 import { useUserName } from "../hooks/use-user-name";
 import ErrorView from "./error-view";
 import { useParams } from "react-router";
 import { toast } from "../components/ui/toast";
 import { useCreateFormPersistenceStore } from "../hooks/use-create-form-persistence";
+import { FormControl } from "../components/ui/form-control";
 
 const UserLink = ({ userId, name }: { userId: string; name: string }) => {
   const { org } = useParams();
@@ -79,11 +79,11 @@ let checked = false;
 function valuesAreEqual(val1: any, val2: any): boolean {
   // Fast path: same reference
   if (val1 === val2) return true;
-  
+
   // Handle null/undefined
   if (val1 == null && val2 == null) return true;
   if (val1 == null || val2 == null) return false;
-  
+
   // Handle arrays and objects - use shallow comparison first for performance
   if (typeof val1 === 'object' && typeof val2 === 'object') {
     // Fast path: if they're arrays, check length first
@@ -105,7 +105,7 @@ function valuesAreEqual(val1: any, val2: any): boolean {
     // For objects, use JSON.stringify (necessary for deep comparison)
     return JSON.stringify(val1) === JSON.stringify(val2);
   }
-  
+
   // Handle primitive types
   return val1 === val2;
 }
@@ -204,7 +204,7 @@ export function DocFormView({
 
   // ===== BADGE CONFIGURATIONS =====
   const badgeConfigs = useRef<Record<string, { variant?: string | null; size?: string | null; getValue?: (doc: any) => any }>>({});
-  
+
   // ===== SECONDARY BUTTONS =====
   const secondaryButtons = useRef<Array<{
     label: string;
@@ -221,7 +221,7 @@ export function DocFormView({
   }>>([]);
 
   // Refs for form get/set so on_render script context can update form when e.g. "Add Delivery Orders" is clicked
-  const formSetValueRef = useRef<(fieldName: string, value: any) => void>(() => {});
+  const formSetValueRef = useRef<(fieldName: string, value: any) => void>(() => { });
   const formGetFormDataRef = useRef<() => Record<string, any>>(() => ({}));
 
   // ===== FIELDS =====
@@ -275,11 +275,11 @@ export function DocFormView({
   // ===== FIELD PROPERTY OVERRIDES =====
   // Track field property overrides from UI scripts (set_df_property)
   const [fieldPropertyOverrides, setFieldPropertyOverrides] = useState<Record<string, Record<string, any>>>({});
-  
+
   // Track child Extend field property overrides from UI scripts (set_df_child_extend_property)
   // Structure: { childFieldName: { fieldName: { property: value } } }
   const [childExtendFieldPropertyOverrides, setChildExtendFieldPropertyOverrides] = useState<Record<string, Record<string, Record<string, any>>>>({});
-  
+
   // Track child Reference Table field property overrides from UI scripts (set_df_child_table_property)
   // Structure: { childFieldName: { idx: { fieldName: { property: value } } } }
   const [childTableFieldPropertyOverrides, setChildTableFieldPropertyOverrides] = useState<Record<string, Record<number, Record<string, Record<string, any>>>>>({});
@@ -364,12 +364,12 @@ export function DocFormView({
         // Check doc_status based readonly conditions
         const docStatus = doc?.doc_status ?? 0;
         let statusBasedReadonly = false;
-        
+
         // Access field config properties (allow_on_submit and only_once are direct properties on field)
         // Support both field.config.allow_on_submit (if config exists) and field.allow_on_submit (direct property)
         const allowOnSubmit = (field as any).config?.allow_on_submit ?? field.allow_on_submit;
         const onlyOnce = (field as any).config?.only_once ?? field.only_once;
-        
+
         // Condition 1: doc_status == 1 && field.config.allow_on_submit !== 1
         if (docStatus === 1 && allowOnSubmit !== 1) {
           statusBasedReadonly = true;
@@ -599,6 +599,9 @@ export function DocFormView({
         }
       },
       org: org || undefined,
+      showToast: (message: string, type: "success" | "error" | "info" = "info") => toast[type](message),
+      msgprint: (message: string, type: "error" | "warning" | "info" = "info") =>
+        toast[type === "warning" ? "info" : type](message),
       showDialog: async (component: any, dialogProps: any) => popup(component, dialogProps),
       open_multi_select_dialog: async (
         doctypeName: Zodula.DoctypeName,
@@ -666,7 +669,7 @@ export function DocFormView({
       // Get current table data
       const currentData = getFormData();
       const tableData = (currentData[tableField] || []) as any[];
-      
+
       // Update the specific row's field value BEFORE building updatedFormData
       // This ensures scripts see the updated value
       const updatedTableData = [...tableData];
@@ -679,13 +682,13 @@ export function DocFormView({
           [childField]: value
         };
       }
-      
+
       // Build updated form data snapshot for scripts with the updated table data
       const updatedFormData = {
         ...currentData,
         [tableField]: updatedTableData
       };
-      
+
       // Also update the form store immediately so getValue returns the latest data
       setFormFieldValue(tableField as keyof typeof formFields, updatedTableData);
 
@@ -954,7 +957,7 @@ export function DocFormView({
 
       // Persist main field change after scripts
       setFormFieldValue(fieldName as string, value);
-      
+
       // Save form values to persistence store in create mode
       if (mode === "create" && org) {
         const latestFormData = getFormData();
@@ -1013,7 +1016,7 @@ export function DocFormView({
   React.useEffect(() => {
     if (doc) {
       const currentDocId = doc.id;
-      if(!checked){
+      if (!checked) {
         for (const [key, value] of Object.entries(doc)) {
           setValue(key as keyof typeof doc, value);
         }
@@ -1044,10 +1047,10 @@ export function DocFormView({
   const handleResetForm = useCallback(async () => {
     // Step 1: Reset the form first (clears all values)
     reset();
-    
+
     // Step 2: Wait for reset to complete
     await new Promise(resolve => setTimeout(resolve, 0));
-    
+
     // Step 3: Apply default values, saved values, and prefill after reset
     if (mode === "create" && fields?.length > 0 && doctypeDoc) {
       const defaultValues: Record<string, any> = {};
@@ -1097,7 +1100,7 @@ export function DocFormView({
       // Step 4.5: Wait for form state to update and verify values are set
       // Use a longer delay to ensure React has fully processed the state update
       await new Promise(resolve => setTimeout(resolve, 50));
-      
+
       // Verify that prefill values are actually in the form store
       const verifyFormData = getFormData();
       const missingPrefillFields: string[] = [];
@@ -1107,14 +1110,14 @@ export function DocFormView({
           // Check if the value is missing (undefined) or if it doesn't match the prefill value
           const currentValue = verifyFormData[key];
           const prefillValue = prefill[key];
-          if (key !== 'references' && 
-              prefillValue !== undefined && 
-              prefillValue !== null && 
-              currentValue !== prefillValue) {
+          if (key !== 'references' &&
+            prefillValue !== undefined &&
+            prefillValue !== null &&
+            currentValue !== prefillValue) {
             missingPrefillFields.push(key);
           }
         });
-        
+
         // If any prefill values are missing, set them again
         if (missingPrefillFields.length > 0) {
           const missingValues: Record<string, any> = {};
@@ -1145,7 +1148,7 @@ export function DocFormView({
       // Step 5: Execute refresh script with the latest form data
       // Get the latest form data after all values have been set
       const latestFormData = getFormData();
-      
+
       // Store prefill values that might be cleared by refresh script
       const prefillValuesToRestore: Record<string, any> = {};
       if (prefill) {
@@ -1156,7 +1159,7 @@ export function DocFormView({
           }
         });
       }
-      
+
       // Execute refresh script with the latest form data
       // Override formData, getValue, and getValues to always use the latest form store state
       // This ensures frm.get_value() returns current values and frm.set_value() updates correctly
@@ -1171,24 +1174,24 @@ export function DocFormView({
           return getFormData();
         },
       });
-      
+
       // Step 6: Restore prefill values that might have been cleared by refresh script
       // Some refresh scripts clear fields (like party) even when they should be preserved
       if (Object.keys(prefillValuesToRestore).length > 0) {
         await new Promise(resolve => setTimeout(resolve, 50));
         const afterRefreshData = getFormData();
         const valuesToRestore: Record<string, any> = {};
-        
+
         Object.keys(prefillValuesToRestore).forEach((key) => {
           // Only restore if the value was cleared (undefined/null/empty) but we had a prefill value
           const currentValue = afterRefreshData[key];
           const prefillValue = prefillValuesToRestore[key];
-          if ((currentValue === undefined || currentValue === null || currentValue === "") && 
-              prefillValue !== undefined && prefillValue !== null && prefillValue !== "") {
+          if ((currentValue === undefined || currentValue === null || currentValue === "") &&
+            prefillValue !== undefined && prefillValue !== null && prefillValue !== "") {
             valuesToRestore[key] = prefillValue;
           }
         });
-        
+
         if (Object.keys(valuesToRestore).length > 0) {
           setValues(valuesToRestore);
         }
@@ -1295,7 +1298,7 @@ export function DocFormView({
   // Helper function to normalize Reference Table fields (empty arrays/undefined -> null)
   const normalizeReferenceTableFields = useCallback((data: Record<string, any>) => {
     const normalized = { ...data };
-    
+
     // Find all Reference Table fields
     Object.keys(formFields).forEach((fieldName) => {
       const field = formFields[fieldName];
@@ -1307,7 +1310,7 @@ export function DocFormView({
         }
       }
     });
-    
+
     return normalized;
   }, [formFields]);
 
@@ -1335,7 +1338,7 @@ export function DocFormView({
     allFieldNames.forEach((fieldName) => {
       const formValue = latestFormData[fieldName];
       const docValue = (doc as any)[fieldName];
-      
+
       // Use form value if it exists, otherwise use doc value
       if (formValue !== undefined) {
         allFields[fieldName] = formValue;
@@ -1368,19 +1371,19 @@ export function DocFormView({
     // Fast path: same reference
     if (obj1 === obj2) return true;
     if (obj1 == null || obj2 == null) return obj1 == obj2;
-    
+
     const keys1 = Object.keys(obj1);
     const keys2 = Object.keys(obj2);
-    
+
     // Early bailout: if key counts differ, they might still be equal (undefined vs missing)
     // But if difference is large, likely different
     if (Math.abs(keys1.length - keys2.length) > 10) {
       return false;
     }
-    
+
     // Get all unique keys from both objects
     const allKeys = new Set([...keys1, ...keys2]);
-    
+
     // For very large objects, do a quick sample check first to bail out early
     let keysToCheck = Array.from(allKeys);
     if (allKeys.size > 100) {
@@ -1396,25 +1399,25 @@ export function DocFormView({
       // If sample passes, only check remaining keys (skip the sample keys)
       keysToCheck = keysToCheck.slice(20);
     }
-    
+
     for (const key of keysToCheck) {
       const val1 = obj1[key];
       const val2 = obj2[key];
-      
+
       // Fast path: same reference
       if (val1 === val2) continue;
-      
+
       // Handle undefined - treat as equal if both are undefined or missing
       if (val1 === undefined && val2 === undefined) continue;
       if (val1 === undefined && val2 == null) continue;
       if (val1 == null && val2 === undefined) continue;
-      
+
       // Use valuesAreEqual for comparison
       if (!valuesAreEqual(val1, val2)) {
         return false;
       }
     }
-    
+
     return true;
   }, []);
 
@@ -1461,10 +1464,24 @@ export function DocFormView({
       // Get the latest form data directly from the store to ensure we have the most recent values
       // This ensures we capture all user input, not just the memoized formData
       const latestFormData = getFormData();
-      
+
+      // When in System Panel, require organization to be selected
+      if (org === "System Panel") {
+        const organization = latestFormData?.organization;
+        if (!organization || organization === "System Panel") {
+          await alert({
+            title: "Organization Required",
+            message: "Please select an Organization before creating this document.",
+            variant: "warning",
+          });
+          setIsLoading(false);
+          return;
+        }
+      }
+
       // Normalize Reference Table fields (empty arrays/undefined -> null)
       const normalizedFormData = normalizeReferenceTableFields(latestFormData);
-      
+
       const createdDoc = await zodula.doc.create_doc(
         doctype as Zodula.DoctypeName,
         normalizedFormData
@@ -1474,7 +1491,7 @@ export function DocFormView({
         if (org) {
           clearFormValues(doctype, org);
         }
-        
+
         if (cbUrl) {
           let obj = fromDoc || {};
           if (fromField) {
@@ -1485,8 +1502,8 @@ export function DocFormView({
               obj[fromField] = createdDoc.id;
             }
           }
-          for(const [key, value] of Object.entries(obj)) {
-            if(value === null || value === undefined) {
+          for (const [key, value] of Object.entries(obj)) {
+            if (value === null || value === undefined) {
               delete obj[key];
             }
           }
@@ -1536,11 +1553,11 @@ export function DocFormView({
   const doctypeLabel = doctypeDoc?.label || doctype;
   const isSystemGenerated = doctypeDoc?.is_system_generated === 1;
   useEffect(() => {
-    if(!doctypeDoc) return;
-    if(fields?.length <= 0) return;
-    if(!mode) return;
+    if (!doctypeDoc) return;
+    if (fields?.length <= 0) return;
+    if (!mode) return;
     if (checked) return;
-    checked = true; 
+    checked = true;
     const navEntry = performance.getEntriesByType("navigation")[0] as any
     let type = "reload"
     if (navEntry?.type === "reload") {
@@ -1548,7 +1565,7 @@ export function DocFormView({
     } else {
       type = "navigate";
     }
-    if(location.state?.resetForm || type === "reload") {
+    if (location.state?.resetForm || type === "reload") {
       handleResetForm();
       replace(pathname, { state: { ...location.state, resetForm: false } });
     }
@@ -1557,14 +1574,14 @@ export function DocFormView({
   // Always reset form when in create mode
   const createModeResetRef = useRef<string | null>(null);
   const prefillAppliedRef = useRef<boolean>(false);
-  
+
   useEffect(() => {
     if (mode === "create" && fields && doctypeDoc) {
       // Create a unique key based on doctype and prefill to track if we've reset for this session
       // Only include prefill in the key if it hasn't been applied yet
       const prefillKey = prefillAppliedRef.current ? {} : (prefill || {});
       const resetKey = `${doctype}-${JSON.stringify(prefillKey)}`;
-      
+
       // Only reset if we haven't already reset for this create session
       if (createModeResetRef.current !== resetKey) {
         createModeResetRef.current = resetKey;
@@ -1593,7 +1610,7 @@ export function DocFormView({
         saveFormValues(doctype, org, formData);
       }, 300); // Save 300ms after last change
     }
-    
+
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
@@ -1609,7 +1626,7 @@ export function DocFormView({
         <div className="zd:space-y-3">
           <div className="zd:space-y-2">
             <div className="zd:text-xs zd:text-muted-foreground">
-            Creating new {doctype} document. Fill in the required fields and save to create
+              Creating new {doctype} document. Fill in the required fields and save to create
             </div>
           </div>
         </div>
@@ -1680,17 +1697,17 @@ export function DocFormView({
       );
     }
     if (!doc) return false;
-    
+
     // Quick shallow comparison first - if references match, definitely not dirty
     if (formData === doc) return false;
-    
+
     // Early bailout: if key counts differ significantly, likely dirty
     const formKeys = Object.keys(formData);
     const docKeys = Object.keys(doc);
     if (Math.abs(formKeys.length - docKeys.length) > 5) {
       return true; // Likely dirty if key counts differ significantly
     }
-    
+
     // Compare formData with doc using optimized deep comparison
     return !areObjectsEqual(formData, doc);
   }, [formData, doc, mode, areObjectsEqual]);
@@ -1716,7 +1733,7 @@ export function DocFormView({
       );
     }
 
-    if(isSingle) {
+    if (isSingle) {
       return (
         <Button onClick={handleSave} className="zd:h-8" disabled={!isDirty}>
           <SaveIcon />
@@ -1747,7 +1764,7 @@ export function DocFormView({
         </Button>
       );
     }
-    
+
     return null;
   });
 
@@ -1794,12 +1811,12 @@ export function DocFormView({
                 const badgeConfig = badgeConfigs.current["doc_status"];
                 if (badgeConfig && doc) {
                   const valueOrObj = badgeConfig.getValue ? badgeConfig.getValue(doc) : doc.doc_status;
-                  
+
                   // If getValue returns null, fall back to default DocStatusBadge
                   if (valueOrObj === null) {
                     return <DocStatusBadge status={doc?.doc_status || 0} />;
                   }
-                  
+
                   // Handle both string values and objects with status/variant
                   const Badge = require("../components/ui/badge").Badge;
                   const displayValue = typeof valueOrObj === 'object' && valueOrObj !== null ? valueOrObj.status : valueOrObj;
@@ -1895,8 +1912,8 @@ export function DocFormView({
                   return (
                     <DropdownMenu key={index}>
                       <DropdownMenuTrigger asChild>
-                        <Button 
-                          variant={button.variant || "outline"} 
+                        <Button
+                          variant={button.variant || "outline"}
                           className="zd:h-8"
                           disabled={button.disabled}
                         >
@@ -1943,6 +1960,26 @@ export function DocFormView({
           )
         }
       >
+        {org === "System Panel" && (
+          <div className="zd:flex zd:gap-4 zd:pb-4">
+            <FormControl
+              readonly={mode === "edit"}
+              required={true}
+              placeholder="Select Organization"
+              className="zd:max-w-[200px]"
+              fieldKey="organization"
+              value={formData?.organization}
+              onChange={handleFieldChange}
+              formData={formData}
+              org={org}
+              field={{
+                default: "System Panel",
+                type: "Reference",
+                reference: "Organization"
+              }}
+            />
+          </div>
+        )}
         {/* Form Content */}
         <div className="zd:flex zd:flex-col zd:gap-8 zd:rounded-lg zd:px-4 zd:md:px-8 zd:py-4 zd:shadow-lg zd:border-t zd:border-dashed">
           <Form
@@ -1982,7 +2019,7 @@ export function DocFormView({
                 {doc?.updated_by ? (
                   <span className="zd:text-sm zd:text-muted-foreground">
                     {getUserName(doc.updated_by) || doc.updated_by}
-                    </span>
+                  </span>
                 ) : (
                   "Unknown"
                 )}{" "}

@@ -16,7 +16,8 @@ export default $doctype({
         required: 1,
         unique: 1,
         group: "doctype-permission",
-        on_delete: "CASCADE"
+        on_delete: "CASCADE",
+        in_list_view: 1
     },
     // Permission Level
     perm_level: {

@@ -55,7 +55,7 @@ if (document.readyState === "loading") {
 }
 
 export const buildIndexJs = async () => {
-    Bun.build({
+    await Bun.build({
         entrypoints: [path.join(process.cwd(), ".zodula", "ui", "index.tsx")],
         outdir: path.join(process.cwd(), ".zodula", "dist"),
         plugins: [

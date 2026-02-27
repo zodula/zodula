@@ -14,6 +14,17 @@ export default $doctype<"User">({
         required: 1,
         no_copy: 1
     },
+    is_confirmed_email: {
+        type: "Check",
+        default: "0",
+        label: "Email Confirmed",
+        no_copy: 1
+    },
+    confirmed_code: {
+        type: "Text",
+        label: "Confirmation Code",
+        no_copy: 1
+    },
     is_active: {
         type: "Check",
         default: "1",

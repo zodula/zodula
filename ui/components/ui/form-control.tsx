@@ -18,6 +18,7 @@ export interface FormControlProps {
   type?: string;
   noPrint?: boolean;
   doctype?: Zodula.DoctypeConfig;
+  placeholder?: string;
   // Field-specific props
   field?: any;
   fieldKey: string;
@@ -68,6 +69,7 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
       parentContext,
       onNestedFieldChange,
       doctype,
+      placeholder,
     },
     ref
   ) => {
@@ -121,6 +123,7 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
                 parentContext={parentContext}
                 onNestedFieldChange={onNestedFieldChange}
                 doctype={doctype}
+                placeholder={placeholder}
               />
             </div>
           );

@@ -16,12 +16,18 @@ export function CreateOrganizationDialog({
   onClose,
 }: CreateOrganizationDialogProps) {
   const [name, setName] = useState("");
+  const [abbr, setAbbr] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { t } = useTranslation();
+
   const handleCreate = async () => {
     if (!name.trim()) {
       setError("Name is required");
+      return;
+    }
+    if (!abbr.trim()) {
+      setError("Abbreviation is required");
       return;
     }
 
@@ -31,6 +37,7 @@ export function CreateOrganizationDialog({
     try {
       const created = await zodula.doc.create_doc("Organization", {
         name: name.trim(),
+        abbr: abbr.trim(),
         tier_level: "0",
       });
       onClose(created);
@@ -49,6 +56,9 @@ export function CreateOrganizationDialog({
     }
   };
 
+  const clearError = () => setError(null);
+  const isFormValid = name.trim() && abbr.trim();
+
   if (!isOpen) return null;
 
   return (
@@ -62,7 +72,7 @@ export function CreateOrganizationDialog({
             value={name}
             onChange={(e) => {
               setName(e.target.value);
-              setError(null);
+              clearError();
             }}
             onKeyDown={handleKeyDown}
             placeholder="Enter organization name"
@@ -70,13 +80,29 @@ export function CreateOrganizationDialog({
             className={cn(error ? "zd:border-destructive" : "")}
             disabled={isLoading}
           />
-          <p>
-            {t('The organization name must be unique and short, like "ORG1", "ORG2", "ORG3", etc. because it will be used as an abbreviation in naming series.')}
-          </p>
-          {error && (
-            <p className="zd:mt-1 zd:text-sm zd:text-destructive">{error}</p>
-          )}
         </div>
+        <div>
+          <label className="zd:text-sm zd:font-medium zd:text-foreground zd:block zd:mb-2">
+            Abbreviation <span className="zd:text-destructive">*</span>
+          </label>
+          <Input
+            value={abbr}
+            onChange={(e) => {
+              setAbbr(e.target.value);
+              clearError();
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder="e.g. ORG1, ORG2"
+            className={cn(error ? "zd:border-destructive" : "")}
+            disabled={isLoading}
+          />
+          <p className="zd:mt-1 zd:text-xs zd:text-muted-foreground">
+            {t('Must be unique and short. Used in naming series (e.g. "ORG1", "ORG2", "ORG3").')}
+          </p>
+        </div>
+        {error && (
+          <p className="zd:text-sm zd:text-destructive">{error}</p>
+        )}
       </div>
       <div className="zd:flex zd:justify-end zd:gap-2 zd:pt-4 zd:border-t">
         <Button
@@ -86,7 +112,7 @@ export function CreateOrganizationDialog({
         >
           Cancel
         </Button>
-        <Button onClick={handleCreate} disabled={isLoading || !name.trim()}>
+        <Button onClick={handleCreate} disabled={isLoading || !isFormValid}>
           {isLoading ? "Creating..." : "Create"}
         </Button>
       </div>

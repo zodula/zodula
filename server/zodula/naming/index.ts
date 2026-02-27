@@ -85,6 +85,7 @@ export async function naming<TN extends Zodula.DoctypeName>(
 
     }
     id = id.replaceAll("/", "⧸");
+    id = id.trimEnd().trimStart();
     if (id.startsWith("-")) {
       throw new ErrorWithCode("ID cannot start with '-'", {
         status: 400,

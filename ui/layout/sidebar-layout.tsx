@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { Button } from "../components/ui/button";
 import { Menu, X, MoreHorizontal } from "lucide-react";
 import {
@@ -10,7 +10,7 @@ import {
 } from "../components/ui/dropdown-menu";
 import { cn } from "../lib/utils";
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { useRouter } from "../components/router";
 
 export interface ActionItem {
   id: string;
@@ -57,23 +57,38 @@ interface SidebarMenuItem {
 }
 
 interface SidebarStore {
-  sidebarOpen: boolean;
-  setSidebarOpen: (open: boolean) => void;
-  toggleSidebar: () => void;
+  sidebarOpenByPath: Record<string, boolean>;
+  setSidebarOpen: (pathname: string, open: boolean) => void;
+  toggleSidebar: (pathname: string) => void;
 }
 
-const useSidebarStore = create<SidebarStore>()(
-  persist(
-    (set) => ({
-      sidebarOpen: false,
-      setSidebarOpen: (open: boolean) => set({ sidebarOpen: open }),
-      toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
-    }),
-    {
-      name: "zodula-sidebar-storage", // unique name for localStorage key
-    }
-  )
-);
+const useSidebarStoreBase = create<SidebarStore>()((set) => ({
+  sidebarOpenByPath: {},
+  setSidebarOpen: (pathname, open) =>
+    set((state) => ({
+      sidebarOpenByPath: {
+        ...state.sidebarOpenByPath,
+        [pathname]: open,
+      },
+    })),
+  toggleSidebar: (pathname) =>
+    set((state) => ({
+      sidebarOpenByPath: {
+        ...state.sidebarOpenByPath,
+        [pathname]: !(state.sidebarOpenByPath[pathname] ?? false),
+      },
+    })),
+}));
+
+export function useSidebarStore(pathname: string, defaultOpen = false) {
+  const { sidebarOpenByPath, setSidebarOpen, toggleSidebar } = useSidebarStoreBase();
+  const sidebarOpen = sidebarOpenByPath[pathname] ?? defaultOpen;
+  return {
+    sidebarOpen,
+    setSidebarOpen: (open: boolean) => setSidebarOpen(pathname, open),
+    toggleSidebar: () => toggleSidebar(pathname),
+  };
+}
 
 export const SidebarLayout = ({
   children,
@@ -85,23 +100,8 @@ export const SidebarLayout = ({
   actions = [],
   defaultOpen = false,
 }: SidebarLayoutProps) => {
-  const { sidebarOpen, setSidebarOpen, toggleSidebar } = useSidebarStore();
-
-  // Initialize from defaultOpen prop if there's no persisted value (only on mount)
-  useEffect(() => {
-    try {
-      const persisted = localStorage.getItem("zodula-sidebar-storage");
-      if (!persisted && defaultOpen) {
-        setSidebarOpen(defaultOpen);
-      }
-    } catch {
-      // localStorage might not be available (SSR)
-      if (defaultOpen) {
-        setSidebarOpen(defaultOpen);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run once on mount
+  const { pathname } = useRouter();
+  const { sidebarOpen, setSidebarOpen, toggleSidebar } = useSidebarStore(pathname, defaultOpen);
 
   const renderActions = () => {
     const primaryActions = Array.isArray(primaryAction)
@@ -194,9 +194,8 @@ export const SidebarLayout = ({
       >
         {/* Sidebar */}
         <div
-          className={`zd:flex zd:flex-col zd:transition-all zd:duration-300 ${
-            sidebarOpen ? "zd:min-w-80" : "zd:min-w-0 zd:w-0 zd:overflow-hidden"
-          }`}
+          className={`zd:flex zd:flex-col zd:transition-all zd:duration-300 ${sidebarOpen ? "zd:min-w-80" : "zd:min-w-0 zd:w-0 zd:overflow-hidden"
+            }`}
         >
           {sidebarOpen && (
             <div className="zd:flex zd:flex-col zd:h-full">

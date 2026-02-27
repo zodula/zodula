@@ -1,5 +1,6 @@
 import { ZodulaDoctype } from "./doc";
 import { ZodulaSession } from "./session";
+import { ZodulaEmail } from "./email";
 import * as serverUtils from "./utils";
 import * as clientUtils from "../../client/utils";
 import { ctxContext } from "../async-context";
@@ -21,6 +22,7 @@ interface ExtendedJobData extends JobData {
 export class ZodulaSDK {
     private worker: Queue;
     private jobMetadata: Map<string, { requester: string | null; backgroundPath: string }> = new Map();
+    private _emailInstance: ZodulaEmail | null = null;
     
     constructor() {
         this.worker = new Queue(process.env.WORKER_COUNT ? parseInt(process.env.WORKER_COUNT) : 4)
@@ -176,6 +178,13 @@ export class ZodulaSDK {
 
     get session() {
         return new ZodulaSession()
+    }
+
+    get email(): ZodulaEmail {
+        if (!this._emailInstance) {
+            this._emailInstance = new ZodulaEmail(this as any);
+        }
+        return this._emailInstance;
     }
 
     get utils() {

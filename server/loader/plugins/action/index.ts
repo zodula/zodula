@@ -203,7 +203,7 @@ export class ActionLoader implements BasePlugin<ActionMetadata> {
      * Generates import name from file path
      */
     private generateImportName(filePath: string): string {
-        return filePath.split("/")?.join("_")?.replace(".ts", "");
+        return filePath.split("/")?.join("_")?.replace(".ts", "").replaceAll("-", "__");
     }
 
     /**

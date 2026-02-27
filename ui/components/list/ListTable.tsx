@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   ChevronDownIcon,
   ChevronUpIcon,
@@ -69,9 +69,10 @@ export function ListTable<TDoc extends Record<string, any>>({
     }
     setSelected(newSelected);
   };
+  const tableRef = useRef<HTMLTableElement>(null);
   return (
-    <div className="zd:w-full zd:overflow-auto zd:shadow zd:rounded zd:border zd:min-h-[50vh]">
-      <table className="zd:w-full zd:text-sm">
+    <div className="zd:relative zd:w-full zd:max-w-full zd:overflow-x-auto zd:shadow zd:rounded zd:border zd:min-h-[50vh]" style={{ height: tableRef?.current?.clientHeight ? `${tableRef?.current?.clientHeight + 5}px` : "50vh" }}>
+      <table ref={tableRef} className="zd:absolute zd:top-0 zd:w-full zd:text-sm">
         <thead className="zd:border-b zd:border-dashed">
           <tr className="zd:text-left">
             {/* Checkbox column */}
@@ -166,7 +167,8 @@ export function ListTable<TDoc extends Record<string, any>>({
                     <td
                       key={String(col.key)}
                       className={cn(
-                        "zd:z-10 zd:px-2 zd:py-2 zd:whitespace-nowrap zd:max-w-[200px] zd:overflow-hidden zd:text-ellipsis",
+                        "zd:z-10 zd:px-2 zd:py-2 zd:whitespace-nowrap zd:overflow-hidden",
+                        !isDisplayField ? "zd:text-ellipsis zd:max-w-[240px]" : ""
                       )}
                     >
                       {(isUndefined || !Render) ? (

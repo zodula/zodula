@@ -60,7 +60,7 @@ export class ZodulaDoctypeUpdate<
       .bypass(true)
       .unsafe();
 
-    this.input.organization = isGlobal ? "System Panel" : old?.organization;
+    this.input.organization = old?.organization;
     const organization = await zodula.doctype("Organization").get(this.input.organization || "System Panel").bypass(true).fields(["abbr", "name"])
     this.input.organization_abbr = organization?.abbr || "";
     if (old?.organization !== this.input.organization) {

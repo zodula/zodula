@@ -7,7 +7,7 @@ export interface InputProps
   type?: string;
   prefix?: any;
   suffix?: React.ReactNode;
-  autocomplete?: "on" | "off";
+  autocomplete?: "on" | "off" | "email" | "username" | "current-password" | "new-password" | string;
   wrapperStyle?: React.CSSProperties;
 }
 

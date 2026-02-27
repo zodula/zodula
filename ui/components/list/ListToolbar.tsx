@@ -12,10 +12,6 @@ import { useTranslation } from "../..";
 interface ListToolbarProps {
     hasActiveFilter?: boolean;
     onClearFilter?: () => void;
-    searchValue?: string;
-    searchPlaceholder?: string;
-    onSearchChange?: (value: string) => void;
-    onSearch?: (query: string) => void;
     /** Quick filter bar - shown in place of search when provided; search is used as fallback when no quick filter fields */
     quickFilterBar?: React.ReactNode;
     sortFields?: Zodula.Field[];
@@ -41,10 +37,6 @@ interface ListToolbarProps {
 export function ListToolbar({
     hasActiveFilter = false,
     onClearFilter,
-    searchValue = "",
-    searchPlaceholder,
-    onSearchChange,
-    onSearch,
     sortFields = [],
     sortValue = "",
     onSortChange,
@@ -69,19 +61,7 @@ export function ListToolbar({
         <div className="zd:flex zd:items-center zd:justify-between zd:gap-3 zd:w-full">
             {/* Left side - QuickFilterBar (replaces search) or search input as fallback */}
             <div className="zd:flex zd:flex-1 zd:items-center zd:gap-2 zd:min-w-0">
-                {quickFilterBar ?? (
-                    <Input
-                        placeholder={searchPlaceholder || `Search By ${t("ID")}`}
-                        className="zd:w-full"
-                        value={searchValue}
-                        onChange={(e) => onSearchChange?.(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                onSearch?.(searchValue);
-                            }
-                        }}
-                    />
-                )}
+                {quickFilterBar}
             </div>
 
             {/* Right side - Filter, Sort, and Last Updated controls */}

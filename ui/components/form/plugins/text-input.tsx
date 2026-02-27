@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useEffect, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { FormPlugin } from "../plugin";
 import { Input } from "../../ui/input";
 import { cn } from "@/zodula/ui/lib/utils";
@@ -17,7 +18,11 @@ export const TextInputPlugin = new FormPlugin({
       return initialValue;
     });
 
+    const [showPassword, setShowPassword] = useState(false);
+    const isPasswordField = props.fieldOptions.type === "Password";
+
     const type = useMemo(() => {
+      if (isPasswordField && showPassword) return "text";
       switch (props.fieldOptions.type) {
         case "Password":
           return "password";
@@ -30,7 +35,7 @@ export const TextInputPlugin = new FormPlugin({
         default:
           return "text";
       }
-    }, [props.fieldOptions.type]);
+    }, [props.fieldOptions.type, isPasswordField, showPassword]);
 
     // Normalize prop value
     const propValue = props.value ?? "";
@@ -70,6 +75,22 @@ export const TextInputPlugin = new FormPlugin({
       isUserTypingRef.current = true;
     };
 
+    const passwordToggleSuffix = isPasswordField && !props.readonly ? (
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={() => setShowPassword((v) => !v)}
+        className="zd:flex zd:items-center zd:justify-center zd:p-0 zd:bg-transparent zd:border-none zd:cursor-pointer zd:hover:text-foreground zd:transition-colors"
+        aria-label={showPassword ? "Hide password" : "Show password"}
+      >
+        {showPassword ? (
+          <EyeOff className="zd:h-4 zd:w-4" />
+        ) : (
+          <Eye className="zd:h-4 zd:w-4" />
+        )}
+      </button>
+    ) : undefined;
+
     return (
       <Input
         ref={inputRef}
@@ -82,6 +103,8 @@ export const TextInputPlugin = new FormPlugin({
         onChange={handleChange}
         onBlur={handleBlur}
         onFocus={handleFocus}
+        autocomplete={(props.fieldOptions as { autocomplete?: string }).autocomplete ?? "off"}
+        suffix={passwordToggleSuffix}
       />
     );
   },

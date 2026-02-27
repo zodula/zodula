@@ -24,6 +24,7 @@ import { useTranslation } from "@/zodula/ui/hooks/use-translation";
 import ErrorView from "@/zodula/ui/views/error-view";
 import { Button } from "@/zodula/ui/components/ui/button";
 import { useParams } from "react-router";
+import { Select } from "@/zodula/ui/components/ui/select";
 
 export default function DoctypeSheetPage() {
     const { params, push, replace, search, location } = useRouter()
@@ -260,27 +261,21 @@ export default function DoctypeSheetPage() {
             primaryAction={primaryActions}
             actions={selected.size > 0 ? actions : []}
             actionSection={
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button
-                            variant="outline"
-                            className="zd:flex zd:items-center zd:gap-2 zd:px-3 zd:py-0.5"
-                        >
-                            <Grid3x3 className="zd:h-4 zd:w-4" />
-                            {t("Sheet View")}
-                            <ChevronDown className="zd:h-4 zd:w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                            onClick={handleSwitchToListView}
-                            className="zd:flex zd:items-center zd:gap-2 zd:px-3 zd:py-0.5"
-                        >
-                            <List className="zd:h-4 zd:w-4" />
-                            {t("List View")}
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                <Select
+                    options={[
+                        { label: t("List View"), value: "list" },
+                        { label: t("Sheet View"), value: "sheet" }
+                    ]}
+                    displayMode="label"
+                    value={location.pathname.includes("/sheet") ? "sheet" : "list"}
+                    onChange={(value) => {
+                        if (value === "list") {
+                            push(`/desk/${org}/doctypes/${doctype}/list${location.search}`);
+                        } else {
+                            push(`/desk/${org}/doctypes/${doctype}/sheet${location.search}`);
+                        }
+                    }}
+                />
             }
         >
             <SheetView

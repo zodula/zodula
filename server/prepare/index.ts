@@ -1,5 +1,5 @@
 import { TypeGenerator } from '@/zodula/server/type-generator/type-generator'
-import { prepareApp } from './tsxPage'
+import { buildIndexJs, prepareApp, prepareTsxPage } from './tsxPage'
 import path from 'path'
 
 export default async function prepareScript() {
@@ -12,4 +12,6 @@ export default async function prepareScript() {
 
   await TypeGenerator.generate()
   await prepareApp()
+  await prepareTsxPage()
+  await buildIndexJs()
 }

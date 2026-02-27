@@ -410,20 +410,10 @@ export function ListView({
   }, [doctypeDoc, fields]);
 
   return (
-    <div className="zd:flex zd:flex-col zd:gap-4 zd:pb-12">
+    <div className="zd:flex zd:flex-col zd:gap-4 zd:pb-12 zd:h-full">
       <ListToolbar
-        searchPlaceholder={
-          t(`Search By`) +
-          " " +
-          t(
-            `${!searchFieldsLabels.length ? "ID" : searchFieldsLabels.join(", ")}`
-          )
-        }
         hasActiveFilter={hasActiveFilter}
         onClearFilter={handleClearFilter}
-        searchValue={searchInput ?? ""}
-        onSearchChange={setSearchInput}
-        onSearch={onSearch}
         sortFields={sortFields}
         sortValue={sort ?? ""}
         onSortChange={onSortChange}
@@ -443,23 +433,6 @@ export function ListView({
             filters={filters ?? []}
             onApplyFilters={onApplyFilters}
             doctype={doctype as any}
-            fallback={
-              <Input
-                placeholder={
-                  t(`Search By`) +
-                  " " +
-                  t(
-                    `${!searchFieldsLabels.length ? "ID" : searchFieldsLabels.join(", ")}`
-                  )
-                }
-                className="zd:w-full"
-                value={searchInput ?? ""}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") onSearch(searchInput);
-                }}
-              />
-            }
           />
         }
       />

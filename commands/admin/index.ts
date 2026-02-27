@@ -21,7 +21,8 @@ export default new Command("admin")
                     const user = await $zodula.doctype("User").insert({
                         email,
                         password,
-                        is_active: 1
+                        is_active: 1,
+                        is_confirmed_email: 1
                     }).bypass(true)
                     for (const role of _roles) {
                         await $zodula.doctype("User Role").insert({

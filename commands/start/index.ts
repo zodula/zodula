@@ -29,8 +29,9 @@ function debouncedRestart() {
         clearTimeout(debounceTimer)
     }
     
-    debounceTimer = setTimeout(() => {
+    debounceTimer = setTimeout(async () => {
         console.log("🔄 Migration trigger detected, restarting server...")
+        await startup()
         restartServer()
     }, DEBOUNCE_DELAY)
 }

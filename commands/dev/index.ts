@@ -1,7 +1,7 @@
 import { Command } from "nailgun";
 import { watch } from "fs";
 import path from "path";
-import { prepareApp, prepareTsxPage } from "@/zodula/server/prepare/tsxPage";
+import { startup } from "@/zodula/server/startup";
 
 let proc: Bun.Subprocess | null = null
 let debounceTimer: NodeJS.Timeout | null = null
@@ -29,8 +29,9 @@ function debouncedRestart() {
         clearTimeout(debounceTimer)
     }
 
-    debounceTimer = setTimeout(() => {
+    debounceTimer = setTimeout(async () => {
         console.log("🔄 File change detected, restarting server...")
+        await startup()
         restartServer()
     }, DEBOUNCE_DELAY)
 }
@@ -38,8 +39,7 @@ function debouncedRestart() {
 export default new Command("dev")
     .description("Start the development server")
     .action(async () => {
-        await prepareApp()
-        await prepareTsxPage()
+        await startup()
 
         // Start the server initially
         restartServer()

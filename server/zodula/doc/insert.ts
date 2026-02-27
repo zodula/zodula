@@ -57,16 +57,14 @@ export class ZodulaDoctypeInsert<
       const user = await this.session.user(true);
       const doctype = loader.from("doctype").get(this.doctypeName);
       const organizationName = await this.session.organization(true);
-      const organization = await zodula.doctype("Organization").get(organizationName || "System Panel").bypass(true).fields(["abbr","name"])
 
-      if(!this.input.organization) {
-        this.input.organization = organization?.name || "System Panel";
-        this.input.organization_abbr = organization?.abbr || "";
-
+      if (!this.input.organization) {
+        this.input.organization = organizationName || "System Panel";
       }
-      if(doctype.config.is_global === 1) {
-        this.input.organization = "System Panel";
-        this.input.organization_abbr = organization?.abbr || "";
+      const organization = await zodula.doctype("Organization").get(this.input.organization || "System Panel").bypass(true).fields(["abbr", "name"])
+      this.input.organization_abbr = organization?.abbr || "";
+      if (doctype.config.is_global === 1 && organizationName !== "System Panel" && !this.options.bypass) {
+        throw new ErrorWithCode("Global doctype can only be created in System Panel organization", { status: 400 });
       }
 
       // Check tier requirements and max_doc limits
@@ -196,7 +194,7 @@ export class ZodulaDoctypeInsert<
 
     // Check if insert_tier_required is set in doctype config
     const insertTierRequiredInt = Number(doctype.config.insert_tier_required) || 0;
-    if(insertTierRequiredInt > 0 && orgTierInt < insertTierRequiredInt) {
+    if (insertTierRequiredInt > 0 && orgTierInt < insertTierRequiredInt) {
       throw new ErrorWithCode(
         `This doctype requires tier level ${insertTierRequiredInt} or higher. Your organization has tier level ${orgTierInt}.`,
         { status: 403 }
@@ -248,11 +246,11 @@ export class ZodulaDoctypeInsert<
 
     // Try to find max_doc starting from the current tier level and cascading down
     let maxDoc = -1; // Default to unlimited
-    
+
     for (let tier = tierLevel; tier >= 0; tier--) {
       const tierConfigs: number[] = [];
       let hasUnlimited = false;
-      
+
       // Get tier configs from all apps for this tier level
       for (const app of apps.docs || []) {
         let tierConfig: { docs: any[]; count: number };
