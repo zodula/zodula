@@ -40,6 +40,7 @@ export interface PrintTemplateSettingsValues {
   isDefault: boolean;
   defaultLetterHead: string;
   defaultLanguage: string;
+  showIdQrCode: boolean;
 }
 
 function PrintTemplateSettingsPopup({
@@ -62,6 +63,7 @@ function PrintTemplateSettingsPopup({
   const [isDefault, setIsDefault] = React.useState(initial?.isDefault ?? false);
   const [defaultLetterHead, setDefaultLetterHead] = React.useState(initial?.defaultLetterHead ?? "");
   const [defaultLanguage, setDefaultLanguage] = React.useState(initial?.defaultLanguage ?? "");
+  const [showIdQrCode, setShowIdQrCode] = React.useState(initial?.showIdQrCode ?? true);
   React.useEffect(() => {
     if (initial) {
       setName(initial.name ?? "");
@@ -75,6 +77,7 @@ function PrintTemplateSettingsPopup({
       setIsDefault(initial.isDefault ?? false);
       setDefaultLetterHead(initial.defaultLetterHead ?? "");
       setDefaultLanguage(initial.defaultLanguage ?? "");
+      setShowIdQrCode(initial.showIdQrCode ?? true);
     }
   }, [initial?.name, initial?.format, initial?.customWidth, initial?.customHeight, initial?.marginTop, initial?.marginRight, initial?.marginBottom, initial?.marginLeft, initial?.isDefault, initial?.defaultLetterHead, initial?.defaultLanguage]);
   const handleApply = () => {
@@ -92,6 +95,7 @@ function PrintTemplateSettingsPopup({
       isDefault,
       defaultLetterHead,
       defaultLanguage,
+      showIdQrCode,
     });
     onClose();
   };
@@ -110,6 +114,13 @@ function PrintTemplateSettingsPopup({
             field={{ type: "Check", label: "Is Default" }}
             value={isDefault ? 1 : 0}
             onChange={(_k, v) => setIsDefault(v === 1 || v === true)}
+          />
+          <FormControl
+            label="Show ID QR Code"
+            fieldKey="show_id_qrcode"
+            field={{ type: "Check", label: "Show ID QR Code" }}
+            value={showIdQrCode ? 1 : 0}
+            onChange={(_k, v) => setShowIdQrCode(v === 1 || v === true)}
           />
         </div>
       </section>
@@ -214,7 +225,9 @@ function itemToPayload(item: PrintTemplateBuilderItem): Record<string, unknown> 
     columns: item.columns ?? "",
     nested_field: item.nested_field ?? "",
     nested_table_field: item.nested_table_field ?? "",
+    nested_table_field_doctype: item.nested_table_field_doctype ?? "",
     nested_columns: item.nested_columns ?? "",
+    height: item.height ?? null,
     table_config: item.table_config ?? "",
     anchor_config: item.anchor_config ?? "",
     transform_x: item.transform_x ?? 0,
@@ -250,7 +263,9 @@ function docToItem(doc: any): PrintTemplateBuilderItem {
     columns: doc.columns ?? null,
     nested_field: doc.nested_field ?? null,
     nested_table_field: doc.nested_table_field ?? null,
+    nested_table_field_doctype: doc.nested_table_field_doctype ?? null,
     nested_columns: doc.nested_columns ?? null,
+    height: doc.height != null ? doc.height : null,
     table_config: doc.table_config ?? null,
     anchor_config: doc.anchor_config ?? null,
     transform_x: doc.transform_x ?? 0,
@@ -295,6 +310,7 @@ export default function PrintTemplateFormPage() {
   const [isDefault, setIsDefault] = useState(false);
   const [defaultLetterHead, setDefaultLetterHead] = useState("");
   const [defaultLanguage, setDefaultLanguage] = useState("");
+  const [showIdQrCode, setShowIdQrCodeState] = useState(true);
 
   // Fetched items snapshot for dirty check (non-HTML mode); updated when items load or after save
   const fetchedItemsJsonRef = useRef<string>("[]");
@@ -320,6 +336,7 @@ export default function PrintTemplateFormPage() {
     setIsDefault(d.is_default === 1 || d.is_default === true);
     setDefaultLetterHead(d.default_letter_head ?? "");
     setDefaultLanguage(d.default_language ?? "");
+    setShowIdQrCodeState(d.show_id_qrcode === 0 ? false : true);
     const tableItems = Array.isArray(d.print_template_items) ? d.print_template_items : [];
     setItems(tableItems.map(docToItem));
     fetchedItemsJsonRef.current = JSON.stringify(tableItems.map(docToItem));
@@ -347,6 +364,7 @@ export default function PrintTemplateFormPage() {
         is_default: isDefault ? 1 : 0,
         default_letter_head: defaultLetterHead || undefined,
         default_language: defaultLanguage || undefined,
+      show_id_qrcode: showIdQrCode ? 1 : 0,
         html_content: html,
         css_content: css,
         js_content: js,
@@ -395,6 +413,7 @@ export default function PrintTemplateFormPage() {
       isDefault: d.is_default === 1 || d.is_default === true,
       defaultLetterHead: d.default_letter_head ?? "",
       defaultLanguage: d.default_language ?? "",
+      showIdQrCode: d.show_id_qrcode === 0 ? false : true,
     };
     const docDirty =
       isHtml !== fetched.isHtml ||
@@ -413,7 +432,8 @@ export default function PrintTemplateFormPage() {
       marginLeft !== fetched.marginLeft ||
       isDefault !== fetched.isDefault ||
       defaultLetterHead !== fetched.defaultLetterHead ||
-      defaultLanguage !== fetched.defaultLanguage;
+      defaultLanguage !== fetched.defaultLanguage ||
+      showIdQrCode !== fetched.showIdQrCode;
     if (isHtml) return docDirty;
     return docDirty || JSON.stringify(items) !== fetchedItemsJsonRef.current;
   }, [doc, isHtml, name, html, css, js, heading, docNameExpr, format, customWidth, customHeight, marginTop, marginRight, marginBottom, marginLeft, isDefault, defaultLetterHead, defaultLanguage, items]);
@@ -438,6 +458,7 @@ export default function PrintTemplateFormPage() {
           isDefault,
           defaultLetterHead,
           defaultLanguage,
+          showIdQrCode,
         },
         onApply: (v: PrintTemplateSettingsValues) => {
           setName(v.name);
@@ -453,6 +474,8 @@ export default function PrintTemplateFormPage() {
           setIsDefault(v.isDefault);
           setDefaultLetterHead(v.defaultLetterHead);
           setDefaultLanguage(v.defaultLanguage);
+          setShowIdQrCodeState(v.showIdQrCode);
+          setShowIdQrCode(v.showIdQrCode);
         },
       }
     );

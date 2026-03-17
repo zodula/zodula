@@ -1,247 +1,122 @@
-# Zodula Framework
+## Zodula Framework
 
-_The Modular Fullstack Framework Powered by Bun._
+**Zodula** is a Bun‑native, type‑safe framework for building data‑driven admin apps around **Doctypes** (typed schemas) instead of hand‑rolled CRUD code.
 
-![Zodul Admin](/apps/zodula/assets/zodula-admin-mock.png)
-![Code Usage](/apps/zodula/assets/code-usage.png)
+### Core ideas
 
-## ✨ Features
+- **Doctypes as source of truth**  
+  You define business objects as Doctypes in `apps/*/doctypes/*`.  
+  From these definitions Zodula generates:
+  - SQLite schema and migrations
+  - TypeScript types (via `FieldHelper` and Zod schemas)
+  - REST APIs and OpenAPI docs
+  - Admin UI forms, lists, and audit trail views
 
-- 🏗️ **Modular Architecture** - Namespace-based approach for scalable applications
-- 👥 **Multi-Tenant Support** - User permission system for data isolation
-- 🔐 **Role-Based Permissions** - Granular access control with user roles
-- 🛡️ **Row-Level Security** - Doctype event-based data access control
-- 🚀 **Auto-Generated CRUD APIs** - RESTful endpoints created automatically
-- 📚 **OpenAPI Documentation** - Complete API documentation with interactive UI
-- ⚡ **Real-time Updates** - Doctype event subscription with WebSocket support
-- 🔄 **Database Schema Sync** - Automatic schema migration and synchronization
-- 🖥️ **Admin Interface** - Built-in desk UI for data management
-- 🎯 **Type-Safe** - Full TypeScript support from database to frontend
-- 📝 **Audit Trail** - Complete change tracking and history
-- 🌐 **Translation Support** - CSV-based internationalization system
+- **Standard fields & conventions**  
+  Every document automatically gets standard fields like `id`, `doc_organization`, `owner`, `created_at`, `updated_at`, `doc_status`, etc.  
+  These are shared on the client (`ClientFieldHelper.standardFields`) and server (`FieldHelper.doctypeToZod`) so validation, storage, and UI stay in sync.
 
-## ⚠️ Important Notice
+- **Field plugins**  
+  Server‑side field plugins (for `Text`, `Integer`, `Select`, `Reference`, `Reference Table`, `Extend`, `Vector`, `Signature`, and more) describe:
+  - SQL type
+  - TypeScript type
+  - Zod validation schema  
+  This keeps schema, runtime validation, and generated SDK all aligned.
 
-**Version 0 is experimental.** This version may have breaking changes and data loss during updates. Use only for development and testing.
+- **Generated desk UI**  
+  The core admin UI (e.g. `DocFormView`) reads Doctype + Field metadata and renders forms automatically:
+  - Required and read‑only rules
+  - Permission‑level field visibility
+  - Reference tables, extend fields, and child rows
+  - Form scripts (`executeFormScripts`) for custom behavior
+  - Audit trail, status badges, actions, and connections
 
-## 🚀 Quick Start
+- **Type‑safe client**  
+  On the frontend you use the bundled client:
 
-**Requirements:**
+  ```ts
+  import { zodula, z } from "@zodula/zodula/client";
 
-- Bun v1.2.x+
-- [Nailgun CLI](https://github.com/zodula/nailgun)
+  // Fetch a document
+  const user = await zodula.doc.get_doc("User", "USER_ID");
 
-**Install:**
+  // Create a document
+  const created = await zodula.doc.create_doc("User", {
+    email: "me@example.com",
+    password: "secret",
+  });
+  ```
 
-1. Install Nailgun CLI globally:
+  Hooks in `apps/zodula/ui/hooks` (`useDocList`, `useDocAll`, `useForm`, etc.) are thin, focused helpers that keep UI code small and predictable.
 
-```bash
-bun install --global nailgun
-```
+### What this app (`apps/zodula`) provides
 
-2. Create a new Zodula project:
+- **Core server helpers**
+  - `FieldHelper` and field plugins for mapping Doctypes to SQL and Zod
+  - Utilities for generating Zod schemas, filtering out relational/standard fields, etc.
+
+- **Core client helpers**
+  - `createZodulaClient`, `zodula`, and re‑exported `z` (Zod) for building typed queries and mutations
+  - `ClientFieldHelper` with shared standard field metadata and permission helpers
+
+- **Core UI**
+  - Desk layout components (`NavbarLayout`, `SidebarLayout`)
+  - Generic `Form` renderer, `FormActions`, audit trail, status badges
+  - `DocFormView` which handles:
+    - Loading docs and field metadata
+    - Tracking dirty state and caching form data
+    - Validating required fields (including reference tables and extend fields)
+    - Running form scripts and handling `fetch_from` logic
+    - Submitting, updating, cancelling, deleting, and duplicating docs
+
+All higher‑level apps (for example `@zodula/zerp`) are built on top of this core.
+
+### Quick start (project level)
+
+Use the **Nailgun** CLI to bootstrap and run a project that includes this app.
+
+- **Requirements**
+  - Bun v1.2.x+
+  - `nailgun` CLI (`bun install --global nailgun`)
+
+- **Create project and install core**
 
 ```bash
 nailgun create my-app --branch v0
-
 cd my-app
-```
 
-3. Install the Zodula core app:
-
-```bash
 nailgun install-app @zodula/zodula --branch v0
-```
-
-This installs the Zodula framework core into your project's `apps/` directory.
-
-**Start Development:**
-
-```bash
 nailgun dev
 ```
 
-Server runs at `http://localhost:3000`
+Then open `http://localhost:3000` and work inside the `apps/` folder.
 
-**Development Location:**
+### Everyday workflow
 
-Develop your applications in the `apps/` folder. Create new apps using `nailgun scaffold app` or install existing apps using `nailgun install-app`.
-
-## 🛠️ Common Commands
-
-```bash
-# Create a new project
-nailgun create my-proj --branch v0
-
-# Install an app from a repository
-nailgun install-app @zodula/zerp --branch v0
-
-# Scaffold (app, doctype, action, etc.)
-nailgun scaffold
-
-# Apply migrations and load data
-nailgun migrate
-
-# Create admin user
-nailgun admin create-user --email me@example.com --password secret --roles "System Admin"
-
-# Backup data (important before upgrades)
-nailgun backup
-
-# Restore from backup
-nailgun restore
-
-# Start development server
-nailgun dev
-
-# Start production server
-nailgun start
-```
-
-## 📡 API & Development
-
-**Auto-Generated REST APIs:**
-
-- List: `GET /api/resources/{Doctype}`
-- API Docs: `GET /openapi`
-
-**TypeScript SDK:**
-
-```ts
-// Query data
-const users = await $zodula
-  .doctype("User")
-  .select()
-  .where("email", "=", "me@example.com");
-
-// Create records
-const user = await $zodula
-  .doctype("User")
-  .insert({ email: "me@example.com", password: "secret" });
-```
-
-## 🔄 Development Workflow
-
-1. **Edit DocTypes** in `apps/*/doctypes/*`
-2. **Apply changes:** `nailgun migrate`
-
-## 🔄 Upgrading Zodula Core
-
-### Development Environment
-
-To upgrade the Zodula core app to the latest version for your branch (v0, v1, etc.):
-
-1. **Create a backup (recommended):**
-
-```bash
-nailgun backup
-```
-
-2. **Upgrade the Zodula app:**
-
-```bash
-# Replace v0 with your version branch (v0, v1, etc.)
-nailgun install-app @zodula/zodula --branch v0 --force
-```
-
-The `--force` flag will replace the existing Zodula app with the latest version from the specified branch.
-
-3. **Update dependencies:**
-
-```bash
-bun install
-```
-
-4. **Apply any new migrations:**
+- **Define / edit Doctypes** in `apps/*/doctypes/*`
+- **Run migrations** to sync DB and generated types:
 
 ```bash
 nailgun migrate
 ```
 
-**Note:** If you've made custom modifications to the Zodula core app, they will be overwritten. Consider creating your own app that extends Zodula functionality instead.
+- **Develop UI** by composing:
+  - server metadata (`Doctype`, `Field`)
+  - client helpers (`zodula`, hooks, `ClientFieldHelper`)
+  - shared desk components (forms, layouts, actions)
 
-### Production Environment
+### API surface (high‑level)
 
-**⚠️ Important:** For production upgrades, we strongly recommend using Docker and performing backup/restore operations to ensure data safety.
+- **REST**
+  - `GET /api/resources/{Doctype}` – list documents
+  - `GET /openapi` – OpenAPI spec and docs
 
-1. **Create a backup before upgrading:**
+- **Client SDK (typed)**
+  - `zodula.doc.get_doc(doctype, id)`
+  - `zodula.doc.create_doc(doctype, payload)`
+  - `zodula.doc.update_doc(doctype, id, payload)`
+  - `zodula.doc.delete_doc(doctype, id)`
 
-```bash
-nailgun backup
-```
+### Stability
 
-This creates a timestamped backup in `.zodula_backup/` directory.
-
-2. **Upgrade the Zodula app in your project:**
-
-```bash
-# Upgrade to latest version of your branch
-nailgun install-app @zodula/zodula --branch v0 --force
-
-# Update dependencies
-bun install
-
-# Apply migrations
-nailgun migrate
-```
-
-3. **Use Docker for production deployments:**
-
-Build and deploy using Docker containers to ensure consistent environments and easy rollback:
-
-```bash
-# Build Docker image
-docker build -t my-zodula-app:latest .
-
-# Stop and remove existing container (if upgrading)
-docker stop my-zodula-app 2>/dev/null || true
-docker rm my-zodula-app 2>/dev/null || true
-
-# Start new container with updated image
-docker run -d --name my-zodula-app \
-  --restart unless-stopped \
-  -v $(pwd)/.zodula_data:/app/.zodula_data \
-  -v $(pwd)/.zodula_backup:/app/.zodula_backup \
-  -p 3000:3000 \
-  my-zodula-app:latest
-```
-
-**First-time setup:** If this is your first deployment, create the data directories:
-
-```bash
-mkdir -p .zodula_data .zodula_backup
-```
-
-4. **If upgrade fails, restore from backup:**
-
-```bash
-# Stop the container
-docker stop my-zodula-app
-
-# Restore from backup (run on host, not in container)
-nailgun restore
-
-# Restart container
-docker start my-zodula-app
-```
-
-**Alternative:** You can also restore from within the container:
-
-```bash
-docker exec -it my-zodula-app nailgun restore
-```
-
-**Best Practices for Production:**
-
-- Always create a backup before upgrading
-- Test upgrades in a staging environment first
-- Use Docker for consistent deployments
-- Keep backups in a separate location (not just `.zodula_backup/`)
-- Document your upgrade process and rollback procedures
-
-## 🎯 What Makes Zodula Different
-
-- **Type-First:** Full TypeScript from database to UI
-- **Bun Native:** No Node.js required
-- **Auto-Migrations:** Schema changes applied automatically
-- **Real-time:** WebSocket updates built-in
+This is **v0** of Zodula. APIs and storage formats may change and can cause breaking changes or data loss. Use for development and testing only and always keep backups for real data.

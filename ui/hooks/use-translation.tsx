@@ -76,7 +76,6 @@ export const useTranslation = (lang?: string) => {
 
     // Use translation store for translation data
     const { translations, setTranslations, getTranslation, setTranslation, deleteTranslation, translationCache, patternCache, isLoaded, languages, setLanguages } = useTranslationStore();
-
     // Use provided language or current language from store
     const activeLanguage = lang || currentLanguage;
 

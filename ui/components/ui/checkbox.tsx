@@ -12,11 +12,11 @@ const Checkbox = React.forwardRef<
   React.ElementRef<typeof CheckboxPrimitive.Root>,
   CheckboxProps
 >(({ className = "", label, description, ...props }, ref) => (
-  <div className="zd:flex zd:items-start zd:space-x-2">
+  <div className="zd:flex zd:space-x-2 zd:items-center">
     <CheckboxPrimitive.Root
       ref={ref}
       className={cn(
-        "zd:cursor-pointer zd:peer zd:h-4 zd:w-4 zd:shrink-0 zd:rounded-sm zd:border zd:border-gray-300 zd:ring-offset-white zd:focus-visible:outline-none zd:focus-visible:ring-2 zd:focus-visible:ring-gray-950 zd:focus-visible:ring-offset-2 zd:disabled:cursor-not-allowed zd:disabled:opacity-50 zd:data-[state=checked]:bg-primary zd:data-[state=checked]:text-primary-foreground zd:dark:border-gray-800 zd:dark:ring-offset-primary zd:dark:focus-visible:ring-gray-300 zd:dark:data-[state=checked]:bg-primary zd:dark:data-[state=checked]:text-primary-foreground",
+        "zd:cursor-pointer zd:peer zd:h-4 zd:w-4 zd:shrink-0 zd:rounded-sm zd:border zd:border-gray-300 zd:ring-offset-white zd:focus-visible:outline-none zd:focus-visible:ring-2 zd:focus-visible:ring-gray-950 zd:focus-visible:ring-offset-2 zd:disabled:cursor-not-allowed zd:disabled:opacity-50 zd:data-[state=checked]:bg-primary zd:data-[state=checked]:text-primary-foreground zd:dark:border-gray-800 zd:dark:ring-offset-primary zd:dark:focus-visible:ring-gray-300 zd:dark:data-[state=checked]:bg-primary zd:dark:data-[state=checked]:text-primary-foreground zd:mt-0! zd:mr-0!",
         className ?? ""
       )}
       {...props}
@@ -28,7 +28,7 @@ const Checkbox = React.forwardRef<
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
     {(label || description) && (
-      <div className="zd:grid zd:gap-1.5 zd:leading-none">
+      <div className="zd:grid zd:gap-1.5 zd:leading-none zd:ml-2">
         {label && (
           <label
             htmlFor={props.id}

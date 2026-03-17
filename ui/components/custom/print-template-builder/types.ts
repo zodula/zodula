@@ -14,9 +14,11 @@ export interface PrintTemplateBuilderItem {
   hide_no_value?: number | boolean | null;
   fields?: string | null; // JSON string for table columns (legacy)
   columns?: string | null; // JSON array of column field names for reference table
-  nested_field?: string | null; // Reference field on child rows (e.g. delivery_order)
+  nested_field?: string | null; // Reference field on child rows (e.g. delivery_note)
   nested_table_field?: string | null; // Field on nested doctype holding the child table (e.g. items)
+  nested_table_field_doctype?: string | null; // Doctype of nested table (override when schema cannot be loaded)
   nested_columns?: string | null; // JSON array of nested table column field names
+  height?: number | null; // Min height (px) for reference table in print
   table_config?: string | null; // JSON
   anchor_config?: string | null; // JSON
   transform_x?: number | null;

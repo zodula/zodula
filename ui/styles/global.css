@@ -146,7 +146,9 @@
     @apply zd:border-border;
 }
 
-html {}
+html {
+    font-size: 92.5%;
+}
 
 svg {
     @apply zd:w-3.5 zd:h-3.5;

@@ -24,7 +24,7 @@ import { useTranslation } from "@/zodula/ui/hooks/use-translation";
 import ErrorView from "@/zodula/ui/views/error-view";
 import { Button } from "@/zodula/ui/components/ui/button";
 import { useParams } from "react-router";
-import { Select } from "@/zodula/ui/components/ui/select";
+import { ViewSelector, getDoctypeViewOptions, type FieldLike } from "@/zodula/ui/components/view-selector";
 
 export default function DoctypeSheetPage() {
     const { params, push, replace, search, location } = useRouter()
@@ -261,16 +261,20 @@ export default function DoctypeSheetPage() {
             primaryAction={primaryActions}
             actions={selected.size > 0 ? actions : []}
             actionSection={
-                <Select
-                    options={[
-                        { label: t("List View"), value: "list" },
-                        { label: t("Sheet View"), value: "sheet" }
-                    ]}
-                    displayMode="label"
-                    value={location.pathname.includes("/sheet") ? "sheet" : "list"}
+                <ViewSelector
+                    views={getDoctypeViewOptions(t, fields as FieldLike[], doctype)}
+                    value={
+                        location.pathname.includes("/sheet")
+                            ? "sheet"
+                            : location.pathname.includes("/tree")
+                              ? "tree"
+                              : "list"
+                    }
                     onChange={(value) => {
                         if (value === "list") {
                             push(`/desk/${org}/doctypes/${doctype}/list${location.search}`);
+                        } else if (value === "tree") {
+                            push(`/desk/${org}/doctypes/${doctype}/tree${location.search}`);
                         } else {
                             push(`/desk/${org}/doctypes/${doctype}/sheet${location.search}`);
                         }

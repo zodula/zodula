@@ -23,6 +23,8 @@ type PromptOptions = {
   confirmText?: string
   cancelText?: string
   required?: boolean
+  /** Input type: "text" (default) or "password" for masked input */
+  type?: "text" | "password"
   validator?: (value: string) => string | null // returns error message or null
 }
 
@@ -57,10 +59,18 @@ const addDialog = (dialog: Omit<DialogItem, "id" | "createdAt">) => {
   const id = Math.random().toString(36).substr(2, 9)
   const newDialog: DialogItem = {
     ...dialog,
+    data: {
+      ...dialog.data,
+      showCloseButton: dialog.data?.showCloseButton ?? true,
+      options: {
+        ...dialog.data?.options,
+        width: dialog.data?.options?.width ?? "90vw",
+        maxWidth: dialog.data?.options?.maxWidth ?? "680px",
+      }
+    },
     id,
     createdAt: Date.now(),
   }
-
   dialogs = [...dialogs, newDialog]
   notifyListeners()
 
@@ -92,7 +102,7 @@ function AlertDialog({
               <DialogTitle className="zd:text-lg zd:font-semibold zd:text-foreground">
                 {title}
               </DialogTitle>
-              <DialogDescription className="zd:mt-2 zd:text-sm zd:text-muted-foreground">
+              <DialogDescription className="zd:mt-2 zd:whitespace-pre-line">
                 {message}
               </DialogDescription>
             </div>
@@ -139,6 +149,7 @@ function PromptDialog({
     confirmText = "OK",
     cancelText = "Cancel",
     required = false,
+    type: inputType = "text",
     validator
   } = dialog.data
 
@@ -188,7 +199,7 @@ function PromptDialog({
                 {title}
               </Dialog.Title>
               {message && (
-                <Dialog.Description className="zd:mt-2 zd:text-sm zd:text-muted-foreground">
+                <Dialog.Description className="zd:mt-2 zd:whitespace-pre-line">
                   {message}
                 </Dialog.Description>
               )}
@@ -203,6 +214,7 @@ function PromptDialog({
           </div>
           <div className="zd:mt-4">
             <Input
+              type={inputType}
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -256,7 +268,7 @@ function ConfirmDialog({
               <Dialog.Title className="zd:text-lg zd:font-semibold zd:text-foreground">
                 {title}
               </Dialog.Title>
-              <Dialog.Description className="zd:mt-2 zd:text-sm zd:text-muted-foreground zd:whitespace-pre-line">
+              <Dialog.Description className="zd:mt-2 zd:whitespace-pre-line">
                 {message}
               </Dialog.Description>
             </div>
@@ -330,7 +342,7 @@ function CustomDialog({
                   {showCloseButton && (
                     <Button
                       variant="ghost"
-                      onClick={onClose}
+                      onClick={() => onClose()}
                       className="zd:h-6 zd:w-6 zd:p-0"
                     >
                       <X className="zd:h-4 zd:w-4" />
@@ -339,7 +351,7 @@ function CustomDialog({
                 </div>
               )}
               {options?.description && (
-                <DialogDescription className="zd:mt-2 zd:text-sm zd:text-muted-foreground">
+                <DialogDescription className="zd:mt-2 zd:whitespace-pre-line">
                   {options.description}
                 </DialogDescription>
               )}

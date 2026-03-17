@@ -94,6 +94,10 @@ export class Zodula {
         return zodulaUtils
     }
 
+    get date() {
+        return zodulaUtils.zodulaDate; // from client/zodula-date.ts (shared with server)
+    }
+
     get realtime() {
         return new ZodulaClientRealtime(this.baseUrl)
     }

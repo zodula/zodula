@@ -107,8 +107,15 @@ export const WorkspaceView = () => {
                 id: "temp-workspace-item-" + Date.now(),
                 type: pluginType,
                 value: "",
-                options: "",
-                workspaceId: currentWorkspace.id
+                label: "",
+                url: "",
+                html: "",
+                text: "",
+                filters: "",
+                heading_level: "2",
+                parentid: currentWorkspace.id,
+                parentype: "Workspace",
+                parentfield: "workspace_items"
             }
             setSelectedItem(tempItem)
             setIsConfiguringNewItem(true)
@@ -198,8 +205,6 @@ export const WorkspaceView = () => {
                         </div>
                     )}
                     <plugin.render
-                        value={item.value}
-                        options={item.options}
                         item={item}
                         isEditing={isEditing}
                     />

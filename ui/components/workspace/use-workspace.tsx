@@ -12,8 +12,16 @@ export interface WorkspaceItem {
   idx?: number | null;
   type?: string | null;
   value?: string | null;
-  options?: string | null;
-  workspaceId: string;
+  label?: string | null;
+  url?: string | null;
+  html?: string | null;
+  text?: string | null;
+  filters?: string | null;
+  heading_level?: string | null;
+  badge_variant?: string | null;
+  parentid?: string | null;
+  parentype?: string | null;
+  parentfield?: string | null;
 }
 
 export interface WorkspaceWithChildren {
@@ -139,13 +147,15 @@ const buildHierarchicalWorkspaces = (
     });
   });
 
-  // Group workspace items by workspaceId
+  // Group workspace items by parentid (workspace id)
   const itemsByWorkspace = new Map<string, WorkspaceItem[]>();
   workspaceItems.forEach((item) => {
-    if (!itemsByWorkspace.has(item.workspaceId)) {
-      itemsByWorkspace.set(item.workspaceId, []);
+    const pid = item.parentid;
+    if (!pid) return;
+    if (!itemsByWorkspace.has(pid)) {
+      itemsByWorkspace.set(pid, []);
     }
-    itemsByWorkspace.get(item.workspaceId)!.push(item);
+    itemsByWorkspace.get(pid)!.push(item);
   });
 
   // Assign items to workspaces
@@ -282,9 +292,9 @@ const detectWorkspaceItemChanges = (
   const changes = {
     added: [] as WorkspaceItem[],
     updated: [] as WorkspaceItem[],
-    deleted: [] as { workspaceId: string; itemId: string }[],
+    deleted: [] as { parentid: string; itemId: string }[],
     reordered: [] as {
-      workspaceId: string;
+      parentid: string;
       itemId: string;
       newIdx: number | null;
       oldIdx: number | null;
@@ -323,7 +333,7 @@ const detectWorkspaceItemChanges = (
         // Check if idx changed (reordering)
         if (originalItem.idx !== editedItem.idx) {
           changes.reordered.push({
-            workspaceId,
+            parentid: workspaceId,
             itemId: editedItem.id,
             newIdx: editedItem.idx ?? null,
             oldIdx: originalItem.idx ?? null,
@@ -336,7 +346,7 @@ const detectWorkspaceItemChanges = (
     originalItems.forEach((originalItem) => {
       if (!editedMap.has(originalItem.id)) {
         changes.deleted.push({
-          workspaceId,
+          parentid: workspaceId,
           itemId: originalItem.id,
         });
       }
@@ -411,15 +421,10 @@ export const useWorkspaceEdit = create<
         workspacesByParent.get(parent)!.push(workspace);
       });
 
-      // Normalize idx values for each parent group
+      // Normalize idx values by array order (preserves user reorder; do not sort by old idx)
       const normalizedWorkspaces = new Map<string, typeof allEditedWorkspaces[0]>();
       workspacesByParent.forEach((workspaces, parent) => {
-        // Sort workspaces by their current idx values to maintain order
-        const sortedWorkspaces = [...workspaces].sort(
-          (a, b) => (a.idx || 0) - (b.idx || 0)
-        );
-        // Reassign idx values sequentially (0, 10, 20, 30, ...)
-        sortedWorkspaces.forEach((workspace, index) => {
+        workspaces.forEach((workspace, index) => {
           normalizedWorkspaces.set(workspace.id, {
             ...workspace,
             idx: index * 10,
@@ -470,16 +475,11 @@ export const useWorkspaceEdit = create<
         });
       });
 
-      // Normalize idx values for each workspace to ensure proper sorting
+      // Normalize idx by array order (preserves user reorder; do not sort by old idx)
       const normalizedItemsByWorkspace = new Map<string, WorkspaceItem[]>();
       for (const workspaceId of affectedWorkspaceIds) {
         const items = editedWorkspaceItems[workspaceId] || [];
-        // Sort items by their current idx values
-        const sortedItems = [...items].sort(
-          (a, b) => (a.idx || 0) - (b.idx || 0)
-        );
-        // Reassign idx values sequentially (0, 10, 20, 30, ...)
-        const normalizedItems = sortedItems.map((item, index) => ({
+        const normalizedItems = items.map((item, index) => ({
           ...item,
           idx: index * 10,
         }));
@@ -499,8 +499,16 @@ export const useWorkspaceEdit = create<
             idx: item.idx || 0,
             type: item.type || null,
             value: item.value || null,
-            options: item.options || null,
-            workspaceId: item.workspaceId,
+            label: item.label ?? null,
+            url: item.url ?? null,
+            html: item.html ?? null,
+            text: item.text ?? null,
+            filters: item.filters ?? null,
+            heading_level: item.heading_level ?? null,
+            badge_variant: item.badge_variant ?? null,
+            parentid: item.parentid ?? workspaceId,
+            parentype: item.parentype ?? "Workspace",
+            parentfield: item.parentfield ?? "workspace_items",
             _deleted: false,
           });
         });
@@ -518,18 +526,24 @@ export const useWorkspaceEdit = create<
         
         items.forEach((originalItem) => {
           if (isWorkspaceDeleted) {
-            // Workspace was deleted, mark all its items as deleted
             workspaceItemsToApply.push({
               id: originalItem.id,
               idx: originalItem.idx || 0,
               type: originalItem.type || null,
               value: originalItem.value || null,
-              options: originalItem.options || null,
-              workspaceId: originalItem.workspaceId,
+              label: originalItem.label ?? null,
+              url: originalItem.url ?? null,
+              html: originalItem.html ?? null,
+              text: originalItem.text ?? null,
+              filters: originalItem.filters ?? null,
+              heading_level: originalItem.heading_level ?? null,
+              badge_variant: originalItem.badge_variant ?? null,
+              parentid: originalItem.parentid ?? workspaceId,
+              parentype: originalItem.parentype ?? "Workspace",
+              parentfield: originalItem.parentfield ?? "workspace_items",
               _deleted: true,
             });
           } else {
-            // Workspace still exists, check if item was deleted
             const editedItems = normalizedItemsByWorkspace.get(workspaceId) || [];
             if (!editedItems.find((item) => item.id === originalItem.id)) {
               workspaceItemsToApply.push({
@@ -537,8 +551,16 @@ export const useWorkspaceEdit = create<
                 idx: originalItem.idx || 0,
                 type: originalItem.type || null,
                 value: originalItem.value || null,
-                options: originalItem.options || null,
-                workspaceId: originalItem.workspaceId,
+                label: originalItem.label ?? null,
+                url: originalItem.url ?? null,
+                html: originalItem.html ?? null,
+                text: originalItem.text ?? null,
+                filters: originalItem.filters ?? null,
+                heading_level: originalItem.heading_level ?? null,
+                badge_variant: originalItem.badge_variant ?? null,
+                parentid: originalItem.parentid ?? workspaceId,
+                parentype: originalItem.parentype ?? "Workspace",
+                parentfield: originalItem.parentfield ?? "workspace_items",
                 _deleted: true,
               });
             }
@@ -546,12 +568,24 @@ export const useWorkspaceEdit = create<
         });
       });
 
-      // Call the apply action with all workspaces and items
+      // Group items by parentid and attach to each workspace
+      const itemsByWorkspaceId = new Map<string, typeof workspaceItemsToApply>();
+      workspaceItemsToApply.forEach((item) => {
+        const pid = item.parentid ?? "";
+        if (!itemsByWorkspaceId.has(pid)) itemsByWorkspaceId.set(pid, []);
+        itemsByWorkspaceId.get(pid)!.push(item);
+      });
+
+      const workspacesWithItems = workspacesToApply.map((w) => ({
+        ...w,
+        workspace_items: (itemsByWorkspaceId.get(w.id) ?? []).map((i) => ({
+          ...i,
+          parentid: i.parentid ?? w.id ?? "",
+        })),
+      }));
+
       const result = await zodula.action("zodula.core.workspace.apply", {
-        data: {
-          workspaces: workspacesToApply,
-          workspaceItems: workspaceItemsToApply,
-        },
+        data: { workspaces: workspacesWithItems },
       });
 
       if (!result.success) {
@@ -561,10 +595,8 @@ export const useWorkspaceEdit = create<
       // Reset editing state and clear loading
       set({ isEditing: false, isSaving: false, saveError: null });
 
-      // Trigger reload of workspaces and workspace items
       const docListAllStore = useDocListAllStore.getState();
       docListAllStore.triggerReload("Workspace");
-      docListAllStore.triggerReload("Workspace Item");
     } catch (error) {
       console.error("Failed to save workspace changes:", error);
       const errorMessage =
@@ -585,11 +617,8 @@ export const useWorkspaceEdit = create<
       originalWorkspaceItems: {},
     });
 
-    // Trigger reload of workspaces and workspace items
-    // This ensures we have the latest data after discarding changes
     const docListAllStore = useDocListAllStore.getState();
     docListAllStore.triggerReload("Workspace");
-    docListAllStore.triggerReload("Workspace Item");
   },
 
   hasChanges: () => {
@@ -641,9 +670,8 @@ export const useWorkspaceEdit = create<
         saveError: null,
       });
 
-      // Refetch latest data from database directly
+      // Refetch latest data (Workspace includes workspace_items reference table)
       try {
-        // Fetch workspaces
         const workspacesResponse = await zodula.doc.select_docs(
           "Workspace",
           {
@@ -654,39 +682,24 @@ export const useWorkspaceEdit = create<
           }
         );
         const workspaces = workspacesResponse.docs || [];
+        const workspaceItems = workspaceItemsFromWorkspaces(workspaces);
 
-        // Fetch workspace items
-        const workspaceItemsResponse = await zodula.doc.select_docs(
-          "Workspace Item",
-          {
-            limit: 100000,
-            filters: [],
-            sort: "idx",
-            order: "asc",
-          }
-        );
-        const workspaceItems = workspaceItemsResponse.docs || [];
-
-        // Update the data store
         const dataStore = useWorkspaceDataStore.getState();
         dataStore.setWorkspaces(workspaces);
         dataStore.setWorkspaceItems(workspaceItems);
 
-        // Build hierarchical workspaces from fresh data
         const hierarchicalWorkspaces = buildHierarchicalWorkspaces(
           workspaces,
           workspaceItems
         );
 
-        // Initialize edit mode with fresh data
         const workspaceItemsMap: Record<string, WorkspaceItem[]> = {};
-
-        // Use the existing workspaceItems from the data store, grouped by workspaceId
         workspaceItems.forEach((item) => {
-          if (!workspaceItemsMap[item.workspaceId]) {
-            workspaceItemsMap[item.workspaceId] = [];
+          const pid = item.parentid ?? "";
+          if (!workspaceItemsMap[pid]) {
+            workspaceItemsMap[pid] = [];
           }
-          workspaceItemsMap[item.workspaceId]!.push(item);
+          workspaceItemsMap[pid]!.push(item);
         });
 
         set({
@@ -767,7 +780,12 @@ export const useWorkspaceEdit = create<
         (a, b) => (a.idx || 0) - (b.idx || 0)
       );
 
-      let newItem = { ...item, workspaceId };
+      let newItem: WorkspaceItem = {
+        ...item,
+        parentid: workspaceId,
+        parentype: "Workspace",
+        parentfield: "workspace_items",
+      };
 
       // Calculate idx if not provided - insert at the end
       if (newItem.idx === undefined || newItem.idx === null) {
@@ -1167,11 +1185,28 @@ export const useWorkspaceEdit = create<
   },
 }));
 
+// Derive flat workspace items from workspaces (each workspace has workspace_items reference table)
+function workspaceItemsFromWorkspaces(
+  workspaces: Array<{ id?: string; workspace_items?: unknown[] | null }>
+): WorkspaceItem[] {
+  return workspaces.flatMap((w) =>
+    (w.workspace_items ?? []).map((i) => {
+      const row = i as Record<string, unknown>;
+      return {
+        ...row,
+        parentid: (row.parentid as string) ?? w.id ?? "",
+        parentype: (row.parentype as string) ?? "Workspace",
+        parentfield: (row.parentfield as string) ?? "workspace_items",
+      } as WorkspaceItem;
+    })
+  );
+}
+
 export const useWorkspace = () => {
   const { selectedWorkspace, setSelectedWorkspace } = useWorkspaceStore();
   const { organization } = useOrganization();
 
-  // Fetch all workspaces and workspace items with persistent caching
+  // Fetch workspaces only; each doc includes workspace_items (reference table)
   const {
     docs: allWorkspaces,
     loading: workspacesLoading,
@@ -1181,48 +1216,27 @@ export const useWorkspace = () => {
     doctype: "Workspace",
   });
 
-  const {
-    docs: allWorkspaceItems,
-    loading: itemsLoading,
-    error: itemsError,
-    reload: reloadWorkspaceItems,
-  } = useDocListAll({
-    doctype: "Workspace Item",
-  });
-
   // Filter and sort workspaces based on organization
-  // is_system workspaces should only show in System Organization
   const workspaces = useMemo(() => {
     const isSystemOrg = organization?.id === "System Panel";
-    
     const filtered = allWorkspaces.filter((workspace) => {
-      // If workspace is system, only show in System Organization
-      if (workspace.is_system === 1) {
-        return isSystemOrg;
-      }
-      // Non-system workspaces show in all organizations
+      if (workspace.is_system === 1) return isSystemOrg;
       return true;
     });
-    
     return filtered.sort((a, b) => (a.idx || 0) - (b.idx || 0));
   }, [allWorkspaces, organization]);
 
-  // Filter workspace items to only include items from visible workspaces
+  // Derive workspace items from workspaces (workspace_items on each workspace)
   const workspaceItems = useMemo(() => {
-    const visibleWorkspaceIds = new Set(workspaces.map((w) => w.id));
-    const filtered = allWorkspaceItems.filter((item) =>
-      visibleWorkspaceIds.has(item.workspaceId)
-    );
-    return filtered.sort((a, b) => (a.idx || 0) - (b.idx || 0));
-  }, [allWorkspaceItems, workspaces]);
+    const items = workspaceItemsFromWorkspaces(workspaces);
+    return items.sort((a, b) => (a.idx || 0) - (b.idx || 0));
+  }, [workspaces]);
 
-  const isLoading = workspacesLoading || itemsLoading;
-  const error = workspacesError || itemsError;
+  const isLoading = workspacesLoading;
+  const error = workspacesError;
 
-  // Reload all function
   const reloadAll = () => {
     reloadWorkspaces();
-    reloadWorkspaceItems();
   };
 
   // Restore selected workspace from localStorage when workspaces are loaded
@@ -1255,7 +1269,7 @@ export const useWorkspace = () => {
 
   // Helper function to get workspace items for a specific workspace
   const getWorkspaceItems = (workspaceId: string) => {
-    return workspaceItems.filter((item) => item.workspaceId === workspaceId);
+    return workspaceItems.filter((item) => item.parentid === workspaceId);
   };
 
   return {
@@ -1267,7 +1281,7 @@ export const useWorkspace = () => {
     isLoading,
     error,
     reloadWorkspaces,
-    reloadWorkspaceItems,
+    reloadWorkspaceItems: reloadWorkspaces,
     reloadAll,
     getWorkspaceItems,
   };

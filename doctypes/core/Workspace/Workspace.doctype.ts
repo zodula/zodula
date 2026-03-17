@@ -1,15 +1,11 @@
 export default $doctype<"Workspace">({
-    name: $f.Data({
+    name: {
+        type: "Data",
         label: "Name",
         required: 1
-    }),
-    idx: {
-        type: "Integer",
-        label: "Idx",
-        default: "0"
     },
     workspace_parent: {
-        type: "Virtual Reference",
+        type: "Reference",
         label: "Workspace Parent",
         reference: "Workspace"
     },
@@ -37,5 +33,6 @@ export default $doctype<"Workspace">({
 }, {
     label: "Workspace",
     is_global: 1,
+    display_field: "name",
+    search_fields: "name",
 })
-

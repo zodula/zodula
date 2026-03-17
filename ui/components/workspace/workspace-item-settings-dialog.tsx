@@ -4,6 +4,7 @@ import { Button } from "../ui/button"
 import { Dialog, DialogContent, DialogTitle } from "../ui/dialog"
 import type { WorkspaceItem } from "./use-workspace"
 import { workspaceItemPlugins } from "../workspace-item"
+import { Input } from "../ui/input"
 
 interface WorkspaceItemSettingsDialogProps {
     item: WorkspaceItem | null
@@ -13,10 +14,10 @@ interface WorkspaceItemSettingsDialogProps {
     isConfiguringNewItem?: boolean
 }
 
-export const WorkspaceItemSettingsDialog = ({ 
-    item, 
-    isOpen, 
-    onClose, 
+export const WorkspaceItemSettingsDialog = ({
+    item,
+    isOpen,
+    onClose,
     onApply,
     isConfiguringNewItem = false
 }: WorkspaceItemSettingsDialogProps) => {
@@ -49,6 +50,10 @@ export const WorkspaceItemSettingsDialog = ({
         }
     }
 
+    const EditValueComponent = plugin.renderEditValue || (() => <Input value={editedItem.value || ""} onChange={(e) => handleValueChange('value', e.target.value)} />)
+
+    const EditOptionsComponent = plugin.renderEditOptions || (() => null)
+
     return (
         <Dialog open={isOpen} onClose={onClose}>
             <div className="zd:fixed zd:inset-0 zd:z-50 zd:flex zd:items-center zd:justify-center">
@@ -58,36 +63,22 @@ export const WorkspaceItemSettingsDialog = ({
                         <DialogTitle className="zd:mb-4">
                             {isConfiguringNewItem ? `Add ${plugin.options.name}` : `Edit ${plugin.options.name}`}
                         </DialogTitle>
-                        
+
                         <div className="zd:space-y-4">
-                            {/* Value field */}
+                            {/* Main value / type-specific primary field */}
                             {plugin.renderEditValue && (
-                                <FormControl
-                                    label="Value"
-                                    fieldKey="value"
-                                    value={editedItem.value}
+                                <EditValueComponent
+                                    item={editedItem}
                                     onChange={handleValueChange}
-                                >
-                                    {plugin.renderEditValue({
-                                        value: editedItem.value,
-                                        onChange: (newValue: any) => handleValueChange('value', newValue)
-                                    })}
-                                </FormControl>
+                                />
                             )}
 
-                            {/* Options field */}
+                            {/* Type-specific extra fields (label, url, heading_level, etc.) */}
                             {plugin.renderEditOptions && (
-                                <FormControl
-                                    label="Options"
-                                    fieldKey="options"
-                                    value={editedItem.options}
+                                <EditOptionsComponent
+                                    item={editedItem}
                                     onChange={handleValueChange}
-                                >
-                                    {plugin.renderEditOptions({
-                                        value: editedItem.options,
-                                        onChange: (newValue: any) => handleValueChange('options', newValue)
-                                    })}
-                                </FormControl>
+                                />
                             )}
                         </div>
 

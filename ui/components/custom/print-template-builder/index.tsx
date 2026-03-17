@@ -78,6 +78,7 @@ function TableColumnsConfigPopup({
   const [selectedColumns, setSelectedColumns] = useState<string[]>(() => parseJsonArray(item?.columns ?? item?.fields));
   const [nestedField, setNestedField] = useState<string | null>(item?.nested_field ?? null);
   const [nestedTableField, setNestedTableField] = useState<string | null>(item?.nested_table_field ?? null);
+  const [nestedTableFieldDoctype, setNestedTableFieldDoctype] = useState<string | null>(item?.nested_table_field_doctype ?? null);
   const [selectedNestedColumns, setSelectedNestedColumns] = useState<string[]>(() => parseJsonArray(item?.nested_columns));
 
   const nestedRefField = useMemo(() => {
@@ -101,7 +102,7 @@ function TableColumnsConfigPopup({
     return (allFields as any[]).find((f: any) => f.doctype === nestedDoctype && f.name === fieldName);
   }, [nestedDoctype, nestedTableField, item?.nested_table_field, allFields]);
 
-  const nestedChildDoctype = (resolvedNestedTableField as any)?.reference ?? null;
+  const nestedChildDoctype = (nestedTableFieldDoctype ?? item?.nested_table_field_doctype) ?? (resolvedNestedTableField as any)?.reference ?? null;
 
   const nestedColumnFields = useMemo(() => {
     if (!nestedChildDoctype) return [];
@@ -115,8 +116,9 @@ function TableColumnsConfigPopup({
     setSelectedColumns(parseJsonArray(item?.columns ?? item?.fields));
     setNestedField(item?.nested_field ?? null);
     setNestedTableField(item?.nested_table_field ?? null);
+    setNestedTableFieldDoctype(item?.nested_table_field_doctype ?? null);
     setSelectedNestedColumns(parseJsonArray(item?.nested_columns));
-  }, [item?.id, item?.columns, item?.fields, item?.nested_field, item?.nested_table_field, item?.nested_columns]);
+  }, [item?.id, item?.columns, item?.fields, item?.nested_field, item?.nested_table_field, item?.nested_table_field_doctype, item?.nested_columns]);
 
   const toggleColumn = (name: string) => {
     setSelectedColumns((prev) =>
@@ -136,6 +138,7 @@ function TableColumnsConfigPopup({
       columns: selectedColumns.length ? JSON.stringify(selectedColumns) : null,
       nested_field: nestedField || null,
       nested_table_field: nestedTableField || null,
+      nested_table_field_doctype: nestedTableFieldDoctype || null,
       nested_columns: selectedNestedColumns.length ? JSON.stringify(selectedNestedColumns) : null,
     });
     onClose();
@@ -172,11 +175,11 @@ function TableColumnsConfigPopup({
           })}
         </div>
       </FormControl>
-      <FormControl label={t("Nested field")} fieldKey="nested_field" helperText={t("Reference on each row (e.g. delivery_order). Nested rows render below each main row.")}>
+      <FormControl label={t("Nested field")} fieldKey="nested_field" helperText={t("Reference on each row (e.g. delivery_note). Nested rows render below each main row.")}>
         <Select
           options={[{ value: "", label: t("— None —") }, ...nestedFieldOptions]}
           value={nestedField ?? ""}
-          onChange={(v) => { setNestedField(v || null); setNestedTableField(null); setSelectedNestedColumns([]); }}
+          onChange={(v) => { setNestedField(v || null); setNestedTableField(null); setNestedTableFieldDoctype(null); setSelectedNestedColumns([]); }}
           className="zd:w-full"
         />
       </FormControl>
@@ -190,8 +193,28 @@ function TableColumnsConfigPopup({
           />
         </FormControl>
       )}
+      {nestedDoctype && nestedTableFieldOptions.length === 0 && (
+        <>
+          <FormControl label={t("Nested table field")} fieldKey="nested_table_field_manual" helperText={t("When schema cannot be loaded, enter the field name (e.g. items).")}>
+            <Input
+              value={nestedTableField ?? ""}
+              onChange={(e) => { setNestedTableField(e.target.value || null); setSelectedNestedColumns([]); }}
+              placeholder={t("e.g. items")}
+              className="zd:w-full"
+            />
+          </FormControl>
+          <FormControl label={t("Nested table field doctype")} fieldKey="nested_table_field_doctype" helperText={t("Doctype of the nested table (e.g. Delivery Note Item).")}>
+            <Input
+              value={nestedTableFieldDoctype ?? ""}
+              onChange={(e) => setNestedTableFieldDoctype(e.target.value || null)}
+              placeholder={t("e.g. Delivery Note Item")}
+              className="zd:w-full"
+            />
+          </FormControl>
+        </>
+      )}
       {(nestedTableField || item?.nested_table_field) && nestedChildDoctype && nestedColumnFields.length > 0 && (
-        <FormControl label={t("Nested columns")} fieldKey="nested_columns" helperText={t("Columns from nested table (e.g. delivery_order_items), extended to the right.")}>
+        <FormControl label={t("Nested columns")} fieldKey="nested_columns" helperText={t("Columns from nested table (e.g. delivery_note_items), extended to the right.")}>
           <div className="zd:max-h-48 zd:overflow-auto zd:border zd:rounded-md zd:p-2 zd:space-y-1">
             {nestedColumnFields.map((f: any) => {
               const isSelected = selectedNestedColumns.includes(f.name);
@@ -242,9 +265,11 @@ function FieldConfigPopup({
 }) {
   const { t } = useTranslation();
   const { item, onApply, onRemove } = initialData ?? { item: null as any, onApply: () => {} };
+  const isRefTable = item?.type === "field" && (item?.fields != null || item?.columns != null);
   const [label, setLabel] = React.useState(item?.label ?? "");
   const [hideNoValue, setHideNoValue] = React.useState(!!item?.hide_no_value);
   const [align, setAlign] = React.useState(item?.align ?? "left");
+  const [height, setHeight] = React.useState<number | "">(item?.height != null ? Number(item.height) : "");
   const [templateValue, setTemplateValue] = React.useState(item?.type === "custom_html" ? (item.value ?? "") : "");
   const isCustomHtml = item?.type === "custom_html";
   React.useEffect(() => {
@@ -252,6 +277,7 @@ function FieldConfigPopup({
       setLabel(item.label ?? "");
       setHideNoValue(!!item.hide_no_value);
       setAlign(item.align ?? "left");
+      setHeight(item.height != null ? Number(item.height) : "");
       if (item.type === "custom_html") setTemplateValue(item.value ?? "");
     }
   }, [item?.id, item?.type]);
@@ -263,6 +289,7 @@ function FieldConfigPopup({
       align: align || "left",
     };
     if (isCustomHtml) patch.value = templateValue;
+    if (isRefTable) patch.height = height === "" ? null : Number(height);
     onApply(patch);
     onClose();
   };
@@ -298,6 +325,18 @@ function FieldConfigPopup({
           className="zd:h-4 zd:w-4 zd:rounded zd:border-input"
         />
       </FormControl>
+      {isRefTable && (
+        <FormControl label={t("Min height (px)")} fieldKey="height" helperText={t("Minimum height for this table in PDF/print.")}>
+          <Input
+            type="number"
+            min={0}
+            value={height === "" ? "" : height}
+            onChange={(e) => setHeight(e.target.value === "" ? "" : Number(e.target.value))}
+            className="zd:w-full"
+            placeholder="e.g. 200"
+          />
+        </FormControl>
+      )}
       <div className="zd:flex zd:flex-wrap zd:justify-end zd:gap-2">
         {onRemove && (
           <Button type="button" variant="outline" className="zd:text-destructive" onClick={() => { onRemove(); onClose(); }}>
@@ -320,7 +359,9 @@ function toWorkspaceItem(item: PrintTemplateBuilderItem, index: number): Workspa
     id: item.id,
     type: item.type || "field",
     value: item.value ?? null,
-    workspaceId: CANVAS_WORKSPACE_ID,
+    parentid: CANVAS_WORKSPACE_ID,
+    parentype: "Workspace",
+    parentfield: "workspace_items",
     idx: index,
   };
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { Button } from "../ui/button";
 import { Select, type SelectOption } from "../ui/select";
 import { Input } from "../ui/input";
@@ -49,6 +49,8 @@ export interface FilterContentProps {
   showBorderTop?: boolean;
   /** When true, apply filters on every change (no Apply button); parent should sync from onFiltersChange */
   applyImmediately?: boolean;
+  /** Optional class for the root container (e.g. zd:w-full for full width in dialogs) */
+  className?: string;
 }
 
 export function FilterContent({
@@ -62,6 +64,7 @@ export function FilterContent({
   addLabel,
   showBorderTop = true,
   applyImmediately = false,
+  className,
 }: FilterContentProps) {
   const { t } = useTranslation();
 
@@ -147,7 +150,11 @@ export function FilterContent({
       : []
   );
 
+  const lastSyncedFiltersRef = useRef<string>(JSON.stringify(filters ?? []));
   useEffect(() => {
+    const key = JSON.stringify(filters ?? []);
+    if (key === lastSyncedFiltersRef.current) return;
+    lastSyncedFiltersRef.current = key;
     if (filters?.length) {
       setFilterRows(
         filters.map((f, i) => ({ id: String(i + 1), field: (f[0] as string) ?? "", operator: f[1], value: String(f[2] ?? "") }))
@@ -155,7 +162,7 @@ export function FilterContent({
     } else {
       setFilterRows([]);
     }
-  }, [filters?.length, filters]);
+  }, [filters]);
 
   const addFilterRow = () => {
     setFilterRows((prev) => [...prev, { id: String(Date.now()), field: "", operator: "=", value: "" }]);
@@ -205,10 +212,15 @@ export function FilterContent({
     onClearFilters?.();
   };
 
+  const lastEmittedRef = useRef<string>("");
   useEffect(() => {
     const valid = buildValidFilters();
-    onFiltersChange?.(valid);
-    if (applyImmediately) onApplyFilters?.(valid);
+    const key = JSON.stringify(valid);
+    if (key !== lastEmittedRef.current) {
+      lastEmittedRef.current = key;
+      onFiltersChange?.(valid);
+      if (applyImmediately) onApplyFilters?.(valid);
+    }
   }, [filterRows, applyImmediately]);
 
   const getValueInputType = (operator: IOperator) =>
@@ -217,10 +229,10 @@ export function FilterContent({
     ["IN", "NOT IN"].includes(operator) ? "comma-separated values" : ["LIKE", "NOT LIKE"].includes(operator) ? "use % as wildcard" : "value";
 
   return (
-    <div className="zd:space-y-4">
-      <div className="zd:space-y-3 zd:min-h-[24px]">
+    <div className={cn("zd:space-y-4 zd:w-full zd:min-w-0", className)}>
+      <div className="zd:space-y-3 zd:min-h-[24px] zd:w-full zd:min-w-0">
         {filterRows.map((row) => (
-          <div key={row.id} className="zd:flex zd:items-center zd:gap-2">
+          <div key={row.id} className="zd:flex zd:items-center zd:gap-2 zd:w-full zd:min-w-0">
             <Select
               displayMode="label"
               options={fieldOptions}
@@ -230,17 +242,18 @@ export function FilterContent({
                 const newOperator = (supportedOps.find((op) => op.value === row.operator)?.value || supportedOps[0]?.value || "=") as IOperator;
                 updateFilterRow(row.id, { field: value, operator: newOperator });
               }}
-              className="zd:w-80"
+              className="zd:shrink-0 zd:w-[180px]"
             />
             <Select
               displayMode="label"
               options={getSupportedOperators(row.field).map((op) => ({ value: op.value, label: op.value, subtitle: op.label }))}
               value={row.operator}
               onChange={(value) => updateFilterRow(row.id, { operator: value as IOperator })}
-              className={cn(["IS NULL", "IS NOT NULL"].includes(row.operator) ? "zd:w-full" : "zd:w-24")}
+              className="zd:shrink-0 zd:w-24"
             />
             {getValueInputType(row.operator) !== "hidden" &&
               (() => {
+                const valueCellClass = "zd:flex-1 zd:min-w-0 zd:max-w-none";
                 if (isReferenceTableCountField(row.field)) {
                   return (
                     <Input
@@ -249,7 +262,7 @@ export function FilterContent({
                       placeholder="0"
                       value={row.value}
                       onChange={(e) => updateFilterRow(row.id, { value: e.target.value })}
-                      className="zd:flex-1"
+                      className={valueCellClass}
                     />
                   );
                 }
@@ -260,12 +273,15 @@ export function FilterContent({
                 const plugin = field ? getFieldPlugin(row.field) : null;
                 if (plugin && field) {
                   return (
-                    <plugin.renderFilter
-                      fieldOptions={field}
-                      value={row.value}
-                      onChange={(value) => updateFilterRow(row.id, { value })}
-                      operator={row.operator}
-                    />
+                    <div className={valueCellClass}>
+                      <plugin.renderFilter
+                        fieldOptions={field}
+                        value={row.value}
+                        onChange={(_fieldPath, value) => updateFilterRow(row.id, { value })}
+                        operator={row.operator}
+                        fieldPath={row.field}
+                      />
+                    </div>
                   );
                 }
                 return (
@@ -274,17 +290,17 @@ export function FilterContent({
                     placeholder={getValuePlaceholder(row.operator)}
                     value={row.value}
                     onChange={(e) => updateFilterRow(row.id, { value: e.target.value })}
-                    className="zd:flex-1"
+                    className={valueCellClass}
                   />
                 );
               })()}
-            <Button variant="ghost" onClick={() => removeFilterRow(row.id)} className="h-8 w-8 p-0">
+            <Button variant="ghost" onClick={() => removeFilterRow(row.id)} className="zd:shrink-0 h-8 w-8 p-0">
               <FilterXIcon />
             </Button>
           </div>
         ))}
       </div>
-      <div className={cn("zd:flex zd:items-center zd:justify-between zd:gap-2", showBorderTop && "zd:pt-2 zd:border-t")}>
+      <div className={cn("zd:flex zd:items-center zd:justify-between zd:gap-2 zd:w-full", showBorderTop && "zd:pt-2 zd:border-t")}>
         <Button variant="ghost" onClick={addFilterRow}>
           + {addLabel ?? t("Add")}
         </Button>

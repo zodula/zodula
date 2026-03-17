@@ -3,6 +3,7 @@ import { Info } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { plugins } from "../form/plugins";
 import { Tooltip } from "./tooltip";
+import { Button } from "./button";
 
 export interface FormControlProps {
   label?: string;
@@ -33,10 +34,12 @@ export interface FormControlProps {
   fieldPath?: string; // The nested field path for reference table fields
   showDescription?: boolean;
   org?: string;
-  childExtendFieldPropertyOverrides?: Record<string, Record<string, Record<string, any>>>; // Child Extend field property overrides
-  childTableFieldPropertyOverrides?: Record<string, Record<number, Record<string, Record<string, any>>>>; // Child Reference Table field property overrides
-  parentContext?: any; // Parent form context
-  onNestedFieldChange?: (nestedFieldPath: string, value: any, oldValue: any, idx?: number) => Promise<void>; // Handler for nested field changes
+
+  referenceTableFields?: Record<string, any>;
+  extendFields?: Record<string, any>;
+  referenceTableIndexFields?: Record<string, { idx: number, fields: Zodula.SelectDoctype<"Field">[]}[]>;
+  /** Buttons to render next to the field label (e.g. "Select Price"). */
+  fieldButtons?: { label: string; run: () => void | Promise<void> }[];
 }
 
 const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
@@ -64,70 +67,69 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
       fieldPath,
       showDescription = true,
       org,
-      childExtendFieldPropertyOverrides,
-      childTableFieldPropertyOverrides,
-      parentContext,
-      onNestedFieldChange,
+      referenceTableFields,
+      referenceTableIndexFields,
+      extendFields,
       doctype,
       placeholder,
+      fieldButtons,
     },
     ref
   ) => {
     // If field is provided, render the field plugin
     const fieldContent = field
       ? (() => {
-          const plugin = plugins.find((plugin) =>
-            plugin.types.find((type) => type === field.type)
-          ) as any;
+        const plugin = plugins.find((plugin) =>
+          plugin.types.find((type) => type === field.type)
+        ) as any;
 
-          if (!plugin) {
-            return <div>Field not supported: {field.type}</div>;
-          }
+        if (!plugin) {
+          return <div>Field not supported: {field.type}</div>;
+        }
 
-          return (
-            <div
-              id={id || `form-control-${fieldKey}`}
-              data-form-control-type={field.type}
-              data-form-control-id={fieldKey}
-              data-form-control-value={value}
-              data-form-control-readonly={readonly}
-              data-form-control-required={required}
-              data-form-control-multiple={multiple}
-              data-form-control-form-data={formData}
-              data-form-control-no-print={noPrint}
-            >
-              <plugin.render
-                id={id || fieldKey}
-                fieldOptions={field}
-                value={value}
-                multiple={multiple}
-                fieldKey={fieldKey}
-                onChange={(newValue: any) => {
-                  // Don't allow changes if field is readonly
-                  if (!readonly && onChange && fieldKey) {
-                    onChange(fieldKey, newValue);
-                  }
-                }}
-                onBlur={(newValue: any) => {
-                  if (onBlur && fieldKey) {
-                    onBlur(fieldKey, newValue);
-                  }
-                }}
-                readonly={readonly}
-                formData={formData}
-                fieldPath={fieldPath}
-                docId={docId}
-                org={org}
-                childExtendFieldPropertyOverrides={childExtendFieldPropertyOverrides}
-                childTableFieldPropertyOverrides={childTableFieldPropertyOverrides}
-                parentContext={parentContext}
-                onNestedFieldChange={onNestedFieldChange}
-                doctype={doctype}
-                placeholder={placeholder}
-              />
-            </div>
-          );
-        })()
+        return (
+          <div
+            id={id || `form-control-${fieldKey}`}
+            data-form-control-type={field.type}
+            data-form-control-id={fieldKey}
+            data-form-control-value={value}
+            data-form-control-readonly={readonly}
+            data-form-control-required={required}
+            data-form-control-multiple={multiple}
+            data-form-control-form-data={formData}
+            data-form-control-no-print={noPrint}
+          >
+            <plugin.render
+              id={id || fieldKey}
+              fieldOptions={field}
+              value={value}
+              multiple={multiple}
+              fieldKey={fieldKey}
+              onChange={(fieldPath: string, newValue: any) => {
+                // Don't allow changes if field is readonly
+                if (!readonly && onChange && fieldKey) {
+                  onChange(fieldPath || fieldKey, newValue);
+                }
+              }}
+              onBlur={(fieldPath: string, newValue: any) => {
+                if (onBlur && fieldKey) {
+                  onBlur(fieldPath, newValue);
+                }
+              }}
+              readonly={readonly}
+              formData={formData}
+              fieldPath={fieldPath}
+              docId={docId}
+              org={org}
+              referenceTableFields={referenceTableFields}
+              extendFields={extendFields}
+              referenceTableIndexFields={referenceTableIndexFields}
+              doctype={doctype}
+              placeholder={placeholder}
+            />
+          </div>
+        );
+      })()
       : children;
 
     // If hideFormControl is true, just return the field content
@@ -145,7 +147,7 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
         ref={ref}
       >
         {label && (
-          <div className="zd:font-medium zd:flex zd:items-center zd:gap-1.5 zd:mb-2 zd:text-sm">
+          <div className="zd:font-medium zd:flex zd:items-center zd:gap-1.5 zd:mb-2 zd:text-sm zd:flex-wrap">
             <label className="zd:text-muted-foreground zd:flex zd:items-center zd:whitespace-nowrap">
               {label}
               {!!required && (
@@ -159,6 +161,18 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
                 </span>
               </Tooltip>
             )}
+            {fieldButtons?.map((btn, i) => (
+              <Button
+                key={i}
+                type="button"
+                variant="outline"
+                size="sm"
+                className="zd:ml-1 no-print"
+                onClick={() => btn.run()}
+              >
+                {btn.label}
+              </Button>
+            ))}
           </div>
         )}
 

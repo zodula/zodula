@@ -9,10 +9,12 @@ import ErrorView from "../views/error-view";
 import LoadingView from "../views/loading-view";
 import { zodula, setOrganizationGetter } from "@/zodula/client/zodula";
 import { getOrganizationId } from "../hooks/use-organization";
-import { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import type { GenerateMetadata } from "../components/metadata";
 import { useOrganizationStore } from "../hooks/use-organization";
 import { useDoc } from "../hooks/use-doc";
+import { ErrorBoundary } from "../components/custom/error-boundary";
+import { OnboardingChecklistBox } from "../components/onboarding/OnboardingChecklistBox";
 
 export const generateMetadata: GenerateMetadata = async (ctx) => {
     return {
@@ -143,15 +145,16 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     if (router.pathname.startsWith("/desk") && process.env.ZODULA_PUBLIC_DISABLE_ADMIN === "true") {
         return <ErrorView message="Admin is disabled" status={404} />
     }
-    if(router.pathname.startsWith("/desk/") && !organization?.id) {
+    if (router.pathname.startsWith("/desk/") && !organization?.id) {
         return <ErrorView message="Organization is not found, please select an organization" status={404} />
     }
     if ((!isAuthenticated || !user) && router.pathname.startsWith("/desk")) {
         return <AuthErrorView message="Authentication required" />
     }
-    return <div>
+    return <ErrorBoundary>
         {children}
+        {router.pathname.startsWith("/desk/") && <OnboardingChecklistBox />}
         <ToastPortal />
         <DialogPortal />
-    </div>
+    </ErrorBoundary>
 }

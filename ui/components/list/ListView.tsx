@@ -21,7 +21,8 @@ import { ClientFieldHelper } from "@/zodula/client/field";
 import { plugins } from "../form/plugins";
 import { useTranslation } from "../../hooks/use-translation";
 import { useColumnSettings } from "../../hooks/use-column-settings";
-import { useUIScriptStore } from "../../zui";
+import { Badge, useZui } from "@/zodula/ui";
+import type { ListFormatBadgeConfig } from "../../zui";
 
 interface ListViewProps {
   doctype: string;
@@ -83,9 +84,11 @@ export function ListView({
     id: doctype,
   });
 
+  const zui = useZui();
   const [hasActiveFilter, setHasActiveFilter] = useState(false);
   const [searchInput, setSearchInput] = useState(searchQuery);
   const [filterPopupOpen, setFilterPopupOpen] = useState(false);
+  const emptyFilters = useMemo(() => [] as IFilter<any, any, IOperator>[], []);
 
   // Update search input when searchQuery prop changes
   useEffect(() => {
@@ -122,7 +125,7 @@ export function ListView({
       label: t("ID"),
       sortable: true,
       render: (doc: any) => {
-        return doc.organization === "System Panel" ? <span className="zd:underline">{doc.id}</span> : <span className="">{doc.id}</span>;
+        return doc.doc_organization === "System Panel" ? <span className="zd:underline">{doc.id}</span> : <span className="">{doc.id}</span>;
       },
     });
 
@@ -156,7 +159,7 @@ export function ListView({
       const { DocStatusBadge } = require("../custom/doc-status-badge");
       cols.push({
         key: "doc_status",
-        label: t("Status"),
+        label: t("Document Status"),
         sortable: true,
         render: (doc: any) => {
           // Default: show doc_status badge
@@ -314,40 +317,27 @@ export function ListView({
       }
     }
   };
-  // Execute list scripts for on_format event
   const customRenderers = useRef<Record<string, (doc: any) => React.ReactNode>>({});
-  const badgeConfigs = useRef<Record<string, { variant?: string; size?: string; getValue?: (doc: any) => any }>>({});
+  const badgeConfigs = useRef<Record<string, ListFormatBadgeConfig>>({});
 
   useEffect(() => {
-    const store = useUIScriptStore.getState();
-    // Execute on_format events to allow scripts to customize column rendering
-    const executeFormatScripts = async () => {
-      const context = {
+    async function executeFormatScripts() {
+      customRenderers.current = {};
+      badgeConfigs.current = {};
+      await zui._.executeListScripts(doctype as any, "on_format", {
         doctype,
-        listData: docs,
-        selectedRows: selected,
-        setSelectedRows: setSelected,
-        refreshList: () => {
-          // Trigger a refresh - this would need to be passed from parent
-          console.log('refreshList called');
+        list_data: docs,
+        selected_rows: selected,
+        set_selected_rows: setSelected,
+        set_badge_config: (fieldKey, config) => {
+          badgeConfigs.current[fieldKey] = config;
         },
-        addColumn: (column: { key: string; label: string; render?: (doc: any) => React.ReactNode }) => {
-          // This would add a custom column - for now we'll store renderers
-          if (column.render) {
-            customRenderers.current[column.key] = column.render;
-          }
+        set_custom_renderer: (fieldKey, render) => {
+          customRenderers.current[fieldKey] = render;
         },
-        addBadge: (fieldName: string, config: { variant?: string; size?: string; getValue?: (doc: any) => any }) => {
-          badgeConfigs.current[fieldName] = config;
-        }
-      };
-
-      await store.executeScripts(doctype as any, 'on_format', context);
-    };
-
-    if (docs.length > 0) {
-      executeFormatScripts();
+      });
     }
+    executeFormatScripts();
   }, [doctype, docs, selected, setSelected]);
 
   const _columns = useMemo(() => {
@@ -364,15 +354,13 @@ export function ListView({
             ...col,
             label: t(col.label || col.key || ""),
             render: (doc: any) => {
-              const valueOrObj = badgeConfig.getValue ? badgeConfig.getValue(doc) : doc[String(col.key)];
+              const valueOrObj = badgeConfig.getValue ? badgeConfig.getValue(doc, t) : doc[String(col.key)];
 
               // If getValue returns null, fall back to default column renderer
               if (valueOrObj === null) {
                 return col.render ? col.render(doc) : doc[String(col.key)];
               }
 
-              // Handle both string values and objects with status/variant
-              const Badge = require("../ui/badge").Badge;
               const displayValue = typeof valueOrObj === 'object' && valueOrObj !== null ? valueOrObj.status : valueOrObj;
               const variant = typeof valueOrObj === 'object' && valueOrObj !== null ? valueOrObj.variant : badgeConfig.variant;
               return (
@@ -402,7 +390,7 @@ export function ListView({
 
   const searchFieldsLabels = useMemo(() => {
     const searchFields = doctypeDoc?.search_fields?.split("\n");
-    if(!searchFields) return [];
+    if (!searchFields) return [];
     return searchFields.map((field: string) => {
       const fieldInfo = fields.find((f: any) => f.name === field);
       return fieldInfo ? t(fieldInfo.label || fieldInfo.name || field) : field;
@@ -419,7 +407,7 @@ export function ListView({
         onSortChange={onSortChange}
         orderValue={order ?? "asc"}
         onOrderChange={onOrderChange}
-        filters={filters ?? []}
+        filters={filters ?? emptyFilters}
         onApplyFilters={onApplyFilters}
         filterPopupOpen={filterPopupOpen}
         onFilterPopupOpenChange={handleFilterPopupOpenChange}
@@ -430,7 +418,7 @@ export function ListView({
         quickFilterBar={
           <QuickFilterBar
             fields={fields}
-            filters={filters ?? []}
+            filters={filters ?? emptyFilters}
             onApplyFilters={onApplyFilters}
             doctype={doctype as any}
           />

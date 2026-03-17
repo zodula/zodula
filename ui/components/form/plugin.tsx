@@ -22,8 +22,8 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
         fieldOptions: Zodula.Field;
         model?: any;
         value?: any;
-        onChange?: (value: any) => void;
-        onBlur?: (value: any) => void | Promise<void>;
+        onChange?: (fieldPath: string, value: any) => void;
+        onBlur?: (fieldPath: string, value: any) => void | Promise<void>;
         readonly?: boolean;
         multiple?: boolean;
         fieldKey?: string;
@@ -50,13 +50,15 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
         value,
         onChange,
         operator,
-        placeholder
+        placeholder,
+        fieldPath
     }: {
         fieldOptions: Zodula.Field;
         value?: any;
-        onChange?: (value: any) => void;
+        onChange?: (fieldPath: string, value: any) => void;
         operator?: string;
         placeholder?: string;
+        fieldPath?: string;
     }) => React.ReactNode;
 
     constructor(ctx: {
@@ -74,13 +76,16 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
             docId,
             fieldPath,
             doctype,
-            placeholder
+            placeholder,
+            referenceTableFields,
+            extendFields,
+            referenceTableIndexFields
         }: {
             fieldOptions: Zodula.Field;
             model?: any;
             value?: any;
-            onChange?: (value: any) => void;
-            onBlur?: (value: any) => void | Promise<void>;
+            onChange?: (fieldPath: string, value: any) => void;
+            onBlur?: (fieldPath: string, value: any) => void | Promise<void>;
             readonly?: boolean;
             multiple?: boolean;
             fieldKey?: string;
@@ -89,6 +94,9 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
             fieldPath?: string;
             doctype?: Zodula.DoctypeConfig;
             placeholder?: string;
+            referenceTableFields?: Record<string, any>;
+            extendFields?: Record<string, any>;
+            referenceTableIndexFields?: Record<string, { idx: number, fields: Zodula.SelectDoctype<"Field">[]}[]>;
         }) => React.ReactNode;
         cellRender?: ({
             fieldOptions,
@@ -106,13 +114,15 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
             value,
             onChange,
             operator,
-            placeholder
+            placeholder,
+            fieldPath
         }: {
             fieldOptions: Zodula.Field;
             value?: any;
-            onChange?: (value: any) => void;
+            onChange?: (fieldPath: string, value: any) => void;
             operator?: string;
             placeholder?: string;
+            fieldPath?: string;
         }) => React.ReactNode;
         supportOperators?: IOperator[];
     }) {
@@ -123,7 +133,7 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
             // Default cell render: show string value or dash if empty
             return value != null ? String(value) : <span className="zd:text-muted-foreground zd:italic">-</span>;
         });
-        this.renderFilter = ctx.renderFilter || (({ value, onChange, operator, placeholder }) => {
+        this.renderFilter = ctx.renderFilter || (({ value, onChange, operator, placeholder, fieldPath }) => {
             // Default filter render: simple input for most field types
             if (["IS NULL", "IS NOT NULL"].includes(operator || "")) {
                 return null; // No input needed for null checks
@@ -132,7 +142,7 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
                 <Input
                     type="text"
                     value={value || ""}
-                    onChange={(e) => onChange?.(e.target.value)}
+                    onChange={(e) => onChange?.(fieldPath || "", e.target.value)}
                     placeholder={placeholder || ""}
                 />
             );

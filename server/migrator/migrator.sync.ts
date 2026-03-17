@@ -56,11 +56,11 @@ export interface OrphanedSchemaElements {
 
 export interface SyncOperation {
   type:
-    | "createTable"
-    | "dropTable"
-    | "addColumn"
-    | "removeColumn"
-    | "modifyColumn";
+  | "createTable"
+  | "dropTable"
+  | "addColumn"
+  | "removeColumn"
+  | "modifyColumn";
   data: any;
 }
 
@@ -99,6 +99,7 @@ export class SyncMigrator {
         removed: [],
       },
     };
+
 
     // Find table differences
     const currentTableSet = new Set(currentTableNames);

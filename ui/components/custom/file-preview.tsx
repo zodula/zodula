@@ -159,24 +159,31 @@ const FilePreviewContent: React.FC<{
             return file.name;
         }
         if (isStringPath) {
+            // For data URLs, keep the whole string as a pseudo name
+            if (file.startsWith('data:')) {
+                return file;
+            }
             return file.split('/').pop() || file;
         }
         return '';
     }, [file, isFile, isStringPath]);
 
     const fileType = useMemo(() => {
+        if (isStringPath && typeof file === 'string' && file.startsWith('data:image/')) {
+            return 'image';
+        }
         if (fileName) {
             return getFileType(fileName, isFile ? file.type : undefined);
         }
         return 'other' as const;
-    }, [fileName, file, isFile]);
+    }, [fileName, file, isFile, isStringPath]);
 
     const fileUrl = useMemo(() => {
         if (isFile) {
             return URL.createObjectURL(file);
         }
         if (isStringPath) {
-            if (file.startsWith('http')) {
+            if (file.startsWith('http') || file.startsWith('data:')) {
                 return file;
             }
             return `${BASE_URL}${file}`;
@@ -267,11 +274,11 @@ const FilePreviewContent: React.FC<{
         switch (fileType) {
             case 'image':
                 return (
-                    <div className="zd:flex zd:items-center zd:justify-center zd:min-h-[400px] zd:w-full">
+                    <div className="zd:flex zd:items-center zd:justify-center zd:w-full zd:h-full">
                         <img
                             src={fileUrl}
                             alt={fileName}
-                            className="zd:max-w-full zd:max-h-full zd:object-contain"
+                            className="zd:max-w-[90vw] zd:max-h-[80vh] zd:object-contain"
                             style={{
                                 transform: `scale(${zoom}) rotate(${rotation}deg)`,
                                 transition: 'transform 0.2s ease-in-out'
@@ -361,25 +368,19 @@ const FilePreviewContent: React.FC<{
     };
 
     return (
-        <div className={cn("zd:max-w-9xl zd:w-[90vw] zd:h-[90vh] zd:flex zd:flex-col", className || '')}>
-            {/* Header */}
-            <div className="zd:flex zd:items-center zd:justify-between zd:p-4 zd:border-b">
-                <div className="zd:flex zd:items-center zd:space-x-3 zd:flex-1">
+        <div className={cn("zd:flex zd:flex-col", className || '')}>
+            {/* Header (fixed at top of dialog) */}
+                <div className={cn(
+                    "zd:flex zd:items-center zd:space-x-3 zd:flex-1",
+                    fileName?.startsWith('data:') ? "zd:hidden" : ""
+                )}>
                     <h2 className="zd:text-lg zd:font-semibold zd:truncate">{fileName}</h2>
                     <span className="zd:text-sm zd:text-muted-foreground zd:capitalize">
                         {fileType} file
                     </span>
                 </div>
 
-                <Button
-                    variant="ghost"
-                    onClick={onClose}
-                >
-                    <X className="zd:h-4 zd:w-4" />
-                </Button>
-            </div>
-
-            {/* Content */}
+            {/* Content (scrollable image area under fixed header) */}
             <div className="zd:flex-1 zd:overflow-auto zd:relative zd:flex zd:items-start zd:justify-center">
                 {renderPreview()}
 
@@ -448,7 +449,12 @@ export const FilePreview: React.FC<FilePreviewProps> = ({
                         onClose={dialogClose}
                         className={className}
                     />
-                )
+                ),
+                {
+                    width: "100vw",
+                    maxWidth: "100vw",
+                    showCloseButton: true,
+                }
             ).then(() => {
                 onClose();
             });
@@ -474,6 +480,12 @@ export function previewFile(
                 className={options?.className}
             />
         ),
+        {
+            title: options?.title,
+            width: "100vw",
+            maxWidth: "100vw",
+            showCloseButton: true,
+        }
     ).then(() => {
         // Convert Promise<void | null> to Promise<void>
     });

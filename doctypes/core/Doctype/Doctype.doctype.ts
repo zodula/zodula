@@ -25,6 +25,11 @@ export default $doctype(
       type: "Check",
       label: "Is Single",
     },
+    is_organization_single: {
+      type: "Check",
+      label: "Is Organization Single",
+      description: "If enabled, this doctype behaves like a singleton per organization (one document per org).",
+    },
     naming_series: {
       type: "Text",
       label: "Naming Series",

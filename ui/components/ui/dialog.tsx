@@ -46,7 +46,7 @@ function DialogContent({ children, className = "", style, "data-state": dataStat
   return (
     <div
       className={cn(
-        "relative bg-background rounded shadow-lg border border-border",
+        "zd:relative zd:bg-background zd:rounded zd:shadow-lg zd:border zd:border-border",
         className
       )}
       style={style}

@@ -1,0 +1,53 @@
+[
+  {
+    "id": "onboarding-step-open-user-menu",
+    "parentid": "onboarding-setup-org",
+    "parentype": "Onboarding",
+    "parentfield": "onboarding_steps",
+    "title": "Open user menu",
+    "description": "Open the user menu in the top-right corner.",
+    "target_selector": "[data-onboarding-id=\"user-menu\"]",
+    "completion_mode": "auto_on_click",
+    "idx": 0,
+    "doc_organization": "System Panel"
+  },
+  {
+    "id": "onboarding-step-open-org-settings",
+    "parentid": "onboarding-setup-org",
+    "parentype": "Onboarding",
+    "parentfield": "onboarding_steps",
+    "title": "Open Organization Setting",
+    "description": "Click Organization Setting in the user menu.",
+    "target_selector": "[data-onboarding-id=\"org-settings-menu\"]",
+    "completion_mode": "auto_on_path",
+    "completion_value": "/desk/{{org}}/doctypes/Organization/form/{{org}}",
+    "idx": 1,
+    "doc_organization": "System Panel"
+  },
+  {
+    "id": "onboarding-step-currency-field",
+    "parentid": "onboarding-setup-org",
+    "parentype": "Onboarding",
+    "parentfield": "onboarding_steps",
+    "title": "Set Organization currency",
+    "description": "Set your organization's default currency.",
+    "target_selector": "[data-form-control-id=\"currency\"]",
+    "completion_mode": "require_value",
+    "completion_value": "",
+    "idx": 2,
+    "doc_organization": "System Panel"
+  },
+  {
+    "id": "onboarding-step-save-org",
+    "parentid": "onboarding-setup-org",
+    "parentype": "Onboarding",
+    "parentfield": "onboarding_steps",
+    "title": "Save Organization",
+    "description": "Save your changes.",
+    "target_selector": "[data-onboarding-id=\"form-primary-action\"]",
+    "completion_mode": "auto_when_not_dirty",
+    "completion_value": "Organization",
+    "idx": 3,
+    "doc_organization": "System Panel"
+  }
+]

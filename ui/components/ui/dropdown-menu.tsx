@@ -3,6 +3,7 @@ import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
 import { Check, ChevronRight, Circle } from "lucide-react"
 
 import { cn } from "../../lib/utils"
+import { Link } from "react-router"
 
 const DropdownMenu = DropdownMenuPrimitive.Root
 
@@ -54,10 +55,15 @@ const DropdownMenuSubContent = React.forwardRef<
 DropdownMenuSubContent.displayName =
   DropdownMenuPrimitive.SubContent.displayName
 
+function isOnboardingTourLayerTarget(target: EventTarget | null): boolean {
+  if (!target || !("closest" in target)) return false
+  return (target as Element).closest?.("[data-onboarding-tour-layer]") != null
+}
+
 const DropdownMenuContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
->(({ className = "", sideOffset = 4, ...props }, ref) => (
+>(({ className = "", sideOffset = 4, onInteractOutside, ...props }, ref) => (
   <DropdownMenuPrimitive.Portal>
     <DropdownMenuPrimitive.Content
       ref={ref}
@@ -66,6 +72,12 @@ const DropdownMenuContent = React.forwardRef<
         "zd:z-50 zd:min-w-[8rem] zd:overflow-hidden zd:rounded-md zd:border zd:bg-popover zd:text-popover-foreground zd:shadow-md zd:data-[state=open]:animate-in zd:data-[state=closed]:animate-out zd:data-[state=closed]:fade-out-0 zd:data-[state=open]:fade-in-0 zd:data-[state=closed]:zoom-out-95 zd:data-[state=open]:zoom-in-95 zd:data-[side=bottom]:slide-in-from-top-2 zd:data-[side=left]:slide-in-from-right-2 zd:data-[side=right]:slide-in-from-left-2 zd:data-[side=top]:slide-in-from-bottom-2 zd:origin-(--radix-dropdown-menu-content-transform-origin) zd:outline-hidden",
         className
       )}
+      onInteractOutside={(e) => {
+        const detail = (e as CustomEvent<{ originalEvent: PointerEvent }>).detail
+        const target = detail?.originalEvent?.target ?? null
+        if (isOnboardingTourLayerTarget(target)) e.preventDefault()
+        onInteractOutside?.(e)
+      }}
       {...props}
     />
   </DropdownMenuPrimitive.Portal>
@@ -95,15 +107,15 @@ const DropdownMenuItem = React.forwardRef<
   if (href) {
     return (
       <DropdownMenuPrimitive.Item asChild {...props}>
-        <a
+        <Link
           ref={ref as React.Ref<HTMLAnchorElement>}
-          href={href}
+          to={href}
           target={target}
           rel={rel}
           className={itemClasses}
         >
           {children}
-        </a>
+        </Link>
       </DropdownMenuPrimitive.Item>
     )
   }

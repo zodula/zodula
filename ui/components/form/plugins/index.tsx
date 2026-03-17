@@ -10,6 +10,7 @@ import { ImagePreviewPlugin } from "./image-preview";
 import { ReferenceTablePlugin } from "./reference-table";
 import { ExtendPlugin } from "./extend";
 import { CurrencyPlugin } from "./currency";
+import { SignaturePlugin } from "./signature";
 
 export const plugins = [
     TextInputPlugin,
@@ -23,7 +24,8 @@ export const plugins = [
     ImagePreviewPlugin,
     ReferenceTablePlugin,
     ExtendPlugin,
-    CurrencyPlugin
+    CurrencyPlugin,
+    SignaturePlugin
 ] as const;
 
-export { TextInputPlugin, TextareaPlugin, SelectPlugin, ReferencePlugin, DateTimePlugin, CheckboxPlugin, EditorPlugin, FileUploadPlugin, ImagePreviewPlugin, ReferenceTablePlugin, CurrencyPlugin };
+export { TextInputPlugin, TextareaPlugin, SelectPlugin, ReferencePlugin, DateTimePlugin, CheckboxPlugin, EditorPlugin, FileUploadPlugin, ImagePreviewPlugin, ReferenceTablePlugin, CurrencyPlugin, SignaturePlugin };

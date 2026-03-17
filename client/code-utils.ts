@@ -35,15 +35,19 @@ export interface TemplateItemForPrint {
   group?: string | null;
   /** JSON array of column field names for reference table */
   columns?: string | null;
-  /** Reference field on each child row for nested table (e.g. delivery_order) */
+  /** Reference field on each child row for nested table (e.g. delivery_note) */
   nested_field?: string | null;
   /** Field on nested doctype holding the child table (e.g. items). When empty, auto-detected. */
   nested_table_field?: string | null;
+  /** Doctype of the nested table (override when schema cannot be loaded). */
+  nested_table_field_doctype?: string | null;
   /** JSON array of nested table column field names */
   nested_columns?: string | null;
   /** Legacy: JSON child fields for reference table */
   fields?: string | null;
   table_config?: string | null;
+  /** Min height (px) for reference table in print (from doctype field height). */
+  height?: number | null;
 }
 
 /** Normalize layout entry: if not array, wrap in array so structure is uniform. */
@@ -97,12 +101,14 @@ export function tabsToTemplateItem(
   const items: TemplateItemForPrint[] = [];
   let idx = 0;
   let rowIndex = 0;
-  const schemaFields = doctype.schema.fields as Record<string, { type?: string; label?: string; reference?: string }>;
+  const schemaFields = doctype.schema.fields as Record<string, { type?: string; label?: string; reference?: string; no_print?: number; height?: number }>;
 
   function collectField(value: string, label: string, group: string) {
     if (!value || typeof value !== "string") return;
-    const fieldDef = schemaFields[value] as { type?: string; reference?: string } | undefined;
+    const fieldDef = schemaFields[value] as { type?: string; reference?: string; no_print?: number; height?: number } | undefined;
+    if (fieldDef?.no_print === 1) return;
     const isRefTable = fieldDef?.type === "Reference Table";
+    const isSignature = fieldDef?.type === "Signature";
     const refTableExtras =
       isRefTable && fieldDef?.reference
         ? (() => {
@@ -112,7 +118,9 @@ export function tabsToTemplateItem(
               fields: "[]",
               nested_field: null,
               nested_table_field: null,
+              nested_table_field_doctype: null,
               nested_columns: null,
+              height: typeof fieldDef.height === "number" ? fieldDef.height : null,
             };
           })()
         : {};
@@ -122,7 +130,7 @@ export function tabsToTemplateItem(
       type: "field",
       field_name: value,
       label: label ?? value,
-      hide_no_value: 1,
+      hide_no_value: isSignature ? 0 : 1,
       align: "left",
       group,
       ...refTableExtras,
@@ -204,7 +212,11 @@ async function renderReferenceTable(
   const childDoctypeMeta = loader.from("doctype").get(childField?.reference as any);
   const nestedField = item.nested_field ? childDoctypeMeta?.schema?.fields[item?.nested_field as keyof typeof childDoctypeMeta.schema.fields] : null;
   const nestedDoctypeMeta = nestedField ? loader.from("doctype").get(nestedField?.reference as any) : null;
-  const nestedChildDoctypeMeta = nestedDoctypeMeta ? loader.from("doctype").get(nestedDoctypeMeta?.schema?.fields[item.nested_table_field as keyof typeof nestedDoctypeMeta.schema.fields]?.reference as any) : null;
+  const nestedChildDoctypeMeta = item.nested_table_field_doctype
+    ? loader.from("doctype").get(item.nested_table_field_doctype as any)
+    : nestedDoctypeMeta
+      ? loader.from("doctype").get(nestedDoctypeMeta?.schema?.fields[item.nested_table_field as keyof typeof nestedDoctypeMeta.schema.fields]?.reference as any)
+      : null;
 
   if (item.columns) {
     allColumns.push(...(safeJsonParse<string[]>(item.columns ?? "[]") ?? []));
@@ -216,7 +228,10 @@ async function renderReferenceTable(
     }
   }
 
-  let html = `<table class="print-ref-table"><thead class="print-th-row"><tr class="print-th-row">`;
+  const wrapStyle = typeof item.height === "number" && item.height > 0 ? ` style="min-height: ${item.height}px"` : "";
+  const wrapOpen = wrapStyle ? `<div class="print-ref-table-wrap"${wrapStyle}>` : "";
+  const wrapClose = wrapStyle ? "</div>" : "";
+  let html = wrapOpen + `<table class="print-ref-table"><thead class="print-th-row"><tr class="print-th-row">`;
   for (const column of allColumns) {
     if (column.includes(".")) {
       const [nestedFieldName, nestedColumnName] = column.split(".");
@@ -263,8 +278,14 @@ async function renderReferenceTable(
     }
     html += `</tr>`;
   }
-  html += `</tbody></table>`
-  return html
+  html += `</tbody></table>` + wrapClose;
+  return html;
+}
+
+function isEmptyPrintValue(raw: unknown): boolean {
+  if (raw === "" || raw === null || raw === undefined) return true;
+  if (Array.isArray(raw) && raw.length === 0) return true;
+  return false;
 }
 
 async function renderFieldCellValue(
@@ -277,7 +298,7 @@ async function renderFieldCellValue(
   fetchRefDoc?: (doctype: string, id: string) => Promise<Record<string, unknown> | null>
 ): Promise<string | null> {
   const raw = item.field_name ? doc[item.field_name as keyof typeof doc] : null;
-  if((raw === "" || raw === null || raw === undefined) && item.hide_no_value) return null;
+  if (isEmptyPrintValue(raw) && item.hide_no_value) return null;
   const textAlign = item.align === "center" || item.align === "right" ? item.align : "left";
   let escapedValue = raw != null ? String(raw) : "";
   if (field?.type === "Select" && field?.no_translate !== 1) {
@@ -285,7 +306,7 @@ async function renderFieldCellValue(
   }
   if (field?.type === "File" && field?.accept?.includes("image/*")) {
     if(!escapedValue) return null;
-    const imageFile = fs.readFileSync(path.join(process.cwd(), ".zodula_data", ["files", doc.organization, doctype, doc.id, item.field_name, escapedValue].join("/")));
+    const imageFile = fs.readFileSync(path.join(process.cwd(), ".zodula_data", escapedValue));
     escapedValue = `<div class="print-image-container" style="float:${textAlign}"><img class="print-image" src="data:image/jpeg;base64,${imageFile.toString('base64')}" alt="" style="width: 100%; max-height: 150px; object-fit: contain;" /></div>`;
   }
 
@@ -296,7 +317,20 @@ async function renderFieldCellValue(
   if (field?.type === "Reference Table") {
     escapedValue = await renderReferenceTable(item, doctype, language, doc).then((html) => html).catch((e) => `<span class=\"print-error\">Template error: ${e.message}</span>`);
   }
-  if (item.hide_no_value && raw === "") return null;
+
+  // Signature field: image can exceed the box (overflow visible); dotted line stays fixed for alignment
+  if (field?.type === "Signature") {
+    const imgPart = escapedValue
+      ? `<div class="print-signature-image"><img src="${escapeHtml(escapedValue)}" alt="" class="print-signature-img" /></div>`
+      : "";
+    escapedValue = `
+      <div class="print-signature-wrap" style="text-align:${textAlign}">
+        ${imgPart}
+        <div class="print-signature-line"></div>
+      </div>
+    `;
+  }
+  if (item.hide_no_value && isEmptyPrintValue(raw)) return null;
   return escapedValue;
 }
 
@@ -325,7 +359,8 @@ async function renderCellContent(
         `<div class="print-cell-inner print-cell-label-${labelPosition}" style="text-align:${align}">${order}</div>`
       );
     }
-    const safeValue = (field?.type === "File" && field?.accept?.includes("image/*")) ? escapedValue : escapeHtml(escapedValue || "");
+    const isImageHtml = (field?.type === "File" && field?.accept?.includes("image/*")) || field?.type === "Signature";
+    const safeValue = isImageHtml ? escapedValue : escapeHtml(escapedValue || "");
     return Promise.resolve(
       `${label !== "" ? `<span class="print-label">${escapeHtml(label)}</span>` : ""}
       <span class="print-value" style="text-align:${align}">${safeValue}</span>`
@@ -352,7 +387,7 @@ async function renderCellContent(
 /**
  * Render template items and a document to an HTML string (body content).
  * Items with the same group are rendered in one visual row. Uses binba for custom_html items.
- * Pass fetchRefDoc when template has reference tables with nested_field (e.g. to load Delivery Order for each row).
+ * Pass fetchRefDoc when template has reference tables with nested_field (e.g. to load Delivery Note for each row).
  */
 export async function templateItemToHtml(
   doctype: Zodula.DoctypeName,
@@ -419,6 +454,7 @@ export function generatePrintItemCss(items: TemplateItemForPrint[]): string {
     .print-row {
     display: flex;
     margin-bottom: 10px;
+    gap: 10px;
     }
     .print-cell {
     flex: 1;
@@ -465,6 +501,38 @@ export function generatePrintItemCss(items: TemplateItemForPrint[]): string {
       border-collapse: collapse;
       margin-bottom: 10px;
       font-size: 0.875rem;
+    }
+
+    .print-signature-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      height: 72px;
+      padding-top: 4px;
+      overflow: visible;
+    }
+
+    .print-signature-image {
+      width: 100%;
+      text-align: center;
+      height: 60px;
+      overflow: visible;
+      flex-shrink: 0;
+    }
+
+    .print-signature-img {
+      max-width: 100%;
+      max-height: 120px;
+      object-fit: contain;
+      vertical-align: bottom;
+    }
+
+    .print-signature-line {
+      width: 100%;
+      border-top: 1px dotted #000;
+      margin-top: auto;
+      flex-shrink: 0;
     }
   `;
 }

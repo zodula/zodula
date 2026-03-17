@@ -12,30 +12,22 @@ export function extendFile() {
     const bxo = new BXO()
     bxo.get("/files/*", async (ctx) => {
         try {
+            const rest = ctx.params.wildcard
+            const [org, doctype, docId, fieldName, _filename] = rest.split("/")
+            ctx.headers["x-organization"] = org || ""
             ctxContext.enterWith({
                 ctx: ctx as any
             })
-            const rest = ctx.params.wildcard
-            const [org, doctype, docId, fieldName, _filename] = rest.split("/")
             let filename = _filename
             if (!_filename) {
                 const files = await fs.readdir(path.join(process.cwd(), ".zodula_data", "files", rest))
                 filename = files[0]
             }
             const url = `/${org}/${doctype}/${docId}/${fieldName}/${filename}`
-            const doc = await zodula.doctype(doctype as Zodula.DoctypeName).get(docId!)
-            const doctypeConfig = loader.from("doctype").get(doctype as Zodula.DoctypeName)
-            const { can } = await ZodulaDoctypeHelper.checkPermission(
-                doctype as Zodula.DoctypeName,
-                "can_get",
-                doc,
-                {
-                    bypass: false,
-                    doctype: doctypeConfig,
-                }
-            )
-            
-            if (!can) {
+            const canDoc = await zodula?.doctype(doctype as Zodula.DoctypeName).get(docId!)
+            const isPublicFile = loader.from("doctype").get(doctype as Zodula.DoctypeName)?.schema?.fields[fieldName as any]?.is_public === 1
+
+            if (!canDoc?.id && !isPublicFile) {
                 return ctx.json("You are not authorized to access this file", 403)
             }
             const filePath = path.join(process.cwd(), ".zodula_data", "files", url)
@@ -81,8 +73,8 @@ export function extendFile() {
                 logger.error('Image resize failed, serving original:', resizeError)
                 return Bun.file(filePath) as any
             }
-        } catch (error) {
-            return ctx.json(error instanceof Error ? error.message : "Internal server error", 500)
+        } catch (error: any) {
+            return ctx.json(error?.message || error, error?.status || 500)
         }
     })
     return bxo

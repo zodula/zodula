@@ -405,7 +405,7 @@ export interface ToastOptions {
   className?: string
 }
 
-interface ToastAPI {
+export interface ToastAPI {
   (props: Omit<ToastItem, "id" | "createdAt">): string
   success: (title: string, description?: string, options?: ToastOptions) => string
   error: (title: string, description?: string, options?: ToastOptions) => string

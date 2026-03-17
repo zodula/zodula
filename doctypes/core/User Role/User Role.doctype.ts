@@ -1,13 +1,4 @@
 export default $doctype({
-    user: {
-        type: "Reference",
-        label: "User",
-        reference: "User",
-        on_delete: "CASCADE",
-        required: 1,
-        unique: 1,
-        group: "user-role",
-    },
     role: {
         type: "Reference",
         label: "Role",
@@ -21,4 +12,5 @@ export default $doctype({
 }, {
     label: "User Role",
     is_global: 1,
+    is_child_doctype: 1,
 });

@@ -4,13 +4,14 @@ import { useRouter } from "../components/router"
 
 interface ErrorViewProps {
     message: string
+    details?: string
     status?: number
     showRetry?: boolean
     onRetry?: () => void
 }
 
 export default function ErrorView(props: ErrorViewProps) {
-    const { message = "An error occurred", status = 500, showRetry = false, onRetry } = props
+    const { message = "An error occurred", details, status = 500, showRetry = false, onRetry } = props
     const router = useRouter()
 
     const getStatusColor = (status: number) => {
@@ -75,6 +76,13 @@ export default function ErrorView(props: ErrorViewProps) {
                     <p className="zd:text-muted-foreground zd:leading-relaxed">
                         {message}
                     </p>
+                    {details && (
+                        <div className="zd:text-muted-foreground zd:bg-muted zd:p-4 zd:rounded-md zd:text-xs zd:overflow-auto zd:max-h-100 zd:mt-4">
+                            <pre className="zd:text-left">
+                                {details}
+                            </pre>
+                        </div>
+                    )}
                 </div>
 
                 {/* Action Buttons */}
@@ -88,16 +96,14 @@ export default function ErrorView(props: ErrorViewProps) {
                         Back to Home
                     </Button>
 
-                    {showRetry && (
-                        <Button
-                            variant="outline"
-                            onClick={handleRetry}
-                            className="zd:flex zd:items-center zd:gap-2"
-                        >
-                            <RefreshCw className="zd:w-4 zd:h-4" />
-                            Try Again
-                        </Button>
-                    )}
+                    <Button
+                        variant="outline"
+                        onClick={handleRetry}
+                        className="zd:flex zd:items-center zd:gap-2"
+                    >
+                        <RefreshCw className="zd:w-4 zd:h-4" />
+                        Try Again
+                    </Button>
                 </div>
 
                 {/* Additional Help */}

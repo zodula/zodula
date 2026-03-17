@@ -14,7 +14,7 @@ const badgeVariants = cva(
         secondary:
           "zd:border-transparent zd:bg-secondary zd:text-secondary-foreground zd:[a&]:hover:bg-secondary/90",
         destructive:
-          "zd:border-transparent zd:bg-destructive zd:text-primary-foreground zd:[a&]:hover:bg-destructive/90 zd:focus-visible:ring-destructive/20 dark:zd:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+          "zd:border-transparent zd:bg-pink-100 zd:text-pink-800 zd:dark:bg-pink-900/20 zd:dark:text-pink-400",
         warning:
           "zd:border-transparent zd:bg-warning zd:text-warning-foreground zd:[a&]:hover:bg-warning/90 zd:focus-visible:ring-warning/20 dark:zd:focus-visible:ring-warning/40",
         success:
@@ -41,7 +41,7 @@ const badgeVariants = cva(
           "zd:border-transparent zd:bg-sky-100 zd:text-sky-800 zd:dark:bg-sky-900/20 zd:dark:text-sky-400",
       },
       size: {
-        default: "zd:px-2 zd:py-1",
+        default: "zd:text-[14px] zd:p-1 zd:px-2 zd:leading-none",
         sm: "zd:text-[14px] zd:p-1 zd:px-2 zd:leading-none",
         lg: "zd:text-sm zd:px-3 zd:py-1.5",
         xl: "zd:text-base zd:px-4 zd:py-2",
@@ -57,7 +57,7 @@ const badgeVariants = cva(
 function Badge({
   className,
   variant,
-  size,
+  size = "sm",
   asChild = false,
   ...props
 }: React.ComponentProps<"span"> &

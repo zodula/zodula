@@ -1,794 +1,482 @@
+import { useRouter } from "./components/router";
+import { useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, type DependencyList } from "react";
 import { create } from "zustand";
+import { toast, type ToastAPI } from "./components/ui/toast";
+import { popup, alert, confirm } from "./components/ui/popit";
+import { MultiSelectDoctypeDialog } from "./components/dialogs/multi-select-doctype-dialog";
+import type { MultiSelectDoctypeDialogInitialData } from "./components/dialogs/multi-select-doctype-dialog";
+import { useTranslation } from "./hooks/use-translation";
+import { useOrganization } from "./hooks/use-organization";
+import type { IconName } from "./components/ui/dynamic-icon";
 import type { BadgeVariant } from "./components/ui/badge";
-import type React from "react";
-import { useLanguageStore, useTranslationStore } from "./hooks/use-translation";
+import { zodula } from "@/zodula/client";
+import { useLocation } from "react-router";
 
-// ============================================================================
-// Type Definitions
-// ============================================================================
+// ---------------------------------------------------------------------------
+// Script events
+// ---------------------------------------------------------------------------
 
-// Client Script Types
-export interface UIScript<DN extends Zodula.DoctypeName = Zodula.DoctypeName> {
-  id: string;
+export type FormScriptEvent<DN extends Zodula.DoctypeName> =
+  | "on_render"
+  | "before_submit"
+  | "after_submit"
+  | "before_cancel"
+  | "after_cancel"
+  | "before_delete"
+  | "after_delete"
+  | "before_insert"
+  | "after_insert"
+  | "before_update"
+  | "after_update"
+  | Extract<keyof Zodula.SelectDoctype<DN>, string>
+  | `${Extract<keyof Zodula.SelectDoctype<DN>, string>}.${string}`
+
+export type ListScriptEvent =
+  | "on_format"
+
+/** Top-level field names or nested paths: "table.0.child_field" (reference table) or "extend.child_field" (extend). */
+export type FormFieldPath<DN extends Zodula.DoctypeName> =
+  | keyof Zodula.SelectDoctype<DN>
+  | `${string}.${number}.${string}` // e.g. delivery_note_items.0.product_name
+  | `${string}.${string}`;          // e.g. extend_field.child_field
+
+/** Value type for a given field path: typed for top-level keys, any for nested paths. */
+export type FormFieldValue<DN extends Zodula.DoctypeName, K extends FormFieldPath<DN>> =
+  K extends `${string}.${number}.${string}` ? any :
+  K extends `${string}.${string}` ? any :
+  K extends keyof Zodula.SelectDoctype<DN> ? Zodula.SelectDoctype<DN>[K] :
+  never;
+
+// ---------------------------------------------------------------------------
+// Script contexts
+// ---------------------------------------------------------------------------
+
+export interface FormScriptContext<DN extends Zodula.DoctypeName> {
   doctype: DN;
-  name: string;
-  description?: string;
-  events: UIScriptEvent[];
-  dependencies?: string[];
-  enabled?: boolean;
-  priority?: number;
+  doc: Zodula.SelectDoctype<DN> | null;
+  id?: string | null;
+  /** Get by top-level field or dotted path (e.g. "delivery_note_items.0.product_name"). */
+  get_value: <K extends FormFieldPath<DN>>(field: K) => FormFieldValue<DN, K>;
+  /** Set by top-level field or dotted path. Value type is inferred for top-level keys. */
+  set_value: {
+    /** Nested table row field with child doctype + field name (e.g. delivery_note_items.0.product_name). */
+    <ChildDN extends Zodula.DoctypeName, ChildField extends keyof Zodula.SelectDoctype<ChildDN> & string>(
+      field: `${string}.${number}.${ChildField}`,
+      value: Zodula.SelectDoctype<ChildDN>[ChildField]
+    ): Promise<void>;
+    /** Top-level or any dotted path. */
+    <K extends FormFieldPath<DN>>(field: K, value: FormFieldValue<DN, K>): Promise<void>;
+  };
+  set_df_property: (fieldPath: string, property: string, value: any) => Promise<void>;
+  get_df_property: (fieldPath: string, property: string) => Promise<any>;
+  idx: number;
+  /** Only set when running on_render/refresh. Register a badge for the form header (e.g. doc_status). */
+  set_badge_config?: (fieldKey: string, config: ListFormatBadgeConfig) => void;
+  /** Reload the current form/doc. Available when context is from form view. */
+  reload?: () => Promise<void>;
 }
 
-export type UIScriptEventType = 
-  | 'field_change' 
-  | 'refresh'
-  | 'form_save' 
-  | 'field_focus' 
-  | 'field_blur' 
-  | 'list_load' 
-  | 'list_refresh'
-  | 'row_select' 
-  | 'row_click' 
-  | 'row_edit' 
-  | 'row_delete' 
-  | 'button_click' 
-  | 'action_execute' 
-  | 'data_change' 
-  | 'on_load' 
-  | 'on_render' 
-  | 'on_format';
-
-export interface UIScriptEvent<DN extends Zodula.DoctypeName = Zodula.DoctypeName> {
-  type: UIScriptEventType;
-  target?: string; // Field name, button name, action name, etc.
-  condition?: (context: UIScriptContext<DN>) => boolean;
-  action: (context: UIScriptContext<DN>) => void | Promise<void>;
-  priority?: number;
+export interface ListFormatBadgeConfig {
+  variant?: BadgeVariant;
+  size?: string;
+  /** t is passed by the list/form so translation uses the current context. */
+  getValue?: (doc: any, t?: (key: string) => string) => string | { status: string; variant?: string } | null;
 }
 
-export interface UIScriptContext<DN extends Zodula.DoctypeName = Zodula.DoctypeName> {
-  // Common context
+export interface ListScriptContext<DN extends Zodula.DoctypeName> {
   doctype: DN;
-  docId?: string;
-  isCreate?: boolean;
-  isEdit?: boolean;
-  
-  // Form context
-  formData?: Partial<Zodula.SelectDoctype<DN>>;
-  setValue?: (fieldName: string, value: any) => void;
-  setValues?: (values: Record<string, any>) => void;
-  getValue?: (fieldName: string) => any;
-  getValues?: () => Partial<Zodula.SelectDoctype<DN>>;
-  setFieldProperty?: (fieldName: string, property: string, value: any) => void;
-  setChildExtendProperty?: (childField: string, fieldName: string, property: string, value: any) => void;
-  setChildTableProperty?: (childField: string, idx: number | null, fieldName: string, property: string, value: any) => void;
-  
-  // Parent context (for child forms)
-  parentContext?: FormContext<any>;
-  
-  // List context
-  listData?: Zodula.SelectDoctype<DN>[];
-  selectedRows?: Set<string>;
-  setSelectedRows?: (selected: Set<string>) => void;
-  refreshList?: () => void;
-  
-  // Event specific context
-  fieldName?: string;
-  value?: any;
-  oldValue?: any;
-  targetValue?: any;
-  event?: Event;
-  idx?: number; // Row index for reference table fields
-  
-  // UI context
-  showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
-  showDialog?: (component: any, props: any) => Promise<any>;
-  navigate?: (path: string) => void;
-  
-  // Formatting context
-  originalValue?: any;
-  formattedValue?: any;
-  fieldType?: string;
-  fieldOptions?: any;
-  
-  // Badge formatting context
-  badgeConfig?: {
-    variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning';
-    size: 'sm' | 'md' | 'lg';
-    className?: string;
+  list_data: any[];
+  selected_rows: Set<string>;
+  set_selected_rows: (selected: Set<string>) => void;
+  /** Only set when event is on_format. Register a badge for a list column. */
+  set_badge_config?: (fieldKey: string, config: ListFormatBadgeConfig) => void;
+  /** Only set when event is on_format. Register a custom cell renderer. */
+  set_custom_renderer?: (fieldKey: string, render: (doc: any) => any) => void;
+  /** Reload the list data. Available when context is from list view. */
+  reload?: () => Promise<void>;
+}
+
+// ---------------------------------------------------------------------------
+// Script handlers and script entries
+// ---------------------------------------------------------------------------
+
+export type FormScriptHandler<DN extends Zodula.DoctypeName> = (
+  context: FormScriptContext<DN>
+) => void | Promise<void>;
+
+export type ListScriptHandler<DN extends Zodula.DoctypeName> = (
+  context: ListScriptContext<DN>
+) => void | Promise<void>;
+
+interface RegisteredFormScript<DN extends Zodula.DoctypeName> {
+  doctype: DN;
+  event: FormScriptEvent<DN>;
+  script: FormScriptHandler<DN>;
+}
+
+interface RegisteredListScript<DN extends Zodula.DoctypeName> {
+  doctype: DN;
+  event: ListScriptEvent;
+  script: ListScriptHandler<DN>;
+}
+
+// ---------------------------------------------------------------------------
+// Secondary buttons (form / list)
+// ---------------------------------------------------------------------------
+
+type ScriptContext<DN extends Zodula.DoctypeName, Kind extends "form" | "list"> = Kind extends "form"
+  ? FormScriptContext<DN>
+  : ListScriptContext<DN>;
+
+export interface SecondaryButtonOptions<DN extends Zodula.DoctypeName, Kind extends "form" | "list"> {
+  icon?: IconName;
+  condition?: (context: ScriptContext<DN, Kind>) => boolean;
+}
+
+export type SecondaryButtonHandler<DN extends Zodula.DoctypeName, Kind extends "form" | "list"> = (
+  doctype: DN,
+  label: string,
+  onClick: (context: ScriptContext<DN, Kind>) => void | Promise<void>,
+  options?: SecondaryButtonOptions<DN, Kind>
+) => void;
+
+// ---------------------------------------------------------------------------
+// Store state
+// ---------------------------------------------------------------------------
+
+interface ZuiState {
+  org: string | null;
+  setOrg: (org: string | null) => void;
+  ui_form_scripts: RegisteredFormScript<Zodula.DoctypeName>[];
+  ui_list_scripts: RegisteredListScript<Zodula.DoctypeName>[];
+  ui_form_secondary_buttons: Array<{
+    doctype: Zodula.DoctypeName;
+    label: string;
+    onClick: (context: FormScriptContext<Zodula.DoctypeName>) => void | Promise<void>;
+    options?: SecondaryButtonOptions<Zodula.DoctypeName, "form">;
+  }>;
+  ui_form_field_buttons: Array<{
+    doctype: Zodula.DoctypeName;
+    fieldName: string;
+    label: string;
+    onClick: (context: FormScriptContext<Zodula.DoctypeName>) => void | Promise<void>;
+    options?: SecondaryButtonOptions<Zodula.DoctypeName, "form">;
+  }>;
+  ui_list_secondary_buttons: Array<{
+    doctype: Zodula.DoctypeName;
+    label: string;
+    onClick: (context: ListScriptContext<Zodula.DoctypeName>) => void | Promise<void>;
+    options?: SecondaryButtonOptions<Zodula.DoctypeName, "list">;
+  }>;
+}
+
+// ---------------------------------------------------------------------------
+// Public ZUI interface
+// ---------------------------------------------------------------------------
+
+export interface ZUI {
+  org: string | null;
+  router: ReturnType<typeof useRouter> | null;
+  params: ReturnType<typeof useParams>;
+  search: Record<string, string>;
+  t: (key: string) => string;
+  toast: ToastAPI;
+  open_dialog: typeof popup;
+  open_multiselect_dialog: (
+    initialData: MultiSelectDoctypeDialogInitialData,
+    options?: { title?: string; description?: string; showCloseButton?: boolean; width?: number | string; maxWidth?: number | string }
+  ) => Promise<string[] | null>;
+  open_singleselect_dialog: (
+    initialData: MultiSelectDoctypeDialogInitialData,
+    options?: { title?: string; description?: string; showCloseButton?: boolean; width?: number | string; maxWidth?: number | string }
+  ) => Promise<string | null>;
+  confirm: typeof confirm;
+  alert: typeof alert;
+  form: {
+    on: <DN extends Zodula.DoctypeName>(
+      doctype: DN,
+      events: Partial<Record<FormScriptEvent<DN>, FormScriptHandler<DN>>>
+    ) => void;
+    set_secondary_button: <DN extends Zodula.DoctypeName>(
+      doctype: DN,
+      label: string,
+      onClick: (context: FormScriptContext<DN>) => void | Promise<void>,
+      options?: SecondaryButtonOptions<DN, "form">
+    ) => void;
+    set_field_button: <DN extends Zodula.DoctypeName>(
+      doctype: DN,
+      fieldName: string,
+      label: string,
+      onClick: (context: FormScriptContext<DN>) => void | Promise<void>,
+      options?: SecondaryButtonOptions<DN, "form">
+    ) => void;
   };
-  
-  // Utility functions
-  utils?: {
-    formatCurrency: (value: number) => string;
-    parseCurrency: (value: string) => number;
-    formatDate: (date: Date | string) => string;
-    parseDate: (date: string) => Date;
-    calculateTotal: (items: any[], quantityField: string, priceField: string) => number;
+  list: {
+    on: <DN extends Zodula.DoctypeName>(
+      doctype: DN,
+      events: Partial<Record<ListScriptEvent, ListScriptHandler<DN>>>
+    ) => void;
+    set_secondary_button: <DN extends Zodula.DoctypeName>(
+      doctype: DN,
+      label: string,
+      onClick: (context: ListScriptContext<DN>) => void | Promise<void>,
+      options?: SecondaryButtonOptions<DN, "list">
+    ) => void;
+  };
+  onboarding: {
+    /** Get onboarding checklist for current org and user (owner vs user mode, steps filtered by role). */
+    getChecklist: () => Promise<{
+      checklist: Array<{
+        onboarding: { id: string; name: string; mode: string };
+        steps: Array<{
+          id: string;
+          title: string;
+          description: string | null;
+          route: string | null;
+          done: boolean;
+          idx: number;
+        }>;
+      }>;
+    }>;
+    /** Mark an onboarding step as done for the current user and org. */
+    markStepDone: (onboardingStepId: string) => Promise<void>;
+  };
+  _: {
+    state: ZuiState;
+    executeFormScripts: <DN extends Zodula.DoctypeName>(
+      doctype: DN,
+      event: FormScriptEvent<DN>,
+      context: FormScriptContext<DN>
+    ) => Promise<void>;
+    executeListScripts: <DN extends Zodula.DoctypeName>(
+      doctype: DN,
+      event: ListScriptEvent,
+      context: ListScriptContext<DN>
+    ) => Promise<void>;
   };
 }
 
-// ============================================================================
-// Store Implementation
-// ============================================================================
-
-interface UIScriptStore {
-  scripts: Record<Zodula.DoctypeName, UIScript[]>;
-  registerScript: <DN extends Zodula.DoctypeName>(doctype: DN, script: UIScript<DN>) => void;
-  unregisterScript: <DN extends Zodula.DoctypeName>(doctype: DN, scriptId: string) => void;
-  getScripts: <DN extends Zodula.DoctypeName>(doctype: DN) => UIScript[];
-  clearScripts: (doctype?: Zodula.DoctypeName) => void;
-  executeScripts: <DN extends Zodula.DoctypeName>(
-    doctype: DN, 
-    eventType: string, 
-    context: Partial<UIScriptContext<DN>>
-  ) => Promise<void>;
-}
-
-export const useUIScriptStore = create<UIScriptStore>((set, get) => ({
-  scripts: {} as Record<Zodula.DoctypeName, UIScript[]>,
-  
-  registerScript: <DN extends Zodula.DoctypeName>(doctype: DN, script: UIScript<DN>) => {
-    set((state) => ({
-      scripts: {
-        ...state.scripts,
-        [doctype]: [...(state.scripts[doctype] || []), script]
-      }
-    }));
-  },
-  
-  unregisterScript: <DN extends Zodula.DoctypeName>(doctype: DN, scriptId: string) => {
-    set((state) => ({
-      scripts: {
-        ...state.scripts,
-        [doctype]: (state.scripts[doctype] || []).filter(s => s.id !== scriptId)
-      }
-    }));
-  },
-  
-  getScripts: <DN extends Zodula.DoctypeName>(doctype: DN) => {
-    return get().scripts[doctype] || [];
-  },
-  
-  clearScripts: (doctype?: Zodula.DoctypeName) => {
-    if (doctype) {
-      set((state) => {
-        const newScripts = { ...state.scripts };
-        delete newScripts[doctype];
-        return { scripts: newScripts };
-      });
-    } else {
-      set({ scripts: {} as Record<Zodula.DoctypeName, UIScript[]> });
-    }
-  },
-  
-  executeScripts: async <DN extends Zodula.DoctypeName>(
-    doctype: DN, 
-    eventType: string, 
-    context: Partial<UIScriptContext<DN>>
-  ) => {
-    const scripts = get().scripts[doctype] || [];
-    const enabledScripts = scripts.filter(script => script.enabled !== false);
-    
-    // Get all events for this event type
-    const allEvents = enabledScripts.flatMap(script => script.events);
-    const matchingEvents = allEvents
-      .filter(event => event.type === eventType)
-      .filter(event => !event.target || event.target === context.fieldName)
-      .filter(event => !event.condition || event.condition(context as UIScriptContext<DN>))
-      .sort((a, b) => (a.priority || 0) - (b.priority || 0));
-    
-    // Execute events in order
-    for (const event of matchingEvents) {
-      try {
-        await event.action(context as UIScriptContext<DN>);
-      } catch (error) {
-        console.error(`Client script error in ${doctype}:`, error);
-      }
-    }
-  }
+export const useZuiStore = create<ZuiState>()((set) => ({
+  org: null,
+  setOrg: (org: string | null) => set({ org }),
+  ui_form_scripts: [],
+  ui_list_scripts: [],
+  ui_form_secondary_buttons: [],
+  ui_form_field_buttons: [],
+  ui_list_secondary_buttons: [],
 }));
 
-// ============================================================================
-// Event Type Definitions
-// ============================================================================
+export function useZui(): ZUI;
+export function useZui(callback: (zui: ZUI) => void | Promise<void>, deps: DependencyList): void;
+export function useZui(
+  callback?: (zui: ZUI) => void | Promise<void>,
+  deps?: DependencyList
+): ZUI | void {
+  const zuiStore = useZuiStore((state) => state);
+  const { organization } = useOrganization();
+  const router = useRouter();
+  const params = useParams();
+  const { t } = useTranslation()
+  const location = useLocation();
+  const search = useMemo(() => {
+    return Object.fromEntries(new URLSearchParams(location.search));
+  }, [location]);
 
-export type FormEventType = 
-  | 'refresh'
-  | 'validate'
-  | 'field_change'
-  | 'before_save'
-  | 'after_save'
-  | 'onload';
+  useEffect(() => {
+    if (organization?.id) {
+      zuiStore.setOrg(organization.id);
+      return;
+    }
 
-export type FormContextEventType = 'on_render' | 'on_format';
+    if (router.pathname.startsWith("/desk/")) {
+      const org = router.pathname.split("/")[2];
+      zuiStore.setOrg(org || null);
+    } else {
+      zuiStore.setOrg(null);
+    }
+  }, [router.pathname, organization?.id]);
 
-export type ListContextEventType = 'on_format' | 'on_render';
+  const formOn = useCallback(<DN extends Zodula.DoctypeName>(
+    doctype: DN,
+    events: Partial<Record<FormScriptEvent<DN>, FormScriptHandler<DN>>>
+  ) => {
+    for (const [event, script] of Object.entries(events)) {
+      if (!script) continue;
+      zuiStore.ui_form_scripts.push({
+        doctype,
+        event: event as FormScriptEvent<DN>,
+        script,
+      } as RegisteredFormScript<Zodula.DoctypeName>);
+    }
+  }, [zuiStore.org]);
 
-export type EventHandler<DN extends Zodula.DoctypeName = Zodula.DoctypeName> = (
-  frm: Form<DN>
-) => void | Promise<void>;
+  const listOn = useCallback(<DN extends Zodula.DoctypeName>(
+    doctype: DN,
+    events: Partial<Record<ListScriptEvent, ListScriptHandler<DN>>>
+  ) => {
+    for (const [event, script] of Object.entries(events)) {
+      if (!script) continue;
+      zuiStore.ui_list_scripts.push({
+        doctype,
+        event: event as ListScriptEvent,
+        script,
+      } as RegisteredListScript<Zodula.DoctypeName>);
+    }
+  }, [zuiStore.org]);
 
-export type FormContextHandler<DN extends Zodula.DoctypeName = Zodula.DoctypeName> = (
-  context: FormContext<DN>
-) => void | Promise<void>;
-
-export type ListContextHandler<DN extends Zodula.DoctypeName = Zodula.DoctypeName> = (
-  context: ListContext<DN>
-) => void | Promise<void>;
-
-// Event handlers map types with field name support
-export type FormEventHandlers<DN extends Zodula.DoctypeName = Zodula.DoctypeName> = {
-  [K in FormEventType]?: EventHandler<DN>;
-} & {
-  // Field-specific handlers - keys are field names from the doctype
-  [fieldName in keyof Zodula.SelectDoctype<DN>]?: EventHandler<DN>;
-} & {
-  // Allow any string for dynamic field names
-  [fieldName: string]: EventHandler<DN>;
-};
-
-export type FormContextEventHandlers<DN extends Zodula.DoctypeName = Zodula.DoctypeName> = {
-  [K in FormContextEventType]?: FormContextHandler<DN>;
-};
-
-export type ListContextEventHandlers<DN extends Zodula.DoctypeName = Zodula.DoctypeName> = {
-  [K in ListContextEventType]?: ListContextHandler<DN>;
-};
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-// Translation helper function
-function translate(key: string): string {
-  const languageStore = useLanguageStore.getState();
-  const translationStore = useTranslationStore.getState();
-  
-  const activeLanguage = languageStore.currentLanguage;
-  const translations = translationStore.translations;
-  const translationCache = translationStore.translationCache;
-  const patternCache = translationStore.patternCache;
-  
-  // Create cache key with language to avoid conflicts
-  const cacheKey = `${activeLanguage}:${key}`;
-  
-  // Check cache first
-  if (translationCache.has(cacheKey)) {
-    return translationCache.get(cacheKey)!;
-  }
-  
-  // Helper function to get translation filtered by language
-  const getTranslationByLanguage = (translationKey: string) => {
-    return translations.find((translation) =>
-      translation.key === translationKey &&
-      translation.language === activeLanguage
-    );
-  };
-  
-  // Helper function to replace template variables in translation strings
-  const replaceTemplateVariables = (template: string, variables: Record<string, string | number> = {}): string => {
-    return template.replace(/\{\{(\w+)\}\}/g, (match, variableName) => {
-      const value = variables[variableName];
-      return value !== undefined ? String(value) : match;
-    });
-  };
-  
-  // Helper function to auto-detect variables from a string
-  const autoDetectVariables = (inputString: string, translationKey: string): Record<string, string | number> => {
-    const variables: Record<string, string | number> = {};
-    
-    // Extract template variables from the translation key
-    const templateMatches = translationKey.match(/\{\{(\w+)\}\}/g);
-    if (!templateMatches) return variables;
-    
-    // Extract the template pattern without variables
-    const templatePattern = translationKey.replace(/\{\{(\w+)\}\}/g, '{{}}');
-    
-    // Create a regex pattern to match the input string
-    const regexPattern = templatePattern.replace(/\{\{\}\}/g, '(.+?)');
-    const regex = new RegExp(`^${regexPattern}$`);
-    
-    const match = inputString.match(regex);
-    if (match) {
-      // Extract variable names and their values
-      templateMatches.forEach((templateVar, index) => {
-        const varName = templateVar.replace(/\{\{|\}\}/g, '');
-        const varValue = match[index + 1]; // +1 because match[0] is the full match
-        if (varValue) {
-          variables[varName] = varValue;
+  const executeFormScripts = useMemo(
+    () =>
+      async <DN extends Zodula.DoctypeName>(
+        doctype: DN,
+        event: FormScriptEvent<DN>,
+        context: FormScriptContext<DN>
+      ): Promise<void> => {
+        const scripts = zuiStore.ui_form_scripts.filter(
+          (s) => s.doctype === doctype && s.event === event
+        );
+        for (const s of scripts) {
+          await s.script(context);
         }
-      });
-    }
-    
-    return variables;
-  };
-  
-  // Helper function to find the best matching translation key
-  const findBestTranslationKey = (inputString: string): string | null => {
-    // First, try exact match with language filter
-    const exactMatch = getTranslationByLanguage(inputString);
-    if (exactMatch) return inputString;
-    
-    // Then, try to find a template pattern that matches with language filter
-    for (const translation of translations) {
-      if (translation.key.includes('{{') && translation.language === activeLanguage) {
-        const templatePattern = translation.key.replace(/\{\{(\w+)\}\}/g, '{{}}');
-        const regexPattern = templatePattern.replace(/\{\{\}\}/g, '(.+?)');
-        const regex = new RegExp(`^${regexPattern}$`);
-        
-        if (regex.test(inputString)) {
-          return translation.key;
+      },
+    [zuiStore.org]
+  );
+
+  const executeListScripts = useMemo(
+    () =>
+      async <DN extends Zodula.DoctypeName>(
+        doctype: DN,
+        event: ListScriptEvent,
+        context: ListScriptContext<DN>
+      ): Promise<void> => {
+        const scripts = zuiStore.ui_list_scripts.filter(
+          (s) => s.doctype === doctype && s.event === event
+        );
+        for (const s of scripts) {
+          await s.script(context);
         }
-      }
-    }
-    
-    return null;
-  };
-  
-  // Find the best matching translation key
-  const bestKey = findBestTranslationKey(key);
-  const translation = bestKey ? getTranslationByLanguage(bestKey) : getTranslationByLanguage(key);
-  const translationText = translation?.translation || key;
-  
-  // If we found a template-based translation, auto-detect variables
-  if (bestKey && bestKey !== key && bestKey.includes('{{')) {
-    // Check pattern cache for this input
-    if (patternCache.has(cacheKey)) {
-      const cached = patternCache.get(cacheKey)!;
-      const result = replaceTemplateVariables(translationText, cached.variables);
-      translationCache.set(cacheKey, result);
-      return result;
-    }
-    
-    const autoDetectedVars = autoDetectVariables(key, bestKey);
-    const result = replaceTemplateVariables(translationText, autoDetectedVars);
-    
-    // Cache the pattern match and result
-    patternCache.set(cacheKey, { key: bestKey, variables: autoDetectedVars });
-    translationCache.set(cacheKey, result);
-    return result;
-  }
-  
-  // Cache the result
-  translationCache.set(cacheKey, translationText);
-  return translationText;
-}
+      },
+    [zuiStore.ui_list_scripts]
+  );
 
-// Map Frappe-style event names to our event types
-function mapEventType(eventType: string): UIScriptEventType {
-  const mapping: Record<string, UIScriptEventType> = {
-    'refresh': 'refresh',
-    'validate': 'form_save',
-    'onload': 'refresh',
-    'before_save': 'form_save',
-    'after_save': 'form_save',
-    'field_change': 'field_change',
-  };
-  
-  return mapping[eventType] || (eventType as UIScriptEventType);
-}
-
-// Create Form object from context (merged Form + FormContext)
-function createFormObject<DN extends Zodula.DoctypeName>(
-  context: UIScriptContext<DN>
-): Form<DN> {
-  const doc = (context.getValues?.() || context.formData || {}) as Partial<Zodula.SelectDoctype<DN>>;
-  const parent = (context as any).parentContext as FormContext<any> | undefined;
-
-  return {
-    doc,
-    doctype: context.doctype,
-    isCreate: context.isCreate ?? false,
-    isEdit: !!context.isEdit,
-    getValue: context.getValue?.bind(context) as any,
-    setValue: context.setValue?.bind(context) as any,
-    set_child_table_value: (context as any).set_child_table_value ?? parent?.set_child_table_value,
-    set_child_extend_value: (context as any).set_child_extend_value ?? parent?.set_child_extend_value,
-    addBadge: (context as any).addBadge ?? parent?.addBadge,
-    addSecondaryButton: (context as any).addSecondaryButton ?? parent?.addSecondaryButton,
-    navigate: (context as any).navigate ?? parent?.navigate,
-    org: (context as any).org ?? parent?.org,
-    showDialog: (context as any).showDialog ?? parent?.showDialog,
-    open_multi_select_dialog: (context as any).open_multi_select_dialog ?? parent?.open_multi_select_dialog,
-    is_new: () => context.isCreate || false,
-    is_dirty: () => {
-      // Simple dirty check - can be enhanced
-      return false;
-    },
-    get_value: <K extends keyof Zodula.SelectDoctype<DN>>(fieldname: K) => {
-      return (context.getValue?.(fieldname as string) ?? doc[fieldname]) as Zodula.SelectDoctype<DN>[K] | undefined;
-    },
-    set_value: <K extends keyof Zodula.SelectDoctype<DN>>(fieldname: K, value: Zodula.SelectDoctype<DN>[K]) => {
-      context.setValue?.(fieldname as string, value);
-      (doc as any)[fieldname] = value;
-    },
-    set_df_property: (fieldname: string, property: string, value: any) => {
-      // Call the setFieldProperty function from context if available
-      if ((context as any).setFieldProperty) {
-        (context as any).setFieldProperty(fieldname, property, value);
-      } else {
-        console.warn(`set_df_property(${fieldname}, ${property}, ${value}) - setFieldProperty not available in context`);
-      }
-    },
-    set_df_child_extend_property: (childField: string, fieldName: string, property: string, value: any) => {
-      // Call the setChildExtendProperty function from context if available
-      if ((context as any).setChildExtendProperty) {
-        (context as any).setChildExtendProperty(childField, fieldName, property, value);
-      } else {
-        console.warn(`set_df_child_extend_property(${childField}, ${fieldName}, ${property}, ${value}) - setChildExtendProperty not available in context`);
-      }
-    },
-    set_df_child_table_property: (childField: string, idx: number | null, fieldName: string, property: string, value: any) => {
-      // Call the setChildTableProperty function from context if available
-      if ((context as any).setChildTableProperty) {
-        (context as any).setChildTableProperty(childField, idx, fieldName, property, value);
-      } else {
-        console.warn(`set_df_child_table_property(${childField}, ${idx}, ${fieldName}, ${property}, ${value}) - setChildTableProperty not available in context`);
-      }
-    },
-    parent: () => {
-      // Return parent context if available
-      return (context as any).parentContext || null;
-    },
-    get_doc: () => doc,
-    refresh: () => {
-      // Refresh would reload the form
-      console.log('refresh() called');
-    },
-    add_fetch: (source_field: string, target_field: string, fetch_path: string) => {
-      // This will be handled by the form component's fetch_from logic
-      console.log(`add_fetch(${source_field}, ${target_field}, ${fetch_path})`);
-    },
-    msgprint: (message: string, type: 'error' | 'warning' | 'info' = 'info') => {
-      // Map 'warning' to 'info' for showToast compatibility
-      const toastType = type === 'warning' ? 'info' : type;
-      context.showToast?.(message, toastType);
-    },
-    // Reference table helpers
-    get_reference_table_value: (field: string, childField: string, idx: number) => {
-      const tableData = context.getValue?.(field);
-      if (Array.isArray(tableData) && tableData[idx]) {
-        return tableData[idx][childField];
-      }
-      return undefined;
-    },
-    set_reference_table_value: (field: string, childField: string, idx: number, value: any) => {
-      const tableData = context.getValue?.(field) || [];
-      if (!Array.isArray(tableData)) return;
-      
-      const newTableData = [...tableData];
-      if (!newTableData[idx]) {
-        newTableData[idx] = {};
-      }
-      newTableData[idx] = {
-        ...newTableData[idx],
-        [childField]: value
-      };
-      context.setValue?.(field, newTableData);
-    },
-    // Extend helpers
-    get_extend_value: (field: string, childField: string) => {
-      const extendData = context.getValue?.(field);
-      if (extendData && typeof extendData === 'object') {
-        return extendData[childField];
-      }
-      return undefined;
-    },
-    set_extend_value: (field: string, childField: string, value: any) => {
-      const extendData = context.getValue?.(field) || {};
-      const newExtendData = {
-        ...extendData,
-        [childField]: value
-      };
-      context.setValue?.(field, newExtendData);
-    },
-    // Field change specific
-    docfield: context.fieldName ? {
-      fieldname: context.fieldName,
-      value: context.value,
-      old_value: context.oldValue
-    } : undefined,
-    idx: context.idx
-  };
-}
-
-// ============================================================================
-// Context Interfaces
-// ============================================================================
-
-export interface ListContext<DN extends Zodula.DoctypeName = Zodula.DoctypeName> {
-  doctype: DN;
-  listData: Zodula.SelectDoctype<DN>[];
-  selectedRows: Set<string>;
-  setSelectedRows: (selected: Set<string>) => void;
-  refreshList: () => void;
-  addColumn: (column: { key: string; label: string; render?: (doc: Zodula.SelectDoctype<DN>) => React.ReactNode }) => void;
-  addBadge: (
-    fieldName: keyof Zodula.SelectDoctype<DN> | string, 
-    config: { 
-      variant?: BadgeVariant['variant']; 
-      size?: BadgeVariant['size']; 
-      getValue?: (doc: Zodula.SelectDoctype<DN>) => any 
-    }
-  ) => void;
-}
-
-export interface FormContext<DN extends Zodula.DoctypeName = Zodula.DoctypeName> {
-  doctype: DN;
-  doc: Partial<Zodula.SelectDoctype<DN>>;
-  isCreate: boolean;
-  isEdit: boolean;
-  getValue: <K extends keyof Zodula.SelectDoctype<DN>>(fieldName: K) => Zodula.SelectDoctype<DN>[K] | undefined;
-  setValue: <K extends keyof Zodula.SelectDoctype<DN>>(fieldName: K, value: Zodula.SelectDoctype<DN>[K]) => void | Promise<void>;
-  /** Set reference table rows and fill fetch_from from linked docs. Prefer over setValue for child tables. */
-  set_child_table_value?: (fieldName: string, rows: any[]) => Promise<void>;
-  /** Set extend field value (object of child field values). */
-  set_child_extend_value?: (fieldName: string, data: Record<string, any>) => void;
-  addBadge: (
-    fieldName: keyof Zodula.SelectDoctype<DN> | string, 
-    config: { 
-      variant?: BadgeVariant['variant']; 
-      size?: BadgeVariant['size']; 
-      getValue?: (doc: Partial<Zodula.SelectDoctype<DN>>) => any 
-    }
-  ) => void;
-  addSecondaryButton: (
-    label: string, 
-    onClick: () => void | Promise<void>, 
-    options?: {
-      variant?: "outline" | "ghost" | "solid" | "subtle" | "success";
-      icon?: React.ComponentType<any>;
-      disabled?: boolean;
-      items?: Array<{
-        label: string;
-        icon?: React.ComponentType<any>;
-        onClick: () => void | Promise<void>;
-        disabled?: boolean;
-      }>;
-    }
-  ) => void;
-  navigate: (path: string, options?: { state?: any }) => void;
-  org?: string;
-  showDialog?: (component: any, dialogProps: any) => Promise<any>;
-  open_multi_select_dialog?: (
-    doctype: Zodula.DoctypeName,
-    options?: {
-      title?: string;
-      defaultFilters?: any[];
-      limit?: number;
-      width?: number | string;
-      list_view_fields?: string[];
-    }
-  ) => Promise<string[] | null>;
-  // Form (Frappe-style) API – same object can be used as context or frm
-  get_value: <K extends keyof Zodula.SelectDoctype<DN>>(fieldname: K) => Zodula.SelectDoctype<DN>[K] | undefined;
-  set_value: <K extends keyof Zodula.SelectDoctype<DN>>(fieldname: K, value: Zodula.SelectDoctype<DN>[K]) => void;
-  set_df_property: (fieldname: string, property: string, value: any) => void;
-  set_df_child_extend_property: (childField: string, fieldName: string, property: string, value: any) => void;
-  set_df_child_table_property: (childField: string, idx: number | null, fieldName: string, property: string, value: any) => void;
-  parent: () => FormContext<any> | null;
-  get_doc: () => Partial<Zodula.SelectDoctype<DN>>;
-  refresh: () => void;
-  add_fetch: (source_field: string, target_field: string, fetch_path: string) => void;
-  msgprint: (message: string, type?: "error" | "warning" | "info") => void;
-  get_reference_table_value?: (field: string, childField: string, idx: number) => any;
-  set_reference_table_value?: (field: string, childField: string, idx: number, value: any) => void;
-  get_extend_value?: (field: string, childField: string) => any;
-  set_extend_value?: (field: string, childField: string, value: any) => void;
-  docfield?: { fieldname: string; value: any; old_value: any };
-  idx: number | undefined;
-  is_new: () => boolean;
-  is_dirty: () => boolean;
-  showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
-}
-
-/** Merged with FormContext: use FormContext<DN> for both context and frm. Form is an alias. */
-export type Form<DN extends Zodula.DoctypeName = Zodula.DoctypeName> = FormContext<DN>;
-
-// ============================================================================
-// ZUI Class - Type-Safe API
-// ============================================================================
-
-class ZUI {
-  private getStore() {
-    return useUIScriptStore.getState();
-  }
-
-  /**
-   * Translation function for internationalization
-   * @param key - The translation key or text to translate
-   * @returns The translated text, or the key if no translation is found
-   */
-  t = (key: string): string => {
-    return translate(key);
-  };
-
-  list = {
-    on: <DN extends Zodula.DoctypeName>(
-      doctype: DN,
-      eventOrHandlers: ListContextEventType | ListContextEventHandlers<DN>,
-      handler?: ListContextHandler<DN>
-    ): void => {
-      const { registerScript } = this.getStore();
-      
-      // Handle single event: zui.list.on('Task', 'on_format', function(context) { ... })
-      if (typeof eventOrHandlers === 'string' && typeof handler === 'function') {
-        const eventType = eventOrHandlers;
-        const scriptId = `${doctype}_list_${eventType}_${Date.now()}`;
-        
-        registerScript(doctype, {
-          id: scriptId,
-          doctype,
-          name: `${doctype} list ${eventType}`,
-          events: [
-            {
-              type: eventType,
-              action: async (context: UIScriptContext) => {
-                await handler(context as ListContext<DN>);
-              }
-            }
-          ]
-        });
-      }
-      // Handle multiple events: zui.list.on('Task', { on_format: function(context) { ... }, on_render: function(context) { ... } })
-      else if (typeof eventOrHandlers === 'object' && !handler) {
-        const scriptId = `${doctype}_list_multi_${Date.now()}`;
-        const events: UIScriptEvent[] = [];
-        
-        Object.entries(eventOrHandlers).forEach(([key, eventHandler]) => {
-          if (key === 'on_format' || key === 'on_render') {
-          events.push({
-              type: key as UIScriptEventType,
-              action: async (context: UIScriptContext) => {
-                await (eventHandler as ListContextHandler<DN>)(context as ListContext<DN>);
-            }
-          });
-          }
-        });
-        
-        registerScript(doctype, {
-          id: scriptId,
-          doctype,
-          name: `${doctype} list multiple events`,
-          events
-        });
-      }
-    }
-  };
-
-  form = {
-    on: <DN extends Zodula.DoctypeName>(
-      doctype: DN,
-      eventOrFieldOrHandlers: 
-        | FormEventType 
-        | FormContextEventType
-        | FormEventHandlers<DN> 
-        | FormContextEventHandlers<DN>
-        | keyof Zodula.SelectDoctype<DN> // Field name
-        | string, // Fallback for dynamic field names
-      handler?: EventHandler<DN> | FormContextHandler<DN>
-    ): void => {
-      const { registerScript } = this.getStore();
-      const knownEventTypes: readonly string[] = ['refresh', 'validate', 'onload', 'before_save', 'after_save', 'field_change', 'on_render', 'on_format'] as const;
-      
-      // Handle single event: zui.form.on('Task', 'validate', function(frm) { ... })
-      // or zui.form.on('Task', 'on_render', function(context) { ... })
-      if (typeof eventOrFieldOrHandlers === 'string' && typeof handler === 'function') {
-        // Check if it's a context-based event (on_render, on_format)
-        if (eventOrFieldOrHandlers === 'on_render' || eventOrFieldOrHandlers === 'on_format') {
-          const eventType = eventOrFieldOrHandlers as FormContextEventType;
-          const scriptId = `${doctype}_form_${eventType}_${Date.now()}`;
-          
-          registerScript(doctype, {
-            id: scriptId,
-            doctype,
-            name: `${doctype} form ${eventType}`,
-            events: [
-              {
-                type: eventType,
-                action: async (context: UIScriptContext) => {
-                  await (handler as FormContextHandler<DN>)(context as FormContext<DN>);
-                }
-              }
-            ]
-          });
-        }
-        // Check if it's a known event type
-        else if (knownEventTypes.includes(eventOrFieldOrHandlers)) {
-          // It's an event type
-          const eventType = mapEventType(eventOrFieldOrHandlers) as UIScriptEventType;
-          const scriptId = `${doctype}_${eventType}_${Date.now()}`;
-          
-          registerScript(doctype, {
-            id: scriptId,
-            doctype,
-            name: `${doctype} ${eventType}`,
-            events: [
-              {
-                type: eventType,
-                action: async (context: UIScriptContext) => {
-                  const frm = createFormObject(context as UIScriptContext<DN>);
-                  await (handler as EventHandler<DN>)(frm);
-                }
-              }
-            ]
-          });
-        } else {
-          // It's a field name - treat as field_change
-          const fieldName = eventOrFieldOrHandlers;
-          const scriptId = `${doctype}_field_change_${fieldName}_${Date.now()}`;
-          
-          registerScript(doctype, {
-            id: scriptId,
-            doctype,
-            name: `${doctype} field_change ${fieldName}`,
-            events: [
-              {
-                type: 'field_change',
-                target: fieldName,
-                action: async (context: UIScriptContext) => {
-                  const frm = createFormObject(context as UIScriptContext<DN>);
-                  await (handler as EventHandler<DN>)(frm);
-                }
-              }
-            ]
-          });
-        }
-      }
-      // Handle multiple events: zui.form.on('Task', { refresh: function(frm) { ... }, customer: function(frm) { ... } })
-      // or zui.form.on('Task', { on_render: function(context) { ... } })
-      else if (typeof eventOrFieldOrHandlers === 'object' && !handler) {
-        const scriptId = `${doctype}_multi_${Date.now()}`;
-        const events: UIScriptEvent[] = [];
-        
-        Object.entries(eventOrFieldOrHandlers).forEach(([key, eventHandler]) => {
-          // Check if it's a context-based event (on_render, on_format)
-          if (key === 'on_render' || key === 'on_format') {
-            events.push({
-              type: key as UIScriptEventType,
-              action: async (context: UIScriptContext) => {
-                await (eventHandler as FormContextHandler<DN>)(context as FormContext<DN>);
-              }
+  const ui = useMemo(
+    () => ({
+      form: {
+        on: formOn,
+        set_secondary_button: <DN extends Zodula.DoctypeName>(
+          doctype: DN,
+          label: string,
+          onClick: (context: FormScriptContext<DN>) => void | Promise<void>,
+          options?: SecondaryButtonOptions<DN, "form">
+        ) => {
+          const exists = zuiStore.ui_form_secondary_buttons.some(
+            (b) => b.doctype === doctype && b.label === label
+          );
+          if (!exists) {
+            zuiStore.ui_form_secondary_buttons.push({
+              doctype,
+              label,
+              onClick: onClick as any,
+              options: options as SecondaryButtonOptions<Zodula.DoctypeName, "form">,
             });
           }
-          // Check if key is a known event type
-          else if (knownEventTypes.includes(key)) {
-            // It's an event type
-            const mappedEventType = mapEventType(key);
-            events.push({
-              type: mappedEventType,
-              action: async (context: UIScriptContext) => {
-                const frm = createFormObject(context as UIScriptContext<DN>);
-                await (eventHandler as EventHandler<DN>)(frm);
-              }
-            });
-          } else {
-            // It's a field name - treat as field_change
-            events.push({
-              type: 'field_change',
-              target: key,
-              action: async (context: UIScriptContext) => {
-                const frm = createFormObject(context as UIScriptContext<DN>);
-                await (eventHandler as EventHandler<DN>)(frm);
-              }
+        },
+        set_field_button: <DN extends Zodula.DoctypeName>(
+          doctype: DN,
+          fieldName: string,
+          label: string,
+          onClick: (context: FormScriptContext<DN>) => void | Promise<void>,
+          options?: SecondaryButtonOptions<DN, "form">
+        ) => {
+          const exists = zuiStore.ui_form_field_buttons.some(
+            (b) => b.doctype === doctype && b.fieldName === fieldName && b.label === label
+          );
+          if (!exists) {
+            zuiStore.ui_form_field_buttons.push({
+              doctype,
+              fieldName,
+              label,
+              onClick: onClick as any,
+              options: options as SecondaryButtonOptions<Zodula.DoctypeName, "form">,
             });
           }
+        },
+      },
+      list: {
+        on: listOn,
+        set_secondary_button: <DN extends Zodula.DoctypeName>(
+          doctype: DN,
+          label: string,
+          onClick: (context: ListScriptContext<DN>) => void | Promise<void>,
+          options?: SecondaryButtonOptions<DN, "list">
+        ) => {
+          const exists = zuiStore.ui_list_secondary_buttons.some(
+            (b) => b.doctype === doctype && b.label === label
+          );
+          if (!exists) {
+            zuiStore.ui_list_secondary_buttons.push({
+              doctype,
+              label,
+              onClick: onClick as any,
+              options: options as SecondaryButtonOptions<Zodula.DoctypeName, "list">,
+            });
+          }
+        },
+      },
+    }),
+    []
+  );
+
+  const zui = {
+    org: organization?.id ?? zuiStore.org,
+    router,
+    params,
+    search,
+    t,
+    toast,
+    open_dialog: popup,
+    open_multiselect_dialog: (
+      initialData: MultiSelectDoctypeDialogInitialData,
+      options?: { title?: string; description?: string; showCloseButton?: boolean; width?: number | string; maxWidth?: number | string }
+    ) => popup(MultiSelectDoctypeDialog, options, initialData) as Promise<string[] | null>,
+    open_singleselect_dialog: (
+      initialData: MultiSelectDoctypeDialogInitialData,
+      options?: { title?: string; description?: string; showCloseButton?: boolean; width?: number | string; maxWidth?: number | string }
+    ) => popup(MultiSelectDoctypeDialog, options, { ...initialData, single: true }) as Promise<string | null>,
+    confirm,
+    alert,
+    form: ui.form,
+    list: ui.list,
+    onboarding: {
+      getChecklist: async () => {
+        const res = await zodula.action("zodula.onboarding.checklist" as Zodula.ActionPath);
+        return res as {
+          checklist: Array<{
+            onboarding: { id: string; name: string; mode: string };
+            steps: Array<{ id: string; title: string; description: string | null; route: string | null; done: boolean; idx: number }>;
+          }>
+        };
+      },
+      markStepDone: async (onboardingStepId: string) => {
+        await zodula.action("zodula.onboarding.markStepDone" as Zodula.ActionPath, {
+          data: { onboarding_step_id: onboardingStepId },
         });
-        
-        registerScript(doctype, {
-          id: scriptId,
-          doctype,
-          name: `${doctype} multiple events`,
-          events
-        });
-      }
-    }
-  };
+      },
+    },
+    _: {
+      state: zuiStore,
+      executeFormScripts,
+      executeListScripts,
+    },
+  } satisfies ZUI;
+
+  const isCallbackMode = typeof callback === "function" && Array.isArray(deps);
+  useEffect(() => {
+    if (!isCallbackMode) return;
+    if (!zui.org) return;
+    void (async () => {
+      await (callback as (zui: ZUI) => void | Promise<void>)(zui);
+    })();
+  }, isCallbackMode ? [...deps, zui.org] : []);
+  return isCallbackMode ? undefined : zui;
 }
-
-// Export singleton instance
-export const zui = new ZUI();
-
-// Export types for use in UI files
-export type { Form as FormType };

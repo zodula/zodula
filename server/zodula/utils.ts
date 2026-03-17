@@ -6,7 +6,9 @@ import { logger } from "../logger"
 import { z } from "bxo"
 import { translate as translateTranslation } from "../serve/extend/translation"
 import { Database } from "../database"
-
+import path from "path"
+import fs from "fs/promises"
+import sharp from "sharp"
 
 export const genRanHex = (size: number) => [...Array(size)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
 
@@ -106,4 +108,75 @@ export async function getDoctypeConnections(doctype: Zodula.DoctypeName, id: str
     }
     connections = connections.filter((connection) => connection.doctype !== doctype)
     return connections
+}
+
+export async function get_image_base64(options: {
+    org: string
+    doctype: Zodula.DoctypeName
+    docId: string
+    fieldName: string
+    filename?: string
+    bypass?: boolean
+    width?: number
+    height?: number
+}): Promise<string | null> {
+    const { org, doctype, docId, fieldName, filename, bypass, width, height } = options
+
+    try {
+        const dtMeta = loader.from("doctype").get(doctype)
+        const field = dtMeta?.schema?.fields?.[fieldName as any]
+        const isPublic = field?.is_public === 1
+
+        if (!bypass && !isPublic) {
+            throw new Error("You are not authorized to access this file")
+        }
+
+        const baseDir = path.join(process.cwd(), ".zodula_data", "files", org, doctype, docId, fieldName)
+        let finalFilename = filename
+
+        if (!finalFilename) {
+            const files = await fs.readdir(baseDir)
+            if (!files.length) return null
+            finalFilename = files[0]
+        }
+
+        const filePath = path.join(baseDir, finalFilename!)
+        const ext = path.extname(finalFilename || "").toLowerCase()
+
+        const imageExts = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff"]
+        const mimeByExt: Record<string, string> = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".webp": "image/webp",
+            ".gif": "image/gif",
+            ".bmp": "image/bmp",
+            ".tiff": "image/tiff",
+        }
+
+        let buffer: Buffer
+
+        if (imageExts.includes(ext) && (width || height)) {
+            try {
+                buffer = await sharp(filePath)
+                    .resize(width, height, {
+                        fit: "inside",
+                        withoutEnlargement: true,
+                    })
+                    .toBuffer()
+            } catch (e) {
+                logger.error("get_image_base64 resize failed, serving original:", e)
+                buffer = await fs.readFile(filePath)
+            }
+        } else {
+            buffer = await fs.readFile(filePath)
+        }
+
+        const mime = mimeByExt[ext] || "application/octet-stream"
+        const base64 = buffer.toString("base64")
+        return `data:${mime};base64,${base64}`
+    } catch (error: any) {
+        logger.error("get_image_base64 error:", error)
+        return null
+    }
 }

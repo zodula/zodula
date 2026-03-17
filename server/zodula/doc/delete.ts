@@ -75,9 +75,9 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
         const doctype = loader.from("doctype").get(this.doctypeName)
         const user = await zodula.session.user()
         let old = await zodula.doctype(this.doctypeName).get(this.id).bypass(true).unsafe()
-        const organization = old?.organization || "System Panel"
-        if(!old?.organization) {
-            old.organization = organization
+        const organization = old?.doc_organization || "System Panel"
+        if(!old?.doc_organization) {
+            old.doc_organization = organization
         }
         // Validate document exists
         if (!old) {
@@ -119,7 +119,7 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
         const result = await db.delete(doctype?.name).where("id", "=", this.id).returning("*").execute()
 
         // Delete associated files
-        await this.deleteFiles(doctype, old?.organization)
+        await this.deleteFiles(doctype, old?.doc_organization)
 
         // Create audit trail for delete action
         await this.createAuditTrail(old, prepared)

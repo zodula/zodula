@@ -58,7 +58,7 @@ export class ZodulaDoctype<TN extends Zodula.DoctypeName = Zodula.DoctypeName> {
                 status: 404
             })
         }
-        const file_path = path.join(process.cwd(), ".zodula_data", "files", doc?.organization || "System Panel", this.doctypeName, docId, fieldName, file as string)
+        const file_path = path.join(process.cwd(), ".zodula_data", "files", doc?.doc_organization || "System Panel", this.doctypeName, docId, fieldName, file as string)
         return file_path
     }
 }

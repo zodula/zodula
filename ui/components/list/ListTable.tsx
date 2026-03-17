@@ -33,6 +33,10 @@ interface ListTableProps<
   count?: number;
   selected: Set<string>;
   setSelected: (selected: Set<string>) => void;
+  /** Dialog/compact: hide count & time columns, overflow-auto + max-height */
+  compact?: boolean;
+  /** When true, only one row can be selected; header "select all" is hidden */
+  single?: boolean;
 }
 
 export function ListTable<TDoc extends Record<string, any>>({
@@ -45,39 +49,42 @@ export function ListTable<TDoc extends Record<string, any>>({
   count,
   selected,
   setSelected,
+  compact = false,
+  single = false,
 }: ListTableProps<TDoc>) {
   const { t } = useTranslation();
-  // Calculate selectAll state based on selected items
-  const selectAll =
-    docs.length > 0 && docs.every((doc) => selected.has(doc.id));
-
+  const idStr = (id: any) => String(id ?? "");
+  const selectAll = !single && docs.length > 0 && docs.every((doc) => selected.has(idStr(doc.id)));
   const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      const allIds = new Set(docs.map((doc) => doc.id));
-      setSelected(allIds);
-    } else {
-      setSelected(new Set());
-    }
+    if (single) return;
+    setSelected(checked ? new Set(docs.map((doc) => idStr(doc.id))) : new Set());
   };
-
   const handleRowSelect = (docId: string, checked: boolean) => {
-    const newSelected = new Set(selected);
-    if (checked) {
-      newSelected.add(docId);
-    } else {
-      newSelected.delete(docId);
+    const sid = idStr(docId);
+    if (single) {
+      setSelected(checked ? new Set([sid]) : new Set());
+      return;
     }
-    setSelected(newSelected);
+    const next = new Set(selected);
+    if (checked) next.add(sid); else next.delete(sid);
+    setSelected(next);
   };
+  const wrapperClass = compact
+    ? "zd:w-full zd:max-w-full zd:overflow-auto zd:max-h-[60vh] zd:rounded zd:border"
+    : "zd:relative zd:w-full zd:max-w-full zd:overflow-x-auto zd:shadow zd:rounded zd:border zd:min-h-[50vh]";
+  const tableClass = compact ? "zd:w-full zd:text-sm" : "zd:absolute zd:top-0 zd:w-full zd:text-sm";
   const tableRef = useRef<HTMLTableElement>(null);
+  const wrapperStyle = compact ? undefined : { height: tableRef?.current?.clientHeight ? `${tableRef?.current?.clientHeight + 20}px` : "50vh" };
   return (
-    <div className="zd:relative zd:w-full zd:max-w-full zd:overflow-x-auto zd:shadow zd:rounded zd:border zd:min-h-[50vh]" style={{ height: tableRef?.current?.clientHeight ? `${tableRef?.current?.clientHeight + 5}px` : "50vh" }}>
-      <table ref={tableRef} className="zd:absolute zd:top-0 zd:w-full zd:text-sm">
+    <div className={wrapperClass} style={wrapperStyle}>
+      <table ref={tableRef} className={tableClass}>
         <thead className="zd:border-b zd:border-dashed">
           <tr className="zd:text-left">
-            {/* Checkbox column */}
+            {/* Checkbox column (select-all hidden in single mode) */}
             <th className="zd:px-3 zd:py-1 zd:font-medium zd:w-12 zd:pl-5">
-              <Checkbox checked={selectAll} onCheckedChange={handleSelectAll} />
+              {single ? null : (
+                <Checkbox checked={selectAll} onCheckedChange={handleSelectAll} />
+              )}
             </th>
             {/* Data columns */}
             {columns.map((col, index) => {
@@ -115,19 +122,18 @@ export function ListTable<TDoc extends Record<string, any>>({
                 </th>
               );
             })}
-            {/* Count column */}
-            <th
-              className="zd:px-3 zd:py-1 zd:font-medium zd:text-right zd:min-w-[100px] zd:group-hover:bg-muted/30 zd:pr-5"
-            >
-              {count ? `${docs.length} of ${count}` : ` 0 of 0`}
-            </th>
+            {!compact && (
+              <th className="zd:px-3 zd:py-1 zd:font-medium zd:text-right zd:min-w-[100px] zd:group-hover:bg-muted/30 zd:pr-5">
+                {count ? `${docs.length} of ${count}` : ` 0 of 0`}
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
           {docs.length === 0 ? (
             <tr>
               <td
-                colSpan={columns.length + 2}
+                colSpan={columns.length + (compact ? 1 : 2)}
                 className="zd:px-3 zd:py-6 zd:text-center zd:text-muted-foreground"
               >
                 <div className="zd:flex zd:items-center zd:justify-center zd:gap-2">
@@ -143,7 +149,7 @@ export function ListTable<TDoc extends Record<string, any>>({
                 className="zd:group zd:h-10 zd:hover:bg-muted/30 zd:cursor-pointer"
                 onClick={() => onRowClick?.(doc)}
               >
-                {/* Checkbox column */}
+                {/* Checkbox / radio column */}
                 <td
                   className={cn(
                     "zd:px-3 zd:py-1 zd:pl-5",
@@ -152,9 +158,9 @@ export function ListTable<TDoc extends Record<string, any>>({
                   onClick={(e) => e.stopPropagation()}
                 >
                   <Checkbox
-                    checked={selected.has(doc.id)}
+                    checked={selected.has(idStr(doc.id))}
                     onCheckedChange={(checked) =>
-                      handleRowSelect(doc.id, checked as boolean)
+                      handleRowSelect(idStr(doc.id), checked as boolean)
                     }
                   />
                 </td>
@@ -179,18 +185,13 @@ export function ListTable<TDoc extends Record<string, any>>({
                     </td>
                   );
                 })}
-                {/* Time column */}
-                <td
-                  className="zd:px-3 zd:py-1 zd:text-right zd:text-sm zd:text-muted-foreground zd:pr-5"
-                >
-                  <div className="zd:flex zd:items-center zd:justify-end zd:gap-1 zd:whitespace-nowrap">
-                    <span>
-                      {doc.updated_at
-                        ? zodula.utils.formatTimeAgo(doc.updated_at)
-                        : "-"}
-                    </span>
-                  </div>
-                </td>
+                {!compact && (
+                  <td className="zd:px-3 zd:py-1 zd:text-right zd:text-sm zd:text-muted-foreground zd:pr-5">
+                    <div className="zd:flex zd:items-center zd:justify-end zd:gap-1 zd:whitespace-nowrap">
+                      <span>{doc.updated_at ? zodula.utils.formatTimeAgo(doc.updated_at) : "-"}</span>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))
           )}

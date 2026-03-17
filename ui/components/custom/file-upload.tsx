@@ -81,7 +81,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                 return value;
             }
             // If not starting with http, use BASE_URL
-            return `${urlPrefix}${value}`;
+            return `${urlPrefix || ""}${value}`;
         }
         return null;
     }, [value, isFile, isStringPath]);
@@ -212,7 +212,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                             mimeType={isFile ? value.type : undefined}
                             previewUrl={previewUrl}
                             size="xxl"
-                            onClick={() => previewFile(`${urlPrefix}${value}`)}
+                            onClick={() => previewFile(value)}
                         />
 
                         {/* File Info */}
@@ -220,7 +220,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                             <div className="zd:flex zd:items-center zd:gap-2 zd:mb-1 zd:truncate">
                                 {isFile ? (
                                     <p className="zd:text-sm zd:font-medium zd:truncate zd:cursor-pointer zd:hover:underline" onClick={() => {
-                                        previewFile(`${urlPrefix}${value}`);
+                                        previewFile(value);
                                     }}>{fileName}</p>
                                 ) : (
                                     <a href={!value.startsWith("http") ? `${BASE_URL}${value}` : value} target="_blank" rel="noopener noreferrer" className="hover:underline truncate">

@@ -1,65 +1,23 @@
-import { format as dateFormat, formatDistanceToNow, isValid, parse, addDays as dateFnsAddDays, subDays } from "date-fns"
-import { ClientFieldHelper } from "./field"
+import { ClientFieldHelper } from "./field";
+import {
+    zodulaDate,
+    format,
+    parseDate,
+    formatTimeAgo as formatTimeAgoFromDate,
+    addDays as addDaysFromDate,
+    minusDays as minusDaysFromDate,
+    type DateUnit,
+} from "./zodula-date";
 
-export let BASE_URL = ""
+export type { DateUnit };
+export { zodulaDate, format, parseDate };
+export const formatTimeAgo = formatTimeAgoFromDate;
+export const addDays = addDaysFromDate;
+export const minusDays = minusDaysFromDate;
+
+export let BASE_URL = "";
 if (typeof window !== "undefined") {
-    BASE_URL = window.location.origin
-}
-
-export const format = (data: Date | string, format: "date" | "datetime" | "time" = "datetime") => {
-    let dateFormatString = "yyyy-MM-dd HH:mm:ss"
-    switch (format) {
-        case "date":
-            dateFormatString = "yyyy-MM-dd"
-            break
-        case "time":
-            dateFormatString = "HH:mm:ss"
-            break
-        default:
-            dateFormatString = "yyyy-MM-dd HH:mm:ss"
-            break
-    }
-    if (data instanceof Date) {
-        return dateFormat(data, dateFormatString)
-    }
-    return dateFormat(new Date(data), dateFormatString)
-}
-
-export function formatTimeAgo(dateString: string) {
-    const date = parseDate(dateString);
-    if (!date) return '-';
-
-    return formatDistanceToNow(date);
-}
-
-/** Add days to a date. Returns a Date. */
-export function addDays(date: Date | string, days: number): Date {
-    const d = typeof date === "string" ? new Date(date) : date;
-    return dateFnsAddDays(d, days);
-}
-
-/** Subtract days from a date. Returns a Date. */
-export function minusDays(date: Date | string, days: number): Date {
-    const d = typeof date === "string" ? new Date(date) : date;
-    return subDays(d, days);
-}
-
-export function parseDate(
-    dateString: string,
-    referenceDate = new Date()
-): Date | null {
-    const formats = ["dd-MM-yyyy", "dd-MM-yyyy HH:mm:ss", "HH:mm:ss", "yyyy-MM-dd", "yyyy-MM-dd HH:mm:ss"]
-    for (const fmt of formats) {
-        try {
-            const parsed = parse(dateString, fmt, referenceDate);
-            if (isValid(parsed)) {
-                return parsed;
-            }
-        } catch (error) {
-            continue
-        }
-    }
-    return null; // none matched
+    BASE_URL = window.location.origin;
 }
 
 export function getDefaultValue(field: Zodula.Field) {

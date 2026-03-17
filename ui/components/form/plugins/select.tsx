@@ -27,7 +27,7 @@ export const SelectPlugin = new FormPlugin({
                 onChange={(value) => {
                     // Don't allow changes if readonly
                     if (!props.readonly) {
-                        props.onChange?.(value);
+                        props.onChange?.(props.fieldPath || "", value);
                     }
                 }}
             />
@@ -57,7 +57,7 @@ export const SelectPlugin = new FormPlugin({
                 <Input
                     placeholder="comma-separated values"
                     value={props.value || ""}
-                    onChange={(e) => props.onChange?.(e.target.value)}
+                    onChange={(e) => props.onChange?.(props.fieldPath || "", e.target.value)}
                     className="flex-1"
                 />
             );
@@ -72,7 +72,7 @@ export const SelectPlugin = new FormPlugin({
                 displayMode="label"
                 searchable
                 allowFreeText
-                onChange={(value) => props.onChange?.(value)}
+                onChange={(value) => props.onChange?.(props.fieldPath || "", value)}
                 className="flex-1"
             />
         );

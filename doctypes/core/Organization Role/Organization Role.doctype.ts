@@ -5,13 +5,6 @@ export default $doctype<"Organization Role">({
         reference: "User",
         required: 1
     },
-    organizationId: {
-        type: "Reference",
-        label: "Organization",
-        reference: "Organization",
-        in_list_view: 1,
-        required: 1,
-    },
     roleId: {
         type: "Reference",
         label: "Role",
@@ -24,6 +17,7 @@ export default $doctype<"Organization Role">({
 }, {
     label: "Organization Role",
     is_global: 1,
+    is_child_doctype: 1,
 })
 .on("before_change", async ({ doc, input }) => {
     const prohibitedRoles = ["System Admin", "Anonymous", "Authenticated"];

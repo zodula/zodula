@@ -43,10 +43,10 @@ export const Section: React.FC<SectionProps> = ({
         <div className="zd:flex zd:flex-col zd:gap-4">
             {title && !hideLabel && (
                 <div
-                    className={`zd:flex zd:items-center zd:justify-between zd:transition-colors ${collapsible
-                        ? 'zd:rounded zd:p-2 zd:-m-2'
-                        : ''
-                        }`}
+                    className={cn(
+                        "zd:flex zd:items-center zd:transition-colors zd:border-b zd:border-muted zd:pb-2",
+                        collapsible && "zd:rounded zd:cursor-pointer"
+                    )}
                     role={collapsible ? 'button' : undefined}
                     tabIndex={collapsible ? 0 : undefined}
                     onKeyDown={collapsible ? (e) => {
@@ -55,17 +55,18 @@ export const Section: React.FC<SectionProps> = ({
                             handleToggle();
                         }
                     } : undefined}
+                    onClick={collapsible ? handleToggle : undefined}
                     aria-label={collapsible ? (isCollapsed ? "Expand section" : "Collapse section") : undefined}
                 >
-                    <h3 className="zd:text-sm zd:font-medium zd:text-accent-foreground/80 zd:border-b zd:border-muted zd:pb-2 zd:flex-1">
+                    <h3 className="zd:text-lg zd:font-semibold">
                         {title}
                     </h3>
                     {collapsible && (
-                        <div className="zd:ml-2 zd:text-muted-foreground zd:cursor-pointer zd:hover:text-accent-foreground" onClick={collapsible ? handleToggle : undefined}>
+                        <div className="zd:ml-2">
                             {isCollapsed ? (
-                                <ChevronRight className="w-4 h-4" />
+                                <ChevronRight className="w-8 h-8" />
                             ) : (
-                                <ChevronDown className="w-4 h-4" />
+                                <ChevronDown className="w-8 h-8" />
                             )}
                         </div>
                     )}

@@ -16,7 +16,7 @@ export class ZodulaSession {
       updated_by: "1",
       doc_status: "Submitted",
       owner: "1",
-      organization: "System Panel",
+      doc_organization: "System Panel",
     } satisfies Zodula.SelectDoctype<"User">;
   }
 
@@ -35,11 +35,11 @@ export class ZodulaSession {
       .execute()) as Zodula.SelectDoctype<"Organization Role">[];
     return [
       ...organizationsOwner?.map((organization) => organization.id),
-      ...organizationsUser.map((organization) => organization.organizationId),
+      ...organizationsUser.map((organization) => organization.parentid),
     ];
   }
 
-  async organizationRoles(organization?: string, bypass?: boolean) {
+  async organizationRoles(organization?: string, bypass?: boolean): Promise<string[]> {
     const db = Database("main");
     const user = await this.user(true);
     const org = organization || (await this.organization(true));
@@ -50,7 +50,9 @@ export class ZodulaSession {
       .select("*")
       .from("Organization Role")
       .where("userId", "=", user.id)
-      .where("organizationId", "=", org)
+      .where("parentid", "=", org)
+      .where("parentype", "=", "Organization")
+      .where("parentfield", "=", "organization_roles")
       .execute();
       
     return organizationRoles.map(
@@ -72,7 +74,9 @@ export class ZodulaSession {
     const organizationRoles = (await db
       .select("*")
       .from("Organization Role")
-      .where("organization", "=", organization_id)
+      .where("parentid", "=", organization_id)
+      .where("parentype", "=", "Organization")
+      .where("parentfield", "=", "organization_roles")
       .execute()) as Zodula.SelectDoctype<"Organization Role">[];
     const organizationOwner = (await db
       .select("*")
@@ -140,7 +144,9 @@ export class ZodulaSession {
     const roles = await db
       .select("*")
       .from("User Role")
-      .where("user", "=", user.id)
+      .where("parentid", "=", user.id)
+      .where("parentype", "=", "User")
+      .where("parentfield", "=", "roles")
       .execute();
     const _roles = roles.map((role) => role.role);
     if (user.id !== "" && user.id !== null && user.id !== undefined) {

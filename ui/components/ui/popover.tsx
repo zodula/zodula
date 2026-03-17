@@ -3,6 +3,11 @@ import * as PopoverPrimitive from "@radix-ui/react-popover"
 
 import { cn } from "@/zodula/ui/lib/utils"
 
+function isOnboardingTourLayerTarget(target: EventTarget | null): boolean {
+  if (!target || !("closest" in target)) return false
+  return (target as Element).closest?.("[data-onboarding-tour-layer]") != null
+}
+
 function Popover({
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
@@ -19,6 +24,7 @@ function PopoverContent({
   className,
   align = "center",
   sideOffset = 4,
+  onInteractOutside,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
   return (
@@ -31,6 +37,12 @@ function PopoverContent({
           "zd:bg-popover zd:text-popover-foreground zd:data-[state=open]:animate-in zd:data-[state=closed]:animate-out zd:data-[state=closed]:fade-out-0 zd:data-[state=open]:fade-in-0 zd:data-[state=closed]:zoom-out-95 zd:data-[state=open]:zoom-in-95 zd:data-[side=bottom]:slide-in-from-top-2 zd:data-[side=left]:slide-in-from-right-2 zd:data-[side=right]:slide-in-from-left-2 zd:data-[side=top]:slide-in-from-bottom-2 zd:z-50 zd:w-72 zd:origin-(--radix-popover-content-transform-origin) zd:rounded-md zd:border zd:p-4 zd:shadow-md zd:outline-hidden",
           className ?? ""
         )}
+        onInteractOutside={(e) => {
+          const detail = (e as CustomEvent<{ originalEvent: PointerEvent }>).detail
+          const target = detail?.originalEvent?.target ?? null
+          if (isOnboardingTourLayerTarget(target)) e.preventDefault()
+          onInteractOutside?.(e)
+        }}
         {...props}
       />
     </PopoverPrimitive.Portal>

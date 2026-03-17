@@ -6,11 +6,12 @@ export default $doctype({
         required: 1,
         on_delete: "CASCADE"
     },
-    expires_at: $f.DateTime({
+    expires_at: {
+        type: "DateTime",
         label: "Expires At",
         required: 1,
         default: "NOW()"
-    }),
+    },
     user_agent: {
         type: "Text",
         label: "User Agent"

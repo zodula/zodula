@@ -157,4 +157,12 @@ export class Fields {
         } as Zodula.Field<"File", C["required"] extends 1 ? 1 : 0>
         return new BaseField("File", _config).config
     }
+
+    static Signature<C extends FieldConfig<Zodula.Field>>(config: C) {
+        const _config = {
+            ...config,
+            type: "Signature"
+        } as Zodula.Field<"Signature", C["required"] extends 1 ? 1 : 0>
+        return new BaseField("Signature", _config).config
+    }
 }

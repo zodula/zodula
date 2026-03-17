@@ -23,10 +23,6 @@ export default $doctype<"Audit Trail">(
       type: "JSON",
       label: "New Value",
     },
-    by_name: {
-      type: "Text",
-      label: "By Name",
-    },
     comment: {
       type: "Text",
       label: "Comment",

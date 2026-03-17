@@ -1,37 +1,34 @@
 import BXO from "bxo";
 import { zodula } from "../..";
-import { ctxContext } from "../../async-context";
 
 export const OrgTier = () => {
   const bxo = new BXO();
 
   bxo.beforeRequest(async (ctx: any) => {
     const org = ctx.headers?.get("x-organization");
-    if (!!org) {
-      let orgDoc = await zodula.doctype("Organization").get(org).bypass(true);
-      let tierLevel = Number(orgDoc?.tier_level || '0') || 0;
-      if(!orgDoc){
-        return ctx;
-      }
-      if(!orgDoc?.tier_level){
-        orgDoc = await zodula.doctype("Organization").update(org, {
-          tier_level: "0",
-        }).bypass(true);
-        tierLevel = 0;
-      }
-      if (tierLevel > 0 && orgDoc.tier_expires_at) {
-        const tierExpiresAt = zodula.utils.parseDate(orgDoc.tier_expires_at);
-        if (!!tierExpiresAt && tierExpiresAt! < new Date()) {
+    if (!org) return ctx;
+
+    const orgDoc = await zodula.doctype("Organization").get(org).bypass(true);
+    if (!orgDoc?.id) return ctx;
+
+    const items = await zodula
+      .doctype("Organization App Tier Item")
+      .select()
+      .where("parentid", "=", orgDoc.id)
+      .where("parentype", "=", "Organization")
+      .where("parentfield", "=", "organization_app_tier_items")
+      .bypass(true);
+
+    const now = new Date();
+    for (const item of items.docs || []) {
+      if (item.tier_level === "0") continue;
+      const expiresAt = item.expires_at ? zodula.utils.parseDate(item.expires_at) : null;
+      if (expiresAt && expiresAt < now) {
         await zodula
-            .doctype("Organization")
-            .update(org, {
-              tier_expires_at: null,
-              tier_level: "0",
-            })
-            .bypass(true).catch((error) => {
-              console.error("Error updating organization tier", error);
-            });
-        }
+          .doctype("Organization App Tier Item")
+          .update(item.id, { tier_level: "0", expires_at: null })
+          .bypass(true)
+          .catch((error) => console.error("Error updating organization app tier item", error));
       }
     }
   });

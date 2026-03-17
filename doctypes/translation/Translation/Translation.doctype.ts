@@ -1,9 +1,10 @@
 export default $doctype({
-    language: $f.VirtualReference({
+    language: {
+        type: "Virtual Reference",
         label: "Language",
         reference: "Language",
         required: 1
-    }),
+    },
     key: {
         type: "Text",
         label: "Key",

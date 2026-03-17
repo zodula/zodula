@@ -26,6 +26,7 @@ function buildPdfUrl(params: {
   printTemplate: string;
   letterHead: string;
   lang: string;
+  fromOrganization: string;
 }) {
   if (!params.doctype || params.ids.length === 0) return "";
   const q = new URLSearchParams();
@@ -34,6 +35,7 @@ function buildPdfUrl(params: {
   q.set("ids", JSON.stringify(params.ids));
   q.set("letter_head", params.letterHead);
   q.set("lang", params.lang);
+  q.set("from_organization", params.fromOrganization);
   const url = new URL("/api/action/zodula.core.pdf", window.location.origin);
   url.search = q.toString();
   return url.toString();
@@ -57,6 +59,7 @@ export default function PrintPage() {
       printTemplate,
       letterHead,
       lang,
+      fromOrganization: org,
     });
   }, [defaultsLoaded, doctype, ids, printTemplate, letterHead, lang]);
 
@@ -66,21 +69,25 @@ export default function PrintPage() {
       return;
     }
     setDefaultsLoaded(false);
-    zodula.doc
-      .select_docs("Print Template", {
-        filters: [["is_default", "=", 1], ["doctype", "=", doctype]],
-        limit: 1,
-        sort: "name",
-        order: "asc",
-      })
-      .then(({ docs }) => docs[0])
-      .then((defaultPrintTemplate) => {
-        setPrintTemplate(defaultPrintTemplate?.id ?? "");
-        setLang(defaultPrintTemplate?.default_language ?? "");
-        setLetterHead(defaultPrintTemplate?.default_letter_head ?? "");
-      })
-      .finally(() => setDefaultsLoaded(true));
-  }, [doctype, ids.length]);
+    const loadDefaults = async () => {
+      const [printRes, orgDoc] = await Promise.all([
+        zodula.doc.select_docs("Print Template", {
+          filters: [["is_default", "=", 1], ["doctype", "=", doctype]],
+          limit: 1,
+          sort: "name",
+          order: "asc",
+        }),
+        org ? zodula.doc.get_doc("Organization", org, { fields: ["default_lang"] }) : null,
+      ]);
+      const defaultPrintTemplate = printRes.docs[0];
+      const defaultLang =
+        defaultPrintTemplate?.default_language ?? (orgDoc as { default_lang?: string } | null)?.default_lang ?? "";
+      setPrintTemplate(defaultPrintTemplate?.id ?? "");
+      setLang(defaultLang);
+      setLetterHead(defaultPrintTemplate?.default_letter_head ?? "");
+    };
+    loadDefaults().finally(() => setDefaultsLoaded(true));
+  }, [doctype, ids.length, org]);
 
   const subtitle =
     doctype && ids.length > 0
@@ -122,6 +129,7 @@ export default function PrintPage() {
         title="Print"
         subtitle={subtitle}
         sidebarContent={sidebarContent}
+        defaultOpen
         primaryAction={
           pdfUrl
             ? {

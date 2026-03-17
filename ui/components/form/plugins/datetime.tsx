@@ -15,7 +15,7 @@ export const DateTimePlugin = new FormPlugin({
         onChange={(value) => {
           // Don't allow changes if readonly
           if (!props.readonly) {
-            props.onChange?.(value);
+            props.onChange?.(props.fieldPath || "", value);
           }
         }}
       />
@@ -25,22 +25,9 @@ export const DateTimePlugin = new FormPlugin({
     // Custom cell render for datetime: show formatted date/time
     if (!value)
       return <span className="zd:text-muted-foreground zd:italic">-</span>;
-
+    
     try {
-      const date = new Date(value);
-
-      const type = fieldOptions.type;
-      if (type === "Time") {
-        return value;
-      }
-      if (isNaN(date.getTime()))
-        return <span className="zd:text-muted-foreground zd:italic">-</span>;
-      if (type === "Date") {
-        return date.toLocaleDateString();
-      } else {
-        // DateTime
-        return date.toLocaleString();
-      }
+      return value
     } catch {
       return <span className="zd:text-muted-foreground zd:italic">-</span>;
     }
@@ -51,7 +38,7 @@ export const DateTimePlugin = new FormPlugin({
         type={props.fieldOptions.type as "DateTime" | "Date" | "Time"}
         value={props.value}
         onChange={(value) => {
-          props.onChange?.(value);
+          props.onChange?.(props.fieldPath || "", value);
         }}
       />
     );

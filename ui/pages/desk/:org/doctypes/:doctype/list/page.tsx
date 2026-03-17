@@ -1,39 +1,36 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "react-router";
+import { Plus, Printer, Download, X, Trash2, RefreshCw, ChevronDown } from "lucide-react";
 import { useRouter } from "@/zodula/ui/components/router";
 import { NavbarLayout } from "@/zodula/ui/layout/navbar-layout";
-import { SidebarLayout, type ActionItem, type PrimaryAction } from "@/zodula/ui/layout/sidebar-layout";
+import { SidebarLayout, type ActionItem, type PrimaryAction, type SecondaryAction } from "@/zodula/ui/layout/sidebar-layout";
 import { ListView } from "@/zodula/ui/components/list/ListView";
 import { useListParams } from "@/zodula/ui/hooks/use-list-params";
 import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
 import { useDocListAll } from "@/zodula/ui/hooks/use-doc-list-all";
 import { useDocAll } from "@/zodula/ui/hooks/use-doc-all";
-import { Plus, Printer, Download, X, Trash2, RefreshCw, Grid3x3, List, ChevronDown } from "lucide-react";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/zodula/ui/components/ui/dropdown-menu";
-import { useEffect, useMemo, useState } from "react";
-import { confirm, popup } from "@/zodula/ui/components/ui/popit";
-import { zodula } from "@/zodula/client";
 import { useAuth } from "@/zodula/ui/hooks/use-auth";
-import { FixtureDialog } from "@/zodula/ui/components/dialogs/fixture-dialog";
-import { toast } from "@/zodula/ui/components/ui/toast";
-import { CSVDialog } from "@/zodula/ui/components/dialogs/csv-dialog";
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
+import { confirm, popup } from "@/zodula/ui/components/ui/popit";
+import { toast } from "@/zodula/ui/components/ui/toast";
+import { ViewSelector, getDoctypeViewOptions, type FieldLike } from "@/zodula/ui/components/view-selector";
+import { DynamicIcon } from "@/zodula/ui/components/ui/dynamic-icon";
+import { FixtureDialog } from "@/zodula/ui/components/dialogs/fixture-dialog";
+import { CSVDialog } from "@/zodula/ui/components/dialogs/csv-dialog";
 import ErrorView from "@/zodula/ui/views/error-view";
-import { Button } from "@/zodula/ui/components/ui/button";
-import { useParams } from "react-router";
 import { QuickEntryDialog } from "@/zodula/ui/components/dialogs/quick-entry-dialog";
-import { Select } from "@/zodula/ui/components/ui/select";
+import { zodula } from "@/zodula/client";
+import { useZui } from "@/zodula/ui";
 
 export default function DoctypeListPage() {
-    const { params, push, replace, search, location } = useRouter()
-    const doctype = params.doctype as Zodula.DoctypeName
-    const { roles } = useAuth()
-    const { t } = useTranslation()
-    const [isRefreshing, setIsRefreshing] = useState(false)
+    const { params, push, replace, search, location } = useRouter();
     const { org } = useParams();
+    const doctype = params.doctype as Zodula.DoctypeName;
+    const { roles } = useAuth();
+    const { t } = useTranslation();
+    const zui = useZui();
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
     const {
         limit,
         sort,
@@ -48,46 +45,97 @@ export default function DoctypeListPage() {
         onApplyFilters,
         onClearFilter,
         selected,
-        setSelected
+        setSelected,
     } = useListParams();
 
-    const {
-        docs,
-        count,
-        loading,
-        error,
-        reload
-    } = useDocList({ doctype, limit, sort, order, q, filters });
-
-    // Fetch all fields with persistent caching, then filter client-side
-    const { docs: allFields, reload: reloadFields } = useDocListAll({
-        doctype: "Field"
+    const { docs, count, loading, error, reload } = useDocList({
+        doctype,
+        limit,
+        sort,
+        order,
+        q,
+        filters,
     });
 
-    // Filter fields by doctype and sort by idx
-    const fields = useMemo(() => {
-        return allFields
-            .filter((field) => field.doctype === doctype)
-            .sort((a, b) => (a.idx || 0) - (b.idx || 0));
-    }, [allFields, doctype]);
+    const docsRef = useRef(docs);
+    const selectedRef = useRef(selected);
+    const reloadRef = useRef(reload);
+    const pushRef = useRef(push);
+    docsRef.current = docs;
+    selectedRef.current = selected;
+    reloadRef.current = reload;
+    pushRef.current = push;
 
-    // Get doctype metadata to check if it's submittable
+    const { docs: allFields, reload: reloadFields } = useDocListAll({
+        doctype: "Field",
+    });
+
+    const fields = useMemo(
+        () =>
+            allFields
+                .filter((field) => field.doctype === doctype)
+                .sort((a, b) => (a.idx || 0) - (b.idx || 0)),
+        [allFields, doctype]
+    );
+
     const { doc: doctypeDoc, reload: reloadDoctype } = useDocAll({
         doctype: "Doctype",
-        id: doctype
+        id: doctype,
     });
 
     useEffect(() => {
-        if (doctypeDoc?.is_single) {
+        if (doctypeDoc?.is_single || (doctypeDoc?.is_organization_single && org !== "System Panel")) {
             replace(`/desk/${org}/doctypes/${doctype}`);
         }
-    }, [doctypeDoc, replace, doctype]);
+    }, [doctypeDoc, replace, doctype, org]);
 
     useEffect(() => {
         reloadFields();
         reloadDoctype();
-        reload()
-    }, [doctype, search]);
+        reload();
+    }, [doctype, search, params]);
+
+    // ----- ZUI list context & secondary actions -----
+    const listContext = useMemo(
+        () => ({
+            doctype,
+            list_data: docs,
+            selected_rows: selected,
+            set_selected_rows: setSelected,
+            reload,
+        }),
+        [doctype, docs, selected, setSelected, reload]
+    );
+
+    const secondaryActions = useMemo((): SecondaryAction[] => {
+        const listButtons =
+            zui?._?.state?.ui_list_secondary_buttons?.filter(
+                (b) => b.doctype === doctype
+            ) ?? [];
+        const visible = listButtons.filter(
+            (b) =>
+                !b.options?.condition ||
+                b.options.condition(listContext as any)
+        );
+        return visible.map((b) => {
+            const iconName = b.options?.icon ?? "MoreHorizontal";
+            const IconComponent = (props: { className?: string }) => (
+                <DynamicIcon
+                    iconName={iconName}
+                    className={props.className ?? "zd:w-4 zd:h-4"}
+                />
+            );
+            return {
+                label: b.label,
+                icon: IconComponent,
+                onClick: () => b.onClick(listContext as any),
+            };
+        });
+    }, [
+        doctype,
+        listContext,
+        zui?._?.state?.ui_list_secondary_buttons,
+    ]);
 
     const columns = useMemo(() => {
         const displayFieldName = doctypeDoc?.display_field || "id";
@@ -125,9 +173,19 @@ export default function DoctypeListPage() {
             }
             return;
         }
+        const prefill: Record<string, any> = {};
+        if (filters?.length) {
+            for (const f of filters) {
+                const [field, operator, value] = f;
+                if (operator === "=" && value !== undefined && value !== null) {
+                    prefill[field as string] = value;
+                }
+            }
+        }
         push(`/desk/${org}/doctypes/${doctype}/form`, {
             state: {
-                resetForm: true
+                resetForm: true,
+                ...(Object.keys(prefill).length ? { prefill } : {})
             }
         });
     };
@@ -297,11 +355,11 @@ export default function DoctypeListPage() {
         variant: "destructive"
     });
 
-    if (!doctypeDoc?.id) {
+    if (!doctypeDoc?.id && !loading) {
         return <ErrorView message="Doctype not found" status={404} />
     }
 
-    if(doctypeDoc.is_global === 1 && org !== "System Panel") {
+    if(doctypeDoc?.is_global === 1 && org !== "System Panel" && !loading) {
         return <ErrorView message="Doctype is global and cannot be accessed from this organization" status={404} />
     }
 
@@ -310,18 +368,23 @@ export default function DoctypeListPage() {
             title={t(`${doctypeDoc?.label || doctype}`)}
             defaultOpen={false}
             primaryAction={primaryActions}
+            secondaryActions={secondaryActions}
             actions={selected.size > 0 ? actions : []}
             actionSection={
-                <Select
-                    options={[
-                        { label: t("List View"), value: "list" },
-                        { label: t("Sheet View"), value: "sheet" }
-                    ]}
-                    displayMode="label"
-                    value={location.pathname.includes("/sheet") ? "sheet" : "list"}
+                <ViewSelector
+                    views={getDoctypeViewOptions(t, fields as FieldLike[], doctype)}
+                    value={
+                        location.pathname.includes("/sheet")
+                            ? "sheet"
+                            : location.pathname.includes("/tree")
+                              ? "tree"
+                              : "list"
+                    }
                     onChange={(value) => {
                         if (value === "list") {
                             push(`/desk/${org}/doctypes/${doctype}/list${location.search}`);
+                        } else if (value === "tree") {
+                            push(`/desk/${org}/doctypes/${doctype}/tree${location.search}`);
                         } else {
                             push(`/desk/${org}/doctypes/${doctype}/sheet${location.search}`);
                         }

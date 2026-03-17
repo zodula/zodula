@@ -29,6 +29,13 @@ export default $doctype<"Print Template">({
     default: "1",
     in_list_view: 1,
   },
+  show_id_qrcode: {
+    type: "Check",
+    label: "Show Document QR Code",
+    default: "1",
+    in_list_view: 0,
+    description: "If set, show a QR code for the document ID next to the title.",
+  },
   format: {
     type: "Select",
     label: "Page Format",
@@ -92,6 +99,7 @@ export default $doctype<"Print Template">({
     label: "Doctype",
     reference: "Doctype",
     description: "Doctype this template is for (for non-HTML builder: field palette).",
+    filters: JSON.stringify([["is_child_doctype", "!=", 1]]),
   },
   doc_name_expression: {
     type: "Text",
@@ -138,6 +146,7 @@ export default $doctype<"Print Template">({
           { type: "field", value: "is_default", align: "left" },
           { type: "field", value: "default_letter_head", align: "left" },
           { type: "field", value: "default_language", align: "left" },
+          { type: "field", value: "show_id_qrcode", align: "left" },
         ],
         { type: "section", value: "Template", align: "left" },
         [

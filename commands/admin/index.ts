@@ -13,7 +13,7 @@ export default new Command("admin")
             try {
                 await startup()
                 const { email, password, roles } = options
-                const _roles = roles.split(",")
+                const _roles = roles.split(",") as string[]
                 const exists = await $zodula.doctype("User").select().where("email", "=", email).bypass(true)
                 if (exists.count > 0) {
                     throw "User already exists"
@@ -22,14 +22,16 @@ export default new Command("admin")
                         email,
                         password,
                         is_active: 1,
-                        is_confirmed_email: 1
+                        is_confirmed_email: 1,
+                        owner: email,
+                        roles: _roles?.map((role) => ({
+                            id: "temp-id",
+                            role: role,
+                            created_at: $zodula.date.today(),
+                            updated_at: $zodula.date.today(),
+                            doc_status: "Draft",
+                        }))
                     }).bypass(true)
-                    for (const role of _roles) {
-                        await $zodula.doctype("User Role").insert({
-                            user: user.id,
-                            role
-                        }).bypass(true)
-                    }
                 }
                 process.exit(0)
             } catch (error) {

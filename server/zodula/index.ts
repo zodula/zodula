@@ -3,6 +3,7 @@ import { ZodulaSession } from "./session";
 import { ZodulaEmail } from "./email";
 import * as serverUtils from "./utils";
 import * as clientUtils from "../../client/utils";
+import { zodulaDate } from "../../client/zodula-date";
 import { ctxContext } from "../async-context";
 import { ZodulaWebsocketServer } from "./websocket";
 import { ZodulaRealtime, broadcastToUsers } from "./realtime";
@@ -192,6 +193,10 @@ export class ZodulaSDK {
             ...serverUtils,
             ...clientUtils
         }
+    }
+
+    get date() {
+        return zodulaDate; // from client/zodula-date.ts (shared with client)
     }
 
     get ctx() {

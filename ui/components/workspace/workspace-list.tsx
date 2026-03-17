@@ -98,10 +98,11 @@ export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
             // Create original workspace items map from the flat workspaceItems
             const originalWorkspaceItems: Record<string, WorkspaceItem[]> = {};
             workspaceItems.forEach(item => {
-                if (!originalWorkspaceItems[item.workspaceId]) {
-                    originalWorkspaceItems[item.workspaceId] = [];
+                const pid = item.parentid ?? "";
+                if (!originalWorkspaceItems[pid]) {
+                    originalWorkspaceItems[pid] = [];
                 }
-                originalWorkspaceItems[item.workspaceId]!.push(item);
+                originalWorkspaceItems[pid]!.push(item);
             });
 
             initializeEditMode(allWorkspaces, allWorkspaces, originalWorkspaceItems)

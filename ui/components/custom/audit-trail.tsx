@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { cn } from "@/zodula/ui/lib/utils";
 import { zodula } from "@/zodula/client";
+import { ClientFieldHelper } from "@/zodula/client/field";
 import { useDocList } from "../../hooks/use-doc-list";
 import { useDoc } from "../../hooks/use-doc";
+import { useDocListAll } from "../../hooks/use-doc-list-all";
 import { Link, useParams } from "react-router";
 import { useTranslation } from "../../hooks/use-translation";
 import { ExternalLinkIcon } from "lucide-react";
@@ -36,17 +38,30 @@ export function AuditTrail({
   const { org } = useParams();
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   // Fetch doctype to check comments_enabled
   const { doc: doctypeDoc } = useDoc({
     doctype: "Doctype",
     id: doctype,
   }, [doctype]);
 
+  // Field config for labels and type (e.g. Signature)
+  const { docs: allFields } = useDocListAll({ doctype: "Field" });
+  const fieldConfigMap = useMemo(() => {
+    return Object.fromEntries(
+      allFields
+        .filter((f: Zodula.SelectDoctype<"Field">) => f.doctype === doctype)
+        .map((f: Zodula.SelectDoctype<"Field">) => [
+          f.name,
+          { label: f.label ?? f.name ?? "", type: f.type ?? "" },
+        ])
+    ) as Record<string, { label: string; type: string }>;
+  }, [allFields, doctype]);
+
   const {
     docs: auditTrails,
     loading,
-    
+
     error,
     reload,
   } = useDocList({
@@ -76,12 +91,11 @@ export function AuditTrail({
         comment: comment.trim(),
         old_value: JSON.stringify({}),
         new_value: JSON.stringify({}),
-        by_name: user?.name || "",
       });
 
       // Clear comment input
       setComment("");
-      
+
       // Reload audit trail to show new comment
       reload();
     } catch (error) {
@@ -121,11 +135,14 @@ export function AuditTrail({
   const formatChanges = (
     oldValue: string,
     newValue: string,
-    action: string,
-    maxLength: number = 100
+    action: string
   ) => {
     if (action === "Delete") {
       return "Delete this document";
+    }
+
+    if (action === "Insert") {
+      return "Created this document";
     }
 
     if (action === "Submit") {
@@ -149,21 +166,17 @@ export function AuditTrail({
       );
     }
 
-    // Helper function to format a value for display
-    const formatValue = (value: any, maxLen: number = 50): string => {
+    // Helper function to format a value for display (full text, no truncation)
+    const formatValue = (value: any): string => {
       if (value === null || value === undefined) {
         return "empty";
       }
-      
+
       // For arrays and objects, use JSON.stringify to avoid "[object Object]"
       if (Array.isArray(value) || typeof value === "object") {
-        const jsonStr = JSON.stringify(value);
-        if (jsonStr.length > maxLen) {
-          return jsonStr.substring(0, maxLen) + "...";
-        }
-        return jsonStr;
+        return JSON.stringify(value);
       }
-      
+
       return String(value);
     };
 
@@ -202,11 +215,7 @@ export function AuditTrail({
             } else if (JSON.stringify(oldData[i]) !== JSON.stringify(newData[i])) {
               const oldItem = JSON.stringify(oldData[i]);
               const newItem = JSON.stringify(newData[i]);
-              const truncatedOld =
-                oldItem.length > 20 ? oldItem.substring(0, 20) + "..." : oldItem;
-              const truncatedNew =
-                newItem.length > 20 ? newItem.substring(0, 20) + "..." : newItem;
-              changes.push(`item at index ${i} from ${truncatedOld} to ${truncatedNew}`);
+              changes.push(`item at index ${i} from ${oldItem} to ${newItem}`);
             }
           }
         }
@@ -230,13 +239,27 @@ export function AuditTrail({
           ...Object.keys(newData || {}),
         ]);
 
-        allKeys.forEach((key) => {
-          if (key !== "doc_status" && oldData[key] !== newData[key]) {
-            // Use formatValue for a concise display, or formatValueDetailed for full JSON
-            const oldVal = formatValue(oldData[key]);
-            const newVal = formatValue(newData[key]);
+        const isSameEmpty = (a: unknown, b: unknown) =>
+          (a === "" || a == null) && (b === "" || b == null);
 
-            changes.push(`${key} from "${oldVal}" to "${newVal}"`);
+        allKeys.forEach((key) => {
+          if (ClientFieldHelper.isStandardField(key)) return;
+          const oldVal = oldData[key];
+          const newVal = newData[key];
+          if (isSameEmpty(oldVal, newVal)) return;
+          if (oldVal !== newVal) {
+            const config = fieldConfigMap[key];
+            const label = config?.label || key;
+            if (config?.type === "Signature") {
+              changes.push(`${label} updated`);
+            } else if (config?.type === "Reference Table") {
+              const oldLen = Array.isArray(oldVal) ? oldVal.length : 0;
+              const newLen = Array.isArray(newVal) ? newVal.length : 0;
+              if (newLen > oldLen) changes.push(`added rows for ${label}`);
+              if (newLen < oldLen) changes.push(`removed rows for ${label}`);
+            } else {
+              changes.push(`${label} from "${formatValue(oldVal)}" to "${formatValue(newVal)}"`);
+            }
           }
         });
       }
@@ -245,16 +268,9 @@ export function AuditTrail({
         return "No changes detected";
       }
 
-      const fullText =
-        changes.length === 1
-          ? `Changed ${changes[0]}`
-          : `Changed ${changes.slice(0, -1).join(", ")} and ${changes[changes.length - 1]}`;
-
-      if (fullText.length <= maxLength) {
-        return fullText;
-      }
-
-      return fullText.substring(0, maxLength) + "...";
+      return changes.length === 1
+        ? `Changed ${changes[0]}`
+        : `Changed ${changes.slice(0, -1).join(", ")} and ${changes[changes.length - 1]}`;
     } catch {
       return "Changes made";
     }
@@ -301,27 +317,24 @@ export function AuditTrail({
           </div>
         ) : (
           auditTrails.map((trail, index) => (
-          <div key={trail.id} className="zd:relative zd:group">
-            <div className="zd:flex zd:items-start zd:gap-4 zd:pl-3">
-              {/* Bullet point */}
-              <div className="zd:relative zd:flex-shrink-0 zd:pt-3">
-                <div className="zd:w-1 zd:h-1 zd:bg-gray-400 zd:rounded-full zd:group-hover:bg-primary zd:transition-colors"></div>
-              </div>
+            <div key={trail.id} className="zd:relative zd:group">
+              <div className="zd:flex zd:items-start zd:gap-4 zd:pl-3">
+                {/* Bullet point */}
+                <div className="zd:relative zd:flex-shrink-0 zd:pt-3">
+                  <div className="zd:w-1 zd:h-1 zd:bg-gray-400 zd:rounded-full zd:group-hover:bg-primary zd:transition-colors"></div>
+                </div>
 
-              {/* Content */}
-              <div className="zd:flex-1 zd:min-w-0 zd:pb-2 zd:pt-1">
-                <div className="zd:flex zd:flex-col zd:gap-1">
-                  <div className="zd:flex zd:items-center zd:gap-2">
-                    <div className="zd:text-sm zd:text-gray-700 zd:leading-relaxed">
+                {/* Content */}
+                <div className="zd:flex-1 zd:min-w-0 zd:pb-2 zd:pt-1">
+                  <div className="zd:flex zd:flex-col zd:gap-1">
+                    <div className="zd:text-sm zd:text-gray-700 zd:leading-relaxed zd:break-words zd:whitespace-pre-wrap">
                       <Link
                         to={`/desk/doctypes/User/form/${trail.created_by}`}
                         className="zd:text-muted-foreground zd:hover:text-primary zd:transition-colors"
                       >
-                        {trail.by_name
-                          ? trail.by_name
-                          : trail.created_by
-                            ? `${trail.created_by.substring(0, 8)}...`
-                            : "System Panel"}
+                        {trail.created_by
+                          ? `${trail.created_by}`
+                          : "System Panel"}
                       </Link>
                       <span className="zd:text-muted-foreground">
                         {" "}
@@ -331,32 +344,28 @@ export function AuditTrail({
                           trail.action || ""
                         )}
                       </span>
-                    </div>
-                    <span className="zd:text-muted-foreground">·</span>
-
-                    <div className="zd:flex zd:items-center zd:gap-2 zd:text-xs zd:text-gray-500">
-                      <span className="">
+                      <span className="zd:text-muted-foreground"> · </span>
+                      <span className="zd:text-xs zd:text-gray-500">
                         {zodula.utils.formatTimeAgo(trail.created_at)}
                       </span>
-                      <span className="zd:text-muted-foreground">·</span>
+                      {" "}
                       <Link
                         to={`/desk/${org}/doctypes/Audit Trail/form/${trail.id}`}
-                        className="zd:text-primary zd:hover:text-primary zd:transition-colors zd:opacity-0 zd:group-hover:opacity-100"
+                        className="zd:text-primary zd:hover:text-primary zd:transition-colors zd:opacity-0 zd:group-hover:opacity-100 zd:align-middle"
                       >
-                        <ExternalLinkIcon className="zd:w-3 zd:h-3" />
+                        <ExternalLinkIcon className="zd:w-3 zd:h-3 zd:inline-block" />
                       </Link>
                     </div>
+                    {/* Comment display */}
+                    {trail.comment && (
+                      <div className="zd:ml-0 zd:mt-1 zd:pl-4 zd:border-l-2 zd:border-muted zd:text-sm zd:text-gray-600 zd:italic">
+                        {trail.comment}
+                      </div>
+                    )}
                   </div>
-                  {/* Comment display */}
-                  {trail.comment && (
-                    <div className="zd:ml-0 zd:mt-1 zd:pl-4 zd:border-l-2 zd:border-muted zd:text-sm zd:text-gray-600 zd:italic">
-                      {trail.comment}
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
-          </div>
           ))
         )}
       </div>

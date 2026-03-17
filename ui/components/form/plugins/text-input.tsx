@@ -10,7 +10,7 @@ export const TextInputPlugin = new FormPlugin({
     const inputRef = useRef<HTMLInputElement>(null);
     const isUserTypingRef = useRef(false);
     const prevPropValueRef = useRef<string>(props.value ?? "");
-    
+
     // Initialize with prop value
     const [internalValue, setInternalValue] = useState<string>(() => {
       const initialValue = props.value ?? "";
@@ -47,20 +47,20 @@ export const TextInputPlugin = new FormPlugin({
       const propChanged = prevPropValueRef.current !== propValue;
       if (propChanged) {
         prevPropValueRef.current = propValue;
-        
+
         // Only update if user is not actively typing
         if (!isUserTypingRef.current) {
           setInternalValue(propValue);
         }
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [propValue, props.fieldKey]);
+    }, [propValue, props.fieldPath]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const value = e.target.value;
       isUserTypingRef.current = true;
       setInternalValue(value);
-      props.onChange?.(value);
+      props.onChange?.(props.fieldPath || "", value);
     };
 
     const handleBlur = () => {
@@ -94,8 +94,8 @@ export const TextInputPlugin = new FormPlugin({
     return (
       <Input
         ref={inputRef}
-        name={props.fieldKey || ""}
-        id={props.fieldKey || ""}
+        name={props.fieldPath || ""}
+        id={props.fieldPath || ""}
         placeholder={""}
         type={type}
         value={internalValue}
@@ -137,7 +137,7 @@ export const TextInputPlugin = new FormPlugin({
         placeholder={getPlaceholder(props.operator)}
         type={type}
         value={props.value || ""}
-        onChange={(e) => props.onChange?.(e.target.value)}
+        onChange={(e) => props.onChange?.(props.fieldPath || "", e.target.value)}
       />
     );
   }

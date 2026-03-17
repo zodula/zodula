@@ -194,13 +194,7 @@ export const Navbar = ({ children }: NavbarProps) => {
               {orgLoading ? <></> : <img
                 src={
                   !!orgDoc?.logo
-                    ? zodula.utils.getDoctypeFileUrl(
-                      "Organization",
-                      orgDoc?.id || "",
-                      "logo",
-                      (orgDoc?.logo as string) || "",
-                      "System Panel"
-                    ) + "?w=40&h=40"
+                    ? `${orgDoc?.logo}?w=40&h=40`
                     : "/public/zodula/zodula-logo.png"
                 }
                 alt="Logo"
@@ -237,6 +231,7 @@ export const Navbar = ({ children }: NavbarProps) => {
                   <Button
                     variant="outline"
                     className="zd:flex zd:items-center zd:gap-2"
+                    data-onboarding-id="user-menu"
                   >
                     <UserIcon />
                   </Button>
@@ -250,7 +245,10 @@ export const Navbar = ({ children }: NavbarProps) => {
                     </span>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem href={`/desk/${org}/doctypes/Organization/form/${org}`}>
+                  <DropdownMenuItem
+                    href={`/desk/${org}/doctypes/Organization/form/${org}`}
+                    data-onboarding-id="org-settings-menu"
+                  >
                     {t("Organization Setting")}
                   </DropdownMenuItem>
 
@@ -266,6 +264,9 @@ export const Navbar = ({ children }: NavbarProps) => {
                   </DropdownMenuItem>
                   <DropdownMenuItem href="/desk">
                     {t("Change Organization")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem href="/">
+                    {t("Go To Website")}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={handleLogout}

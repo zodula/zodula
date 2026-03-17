@@ -19,9 +19,8 @@ export async function prepareApp() {
     export default function App() {
     return(
         ${shell.length > 0 ? shell.map(shell => `<${shell.importName}>`).join("\n") : ""}
-        ${uiScripts.map(script => `<${script.importName} />`).join("\n")}
             <Routes>
-                ${pages.map(page => `<Route path="${page.path}" element={<${page.importName} />} />`).join("\n")}
+                ${pages.map(page => `<Route path="${page.path}" element={<>${uiScripts.map(script => `<${script.importName} />`).join("\n")}<${page.importName} /></>} />`).join("\n")}
             </Routes>
         ${shell.length > 0 ? shell.slice().reverse().map(shell => `</${shell.importName}>`).join("\n") : ""}
     )

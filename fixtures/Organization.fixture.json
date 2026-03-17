@@ -2,6 +2,8 @@
     {
         "id": "System Panel",
         "abbr": "SYS",
-        "name": "System Panel"
+        "unique_name": "System Panel",
+        "currency": "฿",
+        "organization_name": "System Panel"
     }
 ]

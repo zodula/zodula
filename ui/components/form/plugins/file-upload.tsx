@@ -6,29 +6,24 @@ import { BASE_URL } from "@/zodula/client/utils";
 export const FileUploadPlugin = new FormPlugin({
     types: ["File"],
     render: (props) => {
-    const doctype = props.fieldOptions.doctype;
-    const docId = props.docId || "";
-    const fieldName = props.fieldOptions.name;
-    const organization = props.formData?.organization || "System Panel";
-    const urlPrefix = [BASE_URL, "files", organization, doctype, docId || doctype, fieldName, ""].join("/");
-    console.log(urlPrefix);
-    return (
-        <>
-            <FileUpload
-                readOnly={props.readonly}
-                value={props.value}
-                accept={props.fieldOptions.accept || ""}
-                onChange={(value: File | string) => {
-                    props.onChange?.(value);
-                }}
-                urlPrefix={urlPrefix}
-            />
-            {props.fieldOptions.accept && (
-                <div className="zd:text-xs zd:text-muted-foreground zd:mt-2 no-print">
-                    {props.fieldOptions.accept}
-                </div>
-            )}
-        </>
-    );
+        console.log("value", props.value);
+        return (
+            <>
+                <FileUpload
+                    readOnly={props.readonly}
+                    value={props.value}
+                    accept={props.fieldOptions.accept || ""}
+                    onChange={(value: File | string) => {
+                        console.log(value);
+                        props.onChange?.(props.fieldPath || "", value);
+                    }}
+                />
+                {props.fieldOptions.accept && (
+                    <div className="zd:text-xs zd:text-muted-foreground zd:mt-2 no-print">
+                        {props.fieldOptions.accept}
+                    </div>
+                )}
+            </>
+        );
     }
 });

@@ -60,11 +60,11 @@ export class ZodulaDoctypeUpdate<
       .bypass(true)
       .unsafe();
 
-    this.input.organization = old?.organization;
-    const organization = await zodula.doctype("Organization").get(this.input.organization || "System Panel").bypass(true).fields(["abbr", "name"])
-    this.input.organization_abbr = organization?.abbr || "";
-    if (old?.organization !== this.input.organization) {
-      throw new ErrorWithCode("Cannot change organization through update api", {
+    this.input.doc_organization = old?.doc_organization;
+    const organization = await zodula.doctype("Organization").get(this.input.doc_organization || "System Panel").bypass(true).fields(["abbr", "unique_name"])
+    this.input.doc_organization_abbr = organization?.abbr || "";
+    if (old?.doc_organization !== this.input.doc_organization) {
+      throw new ErrorWithCode("Cannot change doc_organization through update api", {
         status: 400,
       });
     }
@@ -74,7 +74,6 @@ export class ZodulaDoctypeUpdate<
       : old?.doc_status || "Draft";
     // Validate document exists and can be updated
     await this.validateDocument(old);
-
     // Prepare the document data
     let prepared = await this.prepareDocumentData(old, user, doctype);
 
@@ -131,7 +130,7 @@ export class ZodulaDoctypeUpdate<
       );
     }
     // Execute the update process
-    return await this.executeUpdate(db, doctype, old, prepared, organization?.abbr || "", organization?.name || "");
+    return await this.executeUpdate(db, doctype, old, prepared, organization?.abbr || "", organization?.unique_name || "");
   }
 
   private async applyFileUpdate(
@@ -157,7 +156,7 @@ export class ZodulaDoctypeUpdate<
               process.cwd(),
               ".zodula_data",
               "files",
-              prepared.organization || "System Panel",
+              prepared.doc_organization || "System Panel",
               doctypeName,
               docId,
               fieldName
@@ -168,7 +167,7 @@ export class ZodulaDoctypeUpdate<
             process.cwd(),
             ".zodula_data",
             "files",
-            prepared.organization || "System Panel",
+            prepared.doc_organization || "System Panel",
             doctypeName,
             docId,
             fieldName,
@@ -181,7 +180,7 @@ export class ZodulaDoctypeUpdate<
               process.cwd(),
               ".zodula_data",
               "files",
-              prepared.organization || "System Panel",
+              prepared.doc_organization || "System Panel",
               doctypeName,
               docId,
               fieldName
@@ -194,7 +193,7 @@ export class ZodulaDoctypeUpdate<
                   process.cwd(),
                   ".zodula_data",
                   "files",
-                  prepared.organization || "System Panel",
+                  prepared.doc_organization || "System Panel",
                   doctypeName,
                   docId,
                   fieldName,
@@ -204,8 +203,9 @@ export class ZodulaDoctypeUpdate<
             }
           }
 
-          // set value to filename
-          (prepared as any)[key] = filename;
+          const url = ["", "files", prepared.doc_organization || "System Panel", doctypeName, docId, fieldName, filename].join("/");
+          // set value to url
+          (prepared as any)[key] = url;
         }
 
         if (!value) {
@@ -214,7 +214,7 @@ export class ZodulaDoctypeUpdate<
             process.cwd(),
             ".zodula_data",
             "files",
-            prepared.organization || "System Panel",
+            prepared.doc_organization || "System Panel",
             doctypeName,
             docId,
             fieldName
@@ -227,7 +227,7 @@ export class ZodulaDoctypeUpdate<
           process.cwd(),
           ".zodula_data",
           "files",
-          prepared.organization || "System Panel",
+          prepared.doc_organization || "System Panel",
           doctypeName,
           docId
         );
@@ -241,7 +241,7 @@ export class ZodulaDoctypeUpdate<
           process.cwd(),
           ".zodula_data",
           "files",
-          prepared.organization || "System Panel",
+          prepared.doc_organization || "System Panel",
           doctypeName
         );
         const doctypeFiles = await fs.readdir(doctypeDir).catch(() => []);
@@ -306,6 +306,8 @@ export class ZodulaDoctypeUpdate<
       idx: this.input.idx === null ? 0 : this.input.idx,
       updated_by: user.id || null,
       updated_at: zodula.utils.format(new Date(), "datetime"),
+      created_at: old?.created_at || zodula.utils.format(new Date(), "datetime"),
+      created_by: old?.created_by || null,
     } as Zodula.SelectDoctype<TN>;
 
     let formatted = { ...prepared };
@@ -338,7 +340,11 @@ export class ZodulaDoctypeUpdate<
     const fieldMatches = namingSeries.match(fieldRegex) || [];
     const fieldsInNamingSeries = fieldMatches.map((match: string) =>
       match.replaceAll("{{", "").replaceAll("}}", "")
-    );
+    )
+    if(namingSeries.startsWith("field:")) {
+      const fieldName = namingSeries.slice(6).trim();
+      fieldsInNamingSeries.push(fieldName);
+    }
 
     if (fieldsInNamingSeries.length === 0) {
       return this.newId;
@@ -457,6 +463,22 @@ export class ZodulaDoctypeUpdate<
     // validate id uniqueness
     await this.validateIdUniqueness(db, doctype, prepared);
     const result = await this.updateMainDocument(db, doctype, prepared);
+
+    if (newId !== this.oldId && (this.doctypeName === "User" || this.doctypeName === "Organization")) {
+      for (const doctype of loader.from("doctype").list()) {
+        const fields = doctype.schema.fields
+        for (const [key, field] of Object.entries(fields)) {
+          const fieldConfig = field as any
+          if (fieldConfig.type === "Reference" && fieldConfig.reference === this.doctypeName) {
+            const stmt = `UPDATE "${doctype.name}" SET ${key} = ? WHERE ${key} = ?`
+            await db.run(stmt, [newId, this.oldId]);
+          }
+        }
+      }
+      // await db.run(`UPDATE "User" SET owner = ? WHERE owner = ?`, [newId, old.owner]);
+      // await db.run(`UPDATE "User" SET created_by = ? WHERE created_by = ?`, [newId, old.created_by]);
+      // await db.run(`UPDATE "User" SET updated_by = ? WHERE updated_by = ?`, [newId, old.updated_by]);
+    }
 
     // Update relationships
     await this.updateRelationships(db, doctype, result, relationshipData);
@@ -693,7 +715,6 @@ export class ZodulaDoctypeUpdate<
       for (let index = 0; index < payloadArray.length; index++) {
         const payload = payloadArray[index]
         const isExists = existings.find((existing: any) => existing.id === payload.id)
-        console.log(payload?.id, isExists);
         if (isExists) {
           payloadArray[index] = await zodula.doctype(child.childDoctype).update(payload.id, {
             ...payload,

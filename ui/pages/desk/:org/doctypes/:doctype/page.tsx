@@ -6,9 +6,8 @@ import ErrorView from "@/zodula/ui/views/error-view";
 import { useParams } from "react-router";
 
 export default function DoctypePage() {
-    const { params, push, replace, location } = useRouter();
+    const { params, push, replace } = useRouter();
     const doctype = params.doctype as Zodula.DoctypeName;
-    const prefill = location.state?.prefill;
     const { org } = useParams();
     // Get doctype metadata to check if it's single
     const { doc: doctypeDoc, loading } = useDocAll({
@@ -16,12 +15,12 @@ export default function DoctypePage() {
         id: doctype
     });
 
-    // Redirect to list if not single doctype
+    // Redirect to list if not a single/org-single doctype
     useEffect(() => {
-        if (doctypeDoc && !doctypeDoc.is_single) {
+        if (doctypeDoc && !doctypeDoc.is_single && !doctypeDoc.is_organization_single) {
             replace(`/desk/${org}/doctypes/${doctype}/list`);
         }
-    }, [doctypeDoc, push, doctype]);
+    }, [doctypeDoc, push, doctype, org]);
 
     if (loading) {
         return (
@@ -33,12 +32,19 @@ export default function DoctypePage() {
 
     // If doctype is single, show the form view
     if (doctypeDoc?.is_single) {
+        const id = doctype;
+        const formId = `create|${doctype}`;
         return (
-            <DocFormView
-                id={doctype}
-                doctype={doctype}
-                prefill={prefill}
-            />
+            <DocFormView id={id} doctype={doctype} formId={formId} />
+        );
+    }
+
+    // If doctype is org-single, show the form view for this org's singleton document
+    if (doctypeDoc?.is_organization_single) {
+        const id = `${doctype} - ${org}` as any;
+        const formId = `edit|${doctype}|${id}`;
+        return (
+            <DocFormView id={id} doctype={doctype} formId={formId} />
         );
     }
 

@@ -240,6 +240,15 @@ export const VectorFieldPlugin = new BaseFieldPlugin({
     textZodSchema: () => `z.array(z.number())`
 })
 
+// Signature field type (canvas drawing stored as base64 data URL)
+export const SignatureFieldPlugin = new BaseFieldPlugin({
+    fieldType: "Signature",
+    sqlType: "TEXT",
+    typescriptType: () => "string",
+    zodSchema: () => z.string(),
+    textZodSchema: () => `z.string()`
+})
+
 // Register all plugins (strongly-typed)
 export const REGISTERED_PLUGINS = {
     Text: TextFieldPlugin,
@@ -263,7 +272,8 @@ export const REGISTERED_PLUGINS = {
     Time: TimeFieldPlugin,
     "Reference Table": ReferenceTableFieldPlugin,
     Extend: ExtendFieldPlugin,
-    Vector: VectorFieldPlugin
+    Vector: VectorFieldPlugin,
+    Signature: SignatureFieldPlugin
 } as const
 
 

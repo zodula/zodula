@@ -77,6 +77,28 @@ export class ZodulaDoctypeHelper {
                 value = ZodulaDoctypeHelper.formatValue(config.default as string)
             }
 
+            if (["Check"].includes(config.type as any)) {
+                value = value === "1" ? 1 : 0
+            }
+
+            if (["Float", "Currency"].includes(config.type as any)) {
+                const numValue = parseFloat(String(value))
+                if (Number.isNaN(numValue)) {
+                    value = 0
+                } else {
+                    value = numValue
+                }
+            }
+
+            if (["Integer"].includes(config.type as any)) {
+                const numValue = parseInt(String(value))
+                if (Number.isNaN(numValue)) {
+                    value = 0
+                } else {
+                    value = numValue
+                }
+            }
+
             // if input can parse to Date
             if (["Date", "DateTime", "Time"].includes(config.type as any) && value !== null) {
                 const fieldType = config.type
@@ -194,7 +216,7 @@ export class ZodulaDoctypeHelper {
         const _roles = [
             ...roles,
         ].filter(Boolean)
-        if (roles.includes("System Admin") || bypass) {
+        if (bypass) {
             return true
         }
         const permissions = await db.select("*").from("Doctype Permission" as Zodula.DoctypeName).where("doctype", "=", doctype).where("role", "IN", _roles).where("perm_level", "=", 0).execute()
@@ -211,7 +233,7 @@ export class ZodulaDoctypeHelper {
             return can_get === 1 || (can_own_get === 1 && isOwn)
         }
         if (action === "can_select") {
-            return can_select === 1 || (can_own_select === 1 && isOwn)
+            return can_select === 1 || (can_own_select === 1)
         }
         if (action === "can_update") {
             return can_update === 1 || (can_own_update === 1 && isOwn)
@@ -242,21 +264,33 @@ export class ZodulaDoctypeHelper {
             return { can: true }
         }
         const user = await zodula.session.user(true);
-        const userRoles = await zodula.session.roles(data?.organization);
+        const userRoles = await zodula.session.roles(data?.doc_organization);
         const userOrganizations = await zodula.session.organizations(true)
+        const userOrganization = await zodula.session.organization(true)
+        const userOrganzationDoc = await zodula.doctype("Organization").get(userOrganization || "").bypass(true)
         const doctype = loader.from("doctype").get(doctypeName);
         let can = await ZodulaDoctypeHelper.can(doctypeName, action, data?.owner === user.id, userRoles, bypass)
-
         if (can && (action !== "can_get" && action !== "can_select")) {
-            if (!userOrganizations.includes(data?.organization || "System Panel")) {
+            if (!userOrganizations.includes(data?.doc_organization || "System Panel")) {
                 can = false
             }
-            if (userRoles.includes("System Admin")) {
+            if (userRoles?.includes("System Admin") && userOrganization === "System Panel") {
                 can = true
             }
-            if (doctype?.name === "Organization" && data?.organization === "System Panel") {
+            if (doctype?.name === "Organization" && data?.doc_organization === "System Panel") {
                 can = true
             }
+        }
+        if (doctype?.config?.is_global !== 1 && userRoles?.includes("Organization Owner") && data?.doc_organization === userOrganization) {
+            can = true
+        }
+
+        if (userRoles?.includes("System Admin") && userOrganization === "System Panel") {
+            can = true
+        }
+
+        if (doctype?.config?.is_organization_single === 1 && userOrganization !== data?.doc_organization) {
+            can = false
         }
 
         return { can }
@@ -317,7 +351,7 @@ export class ZodulaDoctypeHelper {
         //     })
         // }
 
-        if (doctype.is_global == 1 && input.organization !== "System Panel") {
+        if (doctype.is_global == 1 && input.doc_organization !== "System Panel") {
             throw new ErrorWithCode(`Global doctype can only be created in System Panel organization`, {
                 status: 400,
             })
@@ -445,7 +479,7 @@ export class ZodulaDoctypeHelper {
         doctypeName: TN,
         old: Zodula.SelectDoctype<TN>,
         result: Zodula.SelectDoctype<TN>,
-        action: "Update" | "Submit" | "Cancel" | "Delete",
+        action: "Insert" | "Update" | "Submit" | "Cancel" | "Delete",
         userId: string,
         userName: string
     ): Promise<void> {
@@ -459,6 +493,10 @@ export class ZodulaDoctypeHelper {
                 return
             }
 
+            // Normalize empty string and null as same for comparison
+            const normalize = (v: unknown) =>
+                (v === null || v === undefined || v === "") ? null : v;
+
             // Get user-defined fields (exclude system fields)
             const systemFields = Object.keys(ClientFieldHelper.standardFields())
             const userDefinedFields = Object.keys(doctype.schema.fields).filter(field => !systemFields.includes(field))
@@ -469,17 +507,15 @@ export class ZodulaDoctypeHelper {
             const newValues: Record<string, any> = {}
 
             for (const field of userDefinedFields) {
-                const oldValue = old[field as keyof Zodula.SelectDoctype<TN>]
+                const oldValue = old?.[field as keyof Zodula.SelectDoctype<TN>]
                 const newValue = result[field as keyof Zodula.SelectDoctype<TN>]
-
-                // Compare values (handle null/undefined cases)
-                const oldVal = oldValue === null || oldValue === undefined ? null : oldValue
-                const newVal = newValue === null || newValue === undefined ? null : newValue
+                const oldVal = normalize(oldValue)
+                const newVal = normalize(newValue)
 
                 if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
                     changedFields.push(field)
-                    oldValues[field] = oldVal
-                    newValues[field] = newVal
+                    oldValues[field] = oldValue === null || oldValue === undefined ? null : oldValue
+                    newValues[field] = newValue === null || newValue === undefined ? null : newValue
                 }
             }
 
@@ -488,9 +524,8 @@ export class ZodulaDoctypeHelper {
                 doctype: doctypeName,
                 doctype_id: result.id,
                 action: action,
-                old_value: JSON.stringify(changedFields.length > 0 ? oldValues : { doc_status: old.doc_status }),
+                old_value: JSON.stringify(changedFields.length > 0 ? oldValues : { doc_status: old?.doc_status }),
                 new_value: JSON.stringify(changedFields.length > 0 ? newValues : { doc_status: result.doc_status }),
-                by_name: userName
             }
 
             // Insert audit trail record

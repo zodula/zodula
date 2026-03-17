@@ -47,7 +47,7 @@ export default function extendRealtime() {
                                 cookies: ws.data?.cookies || {}
                             } as any
                         });
-                        
+
                         const roles = await zodula.session.roles()
                         const doctypeConfig = loader.from("doctype").get(doctype as Zodula.DoctypeName)
                         const { can } = await ZodulaDoctypeHelper.checkPermission(
@@ -57,11 +57,9 @@ export default function extendRealtime() {
                             {
                                 bypass: false,
                                 doctype: doctypeConfig,
-                                user: user || { id: null },
-                                roles
                             }
                         )
-                        
+
                         if (can) {
                             if (!subscriptions[ws.data?.id]?.paths.includes(path)) {
                                 subscriptions[ws.data?.id]?.paths.push(path)
@@ -85,7 +83,7 @@ export default function extendRealtime() {
                             }))
                             return
                         }
-                        
+
                         if (!subscriptions[ws.data?.id]?.paths.includes(path)) {
                             subscriptions[ws.data?.id]?.paths.push(path)
                             ws.send(JSON.stringify({

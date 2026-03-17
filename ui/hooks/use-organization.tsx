@@ -25,7 +25,7 @@ export function useOrganization() {
   return useOrganizationStore();
 }
 
-/** Fetches organization doc by id. Use when you need the organization for a specific id (e.g. formData.organization). */
+/** Fetches organization doc by id. Use when you need the organization for a specific id (e.g. formData.doc_organization). */
 export function useOrganizationById(id: string | null | undefined) {
   const { doc, loading, error } = useDoc(
     {

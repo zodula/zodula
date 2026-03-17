@@ -10,6 +10,7 @@ import {
 import { ZodulaSession } from "../session";
 import { ZodulaDoctypeHelper, type GETOptions } from "./helper";
 import { zodula } from "../..";
+import { ctxContext } from "../../async-context";
 
 export class ZodulaDoctypeGetter<
   TN extends Zodula.DoctypeName = Zodula.DoctypeName,
@@ -54,7 +55,7 @@ export class ZodulaDoctypeGetter<
       if (!this.options.bypass) {
         const user = await session.user(true);
         const old = (await db.get(
-          `SELECT * FROM "${doctype?.name}" WHERE "id" = '${this.id}' AND (${isGlobal ? "1=1" : `("organization" = "${organization}" OR "organization" = "System Panel")`})`    
+          `SELECT * FROM "${doctype?.name}" WHERE "id" = '${this.id}' AND (${isGlobal ? "1=1" : `("doc_organization" = "${organization}" OR "doc_organization" = "System Panel")`})`
         )) as any;
 
         const { can } =
@@ -91,10 +92,10 @@ export class ZodulaDoctypeGetter<
       const fields =
         this.options?.fields?.length > 0
           ? this.options?.fields
-              ?.map?.((field) => String(field))
-              ?.filter(
-                (field) => !childFieldAliases.has(field)
-              ) ?? []
+            ?.map?.((field) => String(field))
+            ?.filter(
+              (field) => !childFieldAliases.has(field)
+            ) ?? []
           : ["*"];
       let result = (await db.get(
         `SELECT ${fields.join(",")} FROM "${doctype?.name}" WHERE "id" = '${this.id}'`

@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Tabs, Section, FormControl } from "@/zodula/ui";
 import { useTranslation } from "../../hooks/use-translation";
 import { zodula } from "@/zodula/client";
-import type { FormContext } from "../../zui";
 import { cn } from "../../lib/utils";
 
 interface LayoutItem {
@@ -18,7 +17,10 @@ interface TabConfig {
 }
 
 interface FormProps<T extends Record<string, Zodula.Field>> {
+  isCreate?: boolean;
   fields: T;
+  referenceTableFields?: Record<string, any>;
+  extendFields?: Record<string, any>;
   values?: Partial<T>;
   onChange?: (fieldName: keyof T, value: any) => void;
   readonly?: boolean;
@@ -37,8 +39,10 @@ interface FormProps<T extends Record<string, Zodula.Field>> {
     string,
     Record<number, Record<string, Record<string, any>>>
   >;
-  parentContext?: FormContext<any>;
+  referenceTableIndexFields?: Record<string, { idx: number, fields: Zodula.SelectDoctype<"Field">[] }[]>;
   onNestedFieldChange?: (nestedFieldPath: string, value: any, oldValue: any, idx?: number) => Promise<void>;
+  /** Buttons to show next to field labels; key = field name. */
+  fieldButtons?: Record<string, { label: string; run: () => void | Promise<void> }[]>;
 }
 
 export const Form = <T extends Record<string, Zodula.Field>>(
@@ -90,7 +94,7 @@ export const Form = <T extends Record<string, Zodula.Field>>(
         sectionsByTab[label].push({
           sectionName: currentSection,
           rows: [],
-          collapsible: 1,
+          collapsible: 0,
           defaultCollapsed: 0,
         });
 
@@ -121,7 +125,7 @@ export const Form = <T extends Record<string, Zodula.Field>>(
                 sectionsByTab[label].push({
                   sectionName: currentSection,
                   rows: [],
-                  collapsible: 1,
+                  collapsible: 0,
                   defaultCollapsed: 0,
                 });
               }
@@ -222,7 +226,7 @@ export const Form = <T extends Record<string, Zodula.Field>>(
                 columns: 1,
               },
             ],
-            collapsible: 1,
+            collapsible: 0,
             defaultCollapsed: 0,
           });
         }
@@ -234,7 +238,11 @@ export const Form = <T extends Record<string, Zodula.Field>>(
         const sections = sectionsByTab[tab] || [];
         tabHasRequired[tab] = sections.some((section) =>
           section.rows.some((row) =>
-            row.fields.some(({ field }) => field.required === 1)
+            row.fields.some(({ key, field }) => {
+              if (key.startsWith("empty_")) return false;
+              const formatted = zodula.utils.getFormatFieldConfig(field, props.values);
+              return formatted?.hidden !== 1 && formatted?.required === 1;
+            })
           )
         );
       });
@@ -265,7 +273,7 @@ export const Form = <T extends Record<string, Zodula.Field>>(
                 columns: 1,
               },
             ],
-            collapsible: 1,
+            collapsible: 0,
             defaultCollapsed: 0,
           },
         ],
@@ -273,7 +281,7 @@ export const Form = <T extends Record<string, Zodula.Field>>(
       hasTabFields: 0,
       tabHasRequired: { Main: mainHasRequired },
     };
-  }, [props.fields, tabsToUse, t]);
+  }, [props.fields, props.values, tabsToUse, t]);
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -310,7 +318,17 @@ export const Form = <T extends Record<string, Zodula.Field>>(
       )}
 
       {sectionsByTab[activeTab]
-        ?.filter(({ rows }) => rows.length > 0)
+        ?.filter(({ rows }) => {
+          if (rows.length === 0) return false;
+          const hasVisibleField = rows.some((row) =>
+            row.fields.some(({ key, field: _field }) => {
+              if (key.startsWith("empty_")) return false;
+              const field = zodula.utils.getFormatFieldConfig(_field, props.values);
+              return field?.hidden !== 1;
+            })
+          );
+          return hasVisibleField;
+        })
         .map(({ sectionName, rows, collapsible, defaultCollapsed }) => {
           return (
             <Section
@@ -324,9 +342,9 @@ export const Form = <T extends Record<string, Zodula.Field>>(
                 {rows.map(({ fields, columns }, rowIndex) => (
                   <div
                     key={rowIndex}
-                    className={cn("zd:gap-4 zd:grid", 
+                    className={cn("zd:gap-4 zd:grid",
                       columns === 1 ? "zd:grid-cols-1" : columns === 2 ? "zd:grid-cols-2" : columns === 3 ? "zd:grid-cols-3" : columns === 4 ? "zd:grid-cols-4" : columns === 5 ? "zd:grid-cols-5" : columns === 6 ? "zd:grid-cols-6" : "zd:grid-cols-1",
-                      "zd:max-sm:grid-cols-1"
+                      "zd:max-md:grid-cols-1"
                     )}
                   >
                     {fields.map(({ key, field: _field }) => {
@@ -336,6 +354,7 @@ export const Form = <T extends Record<string, Zodula.Field>>(
                       );
                       const isFieldReadonly =
                         !!field.readonly ||
+                        (field.only_once === 1 && props.isCreate === false)
                         props.readonly;
                       const isFieldRequired = field.required === 1;
 
@@ -346,13 +365,14 @@ export const Form = <T extends Record<string, Zodula.Field>>(
                             className="zd:opacity-0 zd:pointer-events-none"
                           >
                             <FormControl
+                              placeholder="Empty"
                               doctype={props.doctype}
                               formData={props.values}
                               docId={props.docId}
                               fieldKey={key as string}
                               field={field}
                               value=""
-                              onChange={() => {}}
+                              onChange={() => { }}
                               readonly={true}
                               label=""
                               required={false}
@@ -372,6 +392,7 @@ export const Form = <T extends Record<string, Zodula.Field>>(
                           key={key}
                           fieldKey={key as string}
                           field={field}
+                          fieldPath={key as string}
                           name={field.name || key}
                           value={props.values?.[key as keyof T]}
                           onChange={handleChange}
@@ -383,15 +404,11 @@ export const Form = <T extends Record<string, Zodula.Field>>(
                             props.values?.[key as keyof T] === undefined ||
                             props.values?.[key as keyof T] === null
                           }
-                          childExtendFieldPropertyOverrides={
-                            props.childExtendFieldPropertyOverrides
-                          }
-                          childTableFieldPropertyOverrides={
-                            props.childTableFieldPropertyOverrides
-                          }
-                          parentContext={props.parentContext}
-                          onNestedFieldChange={props.onNestedFieldChange}
                           doctype={props.doctype}
+                          referenceTableFields={props.referenceTableFields}
+                          extendFields={props.extendFields}
+                          referenceTableIndexFields={props.referenceTableIndexFields}
+                          fieldButtons={props.fieldButtons?.[key as string]}
                         />
                       );
                     })}

@@ -1,24 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { flushSync } from "react-dom";
 import { FormPlugin } from "../plugin";
 import { Select, type SelectAction } from "../../ui/select";
-import { ArrowRight, FilterIcon, PlusIcon, ArrowUpDown } from "lucide-react";
+import { ArrowRight, FilterIcon, PlusIcon, ArrowUpDown, XIcon } from "lucide-react";
 import { Link, useRouter } from "../../router";
 import { useParams } from "react-router";
 import { zodula } from "@/zodula/client";
 import { cn } from "../../../lib/utils";
-import { Input } from "../../ui/input";
 import { popup } from "../../ui/popit";
 import { QuickEntryDialog } from "../../dialogs/quick-entry-dialog";
 import { useDoc } from "../../../hooks/use-doc";
-import { useDocList } from "../../../hooks/use-doc-list";
-import { useOrganization } from "../../../hooks/use-organization";
+import { useDocListAll } from "../../../hooks/use-doc-list-all";
 
 const ReferenceInput = (props: {
   fieldOptions: Zodula.Field;
   value?: any;
-  onChange?: (value: any) => void;
-  onBlur?: (value: any) => void;
+  onChange?: (fieldPath: string, value: any) => void;
+  onBlur?: (fieldPath: string, value: any) => void;
   readonly?: boolean;
   multiple?: boolean;
   fieldKey?: string;
@@ -37,9 +34,8 @@ const ReferenceInput = (props: {
   >([]);
   const [doctype, setDoctype] =
     useState<Zodula.SelectDoctype<"Doctype"> | null>(null);
-  const [isFocused, setIsFocused] = useState(false);
-  // Temp value while focused - avoids triggering onChange (and thus doc fetch) until blur
-  const [tempValue, setTempValue] = useState<string | undefined>(undefined);
+  /** Temp string shown in input while user is searching; only committed via onChange when they select an option. */
+  const [searchText, setSearchText] = useState<string | undefined>(undefined);
   const isVirtual = props.fieldOptions.type === "Virtual Reference";
 
   const referenceDoctype = useMemo(() => {
@@ -48,182 +44,153 @@ const ReferenceInput = (props: {
       props.formData,
       props.fieldOptions
     ) as Zodula.DoctypeName | undefined;
-    if (reference?.includes("{{")) {
-      return ""
-    }
+    if (reference?.includes("{{")) return "";
     return reference;
   }, [props.fieldOptions.reference, props.formData, props.fieldOptions]);
 
-  // Get doctype metadata to check if it's quick entry
-  const { doc: referenceDoctypeDoc } = useDoc({
-    doctype: "Doctype",
-    id: referenceDoctype || ""
-  }, [referenceDoctype]);
+  const { doc: referenceDoctypeDoc } = useDoc(
+    { doctype: "Doctype", id: referenceDoctype || "" },
+    [referenceDoctype]
+  );
 
-  // Get fields for the reference doctype
-  const { docs: referenceFields } = useDocList({
-    doctype: "Field",
-    limit: -1,
-    sort: "idx",
-    order: "asc",
-    q: "",
-    filters: referenceDoctype ? [
-      ["doctype", "=", referenceDoctype]
-    ] : []
-  }, [referenceDoctype]);
+  const { docs: allFields } = useDocListAll({ doctype: "Field" });
+  const referenceFields = useMemo(
+    () =>
+      referenceDoctype
+        ? (allFields ?? []).filter(
+          (f) => (f as any).doctype === referenceDoctype
+        )
+        : [],
+    [allFields, referenceDoctype]
+  );
+
   const filters = useMemo(() => {
-    // Check for child field property overrides first (from parent form scripts)
-    const childExtendFieldPropertyOverrides = (props as any).childExtendFieldPropertyOverrides;
-    const childTableFieldPropertyOverrides = (props as any).childTableFieldPropertyOverrides;
+    const childExtendFieldPropertyOverrides = (props as any)
+      .childExtendFieldPropertyOverrides;
+    const childTableFieldPropertyOverrides = (props as any)
+      .childTableFieldPropertyOverrides;
+    let rawFilters: any[] = [];
 
     if (props.fieldPath) {
-      // Extract child field name, index (if Reference Table), and field name from fieldPath
-      // fieldPath format for Reference Table: "sales_invoices_references.0.sales_invoice"
-      // fieldPath format for Extend: "address.city"
-      const pathParts = props.fieldPath.split('.');
+      const pathParts = props.fieldPath.split(".");
       const lastIndex = pathParts.length - 1;
-
-      if (pathParts.length >= 2 && pathParts[0] && lastIndex >= 0 && pathParts[lastIndex]) {
-        const childFieldName = pathParts[0]; // e.g., "sales_invoices_references" or "address"
-        const fieldName = pathParts[lastIndex]; // e.g., "sales_invoice" or "city"
-
-        // Check if it's a Reference Table (has numeric index in path)
+      if (
+        pathParts.length >= 2 &&
+        pathParts[0] &&
+        lastIndex >= 0 &&
+        pathParts[lastIndex]
+      ) {
+        const childFieldName = pathParts[0];
+        const fieldName = pathParts[lastIndex];
         if (pathParts.length >= 3) {
           const possibleIndex = parseInt(pathParts[1] || "0", 10);
           if (!isNaN(possibleIndex)) {
-            // It's a Reference Table field: check row-specific override, then "all rows" (-1)
             const childOverrides =
-              childTableFieldPropertyOverrides?.[childFieldName]?.[possibleIndex]?.[fieldName]
-              ?? childTableFieldPropertyOverrides?.[childFieldName]?.[-1]?.[fieldName]
-              // Reference-table passes overrides as childExtendFieldPropertyOverrides with shape { [fieldName]: { filters } }
-              ?? childExtendFieldPropertyOverrides?.[fieldName];
+              childTableFieldPropertyOverrides?.[childFieldName]?.[
+              possibleIndex
+              ]?.[fieldName] ??
+              childTableFieldPropertyOverrides?.[childFieldName]?.[-1]?.[
+              fieldName
+              ] ??
+              childExtendFieldPropertyOverrides?.[fieldName];
             if (childOverrides?.filters) {
               try {
-                return typeof childOverrides.filters === 'string'
-                  ? JSON.parse(childOverrides.filters)
-                  : childOverrides.filters;
-              } catch (e) {
-                // Fall through to fieldOptions.filters
+                rawFilters =
+                  typeof childOverrides.filters === "string"
+                    ? JSON.parse(childOverrides.filters)
+                    : childOverrides.filters;
+              } catch {
+                // fall through
               }
             }
           }
         }
-
-        // Check for Extend field overrides (no index in path)
-        if (pathParts.length === 2) {
-          const childOverrides = childExtendFieldPropertyOverrides?.[childFieldName]?.[fieldName];
+        if (pathParts.length === 2 && rawFilters.length === 0) {
+          const childOverrides =
+            childExtendFieldPropertyOverrides?.[childFieldName]?.[fieldName];
           if (childOverrides?.filters) {
             try {
-              return typeof childOverrides.filters === 'string'
-                ? JSON.parse(childOverrides.filters)
-                : childOverrides.filters;
-            } catch (e) {
-              // Fall through to fieldOptions.filters
+              rawFilters =
+                typeof childOverrides.filters === "string"
+                  ? JSON.parse(childOverrides.filters)
+                  : childOverrides.filters;
+            } catch {
+              // fall through
             }
           }
         }
       }
     }
 
-    // Fall back to field options filters
-    try {
-      return JSON.parse(props.fieldOptions.filters || "[]");
-    } catch (e) {
-      return [];
+    if (rawFilters.length === 0) {
+      try {
+        rawFilters = JSON.parse(props.fieldOptions.filters || "[]");
+      } catch {
+        return [];
+      }
     }
-  }, [props.fieldOptions.filters, (props as any).childExtendFieldPropertyOverrides, (props as any).childTableFieldPropertyOverrides, props.fieldPath]);
-  useEffect(() => {
-    async function getDoctype() {
-      if (!isFocused) return;
-      const reference = referenceDoctype;
-      if (!reference) return;
-      const doctype = await zodula.doc.get_doc(
-        "Doctype",
-        reference as any,
-        {}
+
+    const formData = props.formData;
+    if (!formData || !Array.isArray(rawFilters)) return rawFilters;
+    return rawFilters.map((filter: any) => {
+      if (!Array.isArray(filter) || filter.length < 3) return filter;
+      const [fieldPath, operator, filterValue] = filter;
+      if (
+        typeof filterValue !== "string" ||
+        !filterValue.includes("{{")
+      )
+        return filter;
+      const resolved = zodula.utils.getFieldValueFromDoc(
+        filterValue,
+        formData,
+        props.fieldOptions
       );
-      setDoctype(doctype);
-    }
-    getDoctype();
-  }, [referenceDoctype, isFocused]);
-  // Extract search query from value in multiple mode
-  const getSearchQuery = (value: string): string => {
-    if (!props.multiple) {
-      return value || "";
-    }
+      return [fieldPath, operator, resolved];
+    });
+  }, [
+    props.fieldOptions.filters,
+    props.formData,
+    (props as any).childExtendFieldPropertyOverrides,
+    (props as any).childTableFieldPropertyOverrides,
+    props.fieldPath,
+  ]);
 
-    // If empty, return empty query
-    if (!value || value.trim() === "") {
-      return "";
-    }
+  useEffect(() => {
+    if (!referenceDoctype) return;
+    zodula.doc
+      .get_doc("Doctype", referenceDoctype as any, {})
+      .then(setDoctype);
+  }, [referenceDoctype]);
 
-    // Split by comma and get the last part
-    const parts = value.split(",");
-    const lastPart = parts[parts.length - 1]?.trim() || "";
+  const getSearchQuery = useCallback(
+    (value: string): string => {
+      if (!props.multiple) return value || "";
+      if (!value || value.trim() === "") return "";
+      const parts = value.split(",");
+      const lastPart = parts[parts.length - 1]?.trim() || "";
+      if (value.endsWith(",")) return "";
+      return lastPart;
+    },
+    [props.multiple]
+  );
 
-    // If value ends with comma (last part is empty), return empty query
-    if (value.endsWith(",")) {
-      return "";
-    }
-
-    // Otherwise return the last part as search query
-    return lastPart;
-  };
-
-  // Get previous values (all parts except the last one) in multiple mode
-  const getPreviousValues = (value: string): string => {
-    if (!props.multiple || !value || value.trim() === "") {
-      return "";
-    }
-
-    const parts = value.split(",");
-    // Remove the last part (the one being typed)
-    const previousParts = parts.slice(0, -1);
-    return previousParts.join(",");
-  };
-
-  // Append or replace value in multiple mode
-  const appendValue = (currentValue: string, newValue: string): string => {
-    if (!props.multiple) {
-      return newValue;
-    }
-
-    if (!currentValue || currentValue.trim() === "") {
-      return newValue;
-    }
-
-    // If value ends with comma, just append
-    if (currentValue.endsWith(",")) {
-      return `${currentValue}${newValue}`;
-    }
-
-    // Otherwise, replace the last part with the new value
-    const previousValues = getPreviousValues(currentValue);
-    if (previousValues) {
-      return `${previousValues},${newValue}`;
-    }
-    // No previous values, just return the new value
-    return newValue;
-  };
-
-  // When selecting in multiple mode: append new option, or replace last part only if it's a search term
   const appendOrReplaceOnSelect = useCallback(
     (currentValue: string, newId: string): string => {
       if (!props.multiple) return newId;
       if (!currentValue || !currentValue.trim()) return newId;
       if (currentValue.endsWith(",")) return `${currentValue}${newId}`;
-
       const optionIds = new Set(options.map((o) => o.id));
-      const parts = currentValue.split(",").map((p) => p.trim()).filter(Boolean);
+      const parts = currentValue
+        .split(",")
+        .map((p) => p.trim())
+        .filter(Boolean);
       const lastPart = parts[parts.length - 1] ?? "";
-
-      // Last part is a search term (user typed to filter) if it's not a valid option id
-      const isLastPartSearchTerm = lastPart && !optionIds.has(lastPart);
+      const isLastPartSearchTerm =
+        lastPart && !optionIds.has(lastPart);
       if (isLastPartSearchTerm) {
         const previous = parts.slice(0, -1).join(",");
         return previous ? `${previous},${newId}` : newId;
       }
-      // Append: add new id, avoid duplicate
       const ids = new Set(parts);
       if (ids.has(newId)) return currentValue;
       return `${currentValue},${newId}`;
@@ -231,285 +198,144 @@ const ReferenceInput = (props: {
     [props.multiple, options]
   );
 
-  // Helper function to get nested value from formData using dot notation path
-  const getNestedValue = (formData: any, path: string): any => {
-    if (!formData || !path) return undefined;
-
-    const parts = path.split('.');
-    let value = formData;
-
-    for (const part of parts) {
-      if (value === undefined || value === null) return undefined;
-
-      // Check if it's an array index
-      const index = parseInt(part, 10);
-      if (!isNaN(index) && Array.isArray(value)) {
-        value = value[index];
-      } else if (typeof value === 'object') {
-        value = value[part];
-      } else {
-        return undefined;
-      }
-    }
-
-    return value;
+  const getNestedValue = (obj: any, path: string): any => {
+    if (!obj || !path) return undefined;
+    return path.split(".").reduce((cur: any, key) => cur?.[key], obj);
   };
 
-  // Helper function to set nested value in an object/array structure
-  const setNestedValue = (obj: any, path: string, value: any): void => {
-    if (!path) return;
-
-    const parts = path.split('.').filter((p): p is string => Boolean(p));
-    if (parts.length === 0) return;
-
-    let current = obj;
-
-    for (let i = 0; i < parts.length - 1; i++) {
-      const part = parts[i];
-      const nextPart = parts[i + 1];
-
-      if (!part || !nextPart) continue;
-
-      // Check if next part is a numeric index (for arrays)
-      const nextIndex = parseInt(nextPart, 10);
-      if (!isNaN(nextIndex)) {
-        // Next part is an array index, so current part should be an array
-        if (!current[part] || !Array.isArray(current[part])) {
-          current[part] = [];
-        }
-        // Ensure array is large enough
-        while (current[part].length <= nextIndex) {
-          current[part].push({});
-        }
-        current = current[part][nextIndex];
-      } else {
-        // Next part is an object key
-        if (!current[part] || typeof current[part] !== 'object') {
-          current[part] = {};
-        }
-        current = current[part];
-      }
-    }
-
-    // Set the final value
-    const lastPart = parts[parts.length - 1];
-    if (lastPart) {
-      current[lastPart] = value;
-    }
-  };
-
-  // Build prefill data from filters and formData
   const buildPrefillData = useCallback((): Record<string, any> => {
     const prefill: Record<string, any> = {};
-
-    if (!referenceFields || !referenceDoctype) return prefill;
-
-    // Create a map of field names to field configs for quick lookup
+    if (!referenceFields?.length || !referenceDoctype) return prefill;
     const fieldMap = new Map<string, any>();
-    referenceFields.forEach((field: any) => {
-      if (field.name) {
-        fieldMap.set(field.name, field);
-      }
+    referenceFields.forEach((f: any) => {
+      if (f.name) fieldMap.set(f.name, f);
     });
 
-    // 1. Extract prefill from filters
     if (filters && Array.isArray(filters)) {
       filters.forEach((filter: any) => {
         if (!Array.isArray(filter) || filter.length < 3) return;
-
         const [fieldPath, operator, filterValue] = filter;
-
-        // Only process "=" operator for prefill
         if (operator !== "=") return;
-
-        // Handle nested fields (e.g., "links.link_doctype", "links.link_id")
-        if (fieldPath.includes('.')) {
-          const pathParts = fieldPath.split('.');
-          const parentFieldName = pathParts[0];
-          const childFieldName = pathParts.slice(1).join('.');
-
-          // Check if parent field exists in target doctype
+        if (fieldPath.includes(".")) {
+          const [parentFieldName, ...rest] = fieldPath.split(".");
+          const childFieldName = rest.join(".");
           const parentField = fieldMap.get(parentFieldName);
-          if (!parentField) return;
-
-          // Determine if it's Reference Table (array) or Extend (object)
-          const isReferenceTable = parentField.type === "Reference Table";
-          const isExtend = parentField.type === "Extend";
-
-          if (isReferenceTable) {
-            // For Reference Table, create array structure
-            if (!prefill[parentFieldName] || !Array.isArray(prefill[parentFieldName])) {
-              prefill[parentFieldName] = [{}];
-            }
-            // Set value in the first item (or create new item if needed)
-            const firstItem = prefill[parentFieldName][0] || {};
-            setNestedValue(firstItem, childFieldName, filterValue);
-            prefill[parentFieldName][0] = firstItem;
-          } else if (isExtend) {
-            // For Extend, create object structure
-            if (!prefill[parentFieldName] || typeof prefill[parentFieldName] !== 'object') {
-              prefill[parentFieldName] = {};
-            }
-            setNestedValue(prefill[parentFieldName], childFieldName, filterValue);
-          } else {
-            // Regular nested field, try to set it
-            if (!prefill[parentFieldName]) {
-              prefill[parentFieldName] = {};
-            }
-            setNestedValue(prefill[parentFieldName], childFieldName, filterValue);
-          }
+          // Emit flat key for form prefill: e.g. filters "links.link_type" = "Customer" -> "links.0.link_type": "Customer"
+          const isRefTable = parentField ? parentField.type === "Reference Table" : true;
+          const flatKey = isRefTable ? `${parentFieldName}.0.${childFieldName}` : `${parentFieldName}.${childFieldName}`;
+          prefill[flatKey] = filterValue;
         } else {
-          // Simple field (e.g., "is_company_address")
           const field = fieldMap.get(fieldPath);
           if (field) {
-            // Convert filter value to appropriate type based on field type
-            let value = filterValue;
-
-            // Handle type conversion
-            if (field.type === "Check") {
-              value = filterValue === 1 || filterValue === "1" || filterValue === true || filterValue === "true" ? 1 : 0;
-            } else if (field.type === "Integer" || field.type === "Float") {
-              value = Number(filterValue);
-              if (isNaN(value)) value = filterValue;
-            } else if (field.type === "Date" || field.type === "Datetime") {
-              // Keep as string for date fields
-              value = String(filterValue);
-            } else {
-              value = filterValue;
-            }
-
-            prefill[fieldPath] = value;
+            let v = filterValue;
+            if (field.type === "Check")
+              v =
+                filterValue === 1 ||
+                  filterValue === "1" ||
+                  filterValue === true ||
+                  filterValue === "true"
+                  ? 1
+                  : 0;
+            else if (field.type === "Integer" || field.type === "Float") {
+              v = Number(filterValue);
+              if (isNaN(v)) v = filterValue;
+            } else if (field.type === "Date" || field.type === "Datetime")
+              v = String(filterValue);
+            prefill[fieldPath] = v;
           }
         }
       });
     }
-
-    // 2. Extract prefill from formData (matching fields by name)
     if (props.formData) {
-      const targetFieldNames = new Set(fieldMap.keys());
-
+      const targetNames = new Set(fieldMap.keys());
       Object.keys(props.formData).forEach((fieldName) => {
-        if (targetFieldNames.has(fieldName)) {
-          const field = fieldMap.get(fieldName);
-          if (!field) return;
-
-          const value = props.formData[fieldName];
-
-          // Only include non-empty values (and don't override filter values)
-          if (value !== undefined && value !== null && value !== "") {
-            // Only set if not already set by filters
-            if (prefill[fieldName] === undefined) {
-              prefill[fieldName] = value;
-            }
-          }
+        if (
+          targetNames.has(fieldName) &&
+          prefill[fieldName] === undefined
+        ) {
+          const v = props.formData[fieldName];
+          if (v !== undefined && v !== null && v !== "")
+            prefill[fieldName] = v;
         }
       });
     }
-
-    // 3. Try to extract values from formData for nested filter paths
     if (filters && Array.isArray(filters) && props.formData) {
       filters.forEach((filter: any) => {
         if (!Array.isArray(filter) || filter.length < 3) return;
-
         const [fieldPath, operator] = filter;
-
-        // Only process "=" operator
-        if (operator !== "=") return;
-
-        // For nested paths, try to get value from formData
-        if (fieldPath.includes('.')) {
-          const formValue = getNestedValue(props.formData, fieldPath);
-          if (formValue !== undefined && formValue !== null && formValue !== "") {
-            const pathParts = fieldPath.split('.');
-            const parentFieldName = pathParts[0];
-            const childFieldName = pathParts.slice(1).join('.');
-
-            const parentField = fieldMap.get(parentFieldName);
-            if (parentField) {
-              const isReferenceTable = parentField.type === "Reference Table";
-              const isExtend = parentField.type === "Extend";
-
-              if (isReferenceTable) {
-                if (!prefill[parentFieldName] || !Array.isArray(prefill[parentFieldName])) {
-                  prefill[parentFieldName] = [{}];
-                }
-                const firstItem = prefill[parentFieldName][0] || {};
-                setNestedValue(firstItem, childFieldName, formValue);
-                prefill[parentFieldName][0] = firstItem;
-              } else if (isExtend) {
-                if (!prefill[parentFieldName] || typeof prefill[parentFieldName] !== 'object') {
-                  prefill[parentFieldName] = {};
-                }
-                setNestedValue(prefill[parentFieldName], childFieldName, formValue);
-              }
-            }
-          }
-        }
+        if (operator !== "=" || !fieldPath.includes(".")) return;
+        const formVal = getNestedValue(props.formData, fieldPath);
+        if (formVal === undefined || formVal === null || formVal === "") return;
+        const [parentFieldName, ...rest] = fieldPath.split(".");
+        const childFieldName = rest.join(".");
+        const parentField = fieldMap.get(parentFieldName);
+        const isRefTable = parentField ? parentField.type === "Reference Table" : true;
+        const flatKey = isRefTable ? `${parentFieldName}.0.${childFieldName}` : `${parentFieldName}.${childFieldName}`;
+        if (prefill[flatKey] === undefined) prefill[flatKey] = formVal;
       });
     }
-
     return prefill;
   }, [filters, referenceFields, referenceDoctype, props.formData]);
 
-  async function search(value: string) {
-    if (!doctype) return;
-    const reference = zodula.utils.getFieldValueFromDoc(
-      props.fieldOptions.reference as string,
-      props.formData,
-      props.fieldOptions
-    );
-    if (!reference) return;
+  const search = useCallback(
+    async (query: string) => {
+      if (!doctype || !referenceDoctype) return;
+      const q = getSearchQuery(query);
+      const sortField = props.fieldOptions.sort || "updated_at";
+      const orderDirection = props.fieldOptions.order || "asc";
+      const res = await zodula.doc.select_docs(referenceDoctype as any, {
+        q: q,
+        limit: 10000,
+        sort: sortField,
+        order: orderDirection,
+        filters: filters,
+      });
+      setOptions(
+        res.docs.map((r) => ({
+          id: r.id,
+          title: r[doctype.display_field || "id"] || r.id,
+          subtitle:
+            doctype.search_fields
+              ?.split("\n")
+              ?.map((field: string) => r[field])
+              ?.filter(
+                (field: string) =>
+                  field !== undefined && field !== null && field !== ""
+              )
+              ?.join(", ") || "",
+          doc: r.doc,
+        }))
+      );
+    },
+    [
+      doctype,
+      referenceDoctype,
+      filters,
+      props.fieldOptions.sort,
+      props.fieldOptions.order,
+      getSearchQuery,
+    ]
+  );
 
-    // Extract the search query based on multiple mode
-    const searchQuery = getSearchQuery(value);
-
-    // Get sort and order from field options, with defaults
-    const sortField = props.fieldOptions.sort || "updated_at";
-    const orderDirection = props.fieldOptions.order || "asc";
-
-    const res = await zodula.doc.select_docs(reference as any, {
-      q: searchQuery,
-      limit: 10000,
-      sort: sortField,
-      order: orderDirection,
-      filters: filters,
-    });
-    setOptions(
-      res.docs.map((r) => ({
-        id: r.id,
-        title: r[doctype.display_field || "id"] || r.id,
-        subtitle:
-          doctype.search_fields
-            ?.split("\n")
-            .map((field: string) => r[field])
-            .filter(
-              (field: string) =>
-                field !== undefined && field !== null && field !== ""
-            )
-            .join(", ") || "",
-        doc: r.doc,
-      }))
-    );
-  }
-  const valueForSearch = isFocused && tempValue !== undefined ? tempValue : props.value;
+  // When committed value changes from parent, exit "search mode"
   useEffect(() => {
-    if (!isFocused) return;
-    search(valueForSearch || "");
-  }, [valueForSearch, isFocused, doctype, filters]);
-
-  useEffect(() => {
-    setTempValue(props.value);
-    setIsFocused(false);
+    setSearchText(undefined);
   }, [props.value]);
-  const actions = useMemo(() => {
-    let _actions: SelectAction[] = [];
+
+  // When doctype becomes available while user is searching, run search
+  useEffect(() => {
+    if (doctype && searchText !== undefined) search(searchText);
+  }, [doctype, searchText, search]);
+
+  const actions = useMemo((): SelectAction[] => {
+    const out: SelectAction[] = [];
     if (filters?.length > 0) {
-      _actions.push({
+      out.push({
         label: "",
         disabled: true,
-        description: `
-              ${filters.map((filter: any) => `${filter[0]} ${filter[1]} ${filter[2]}`).join(", ")}
-              `,
+        description: filters
+          .map((f: any) => `${f[0]} ${f[1]} ${f[2]}`)
+          .join(", "),
         icon: <FilterIcon />,
         onClick: (e: React.MouseEvent) => {
           e.preventDefault();
@@ -517,14 +343,11 @@ const ReferenceInput = (props: {
         },
       });
     }
-    // Show sort and order if configured
     if (props.fieldOptions.sort || props.fieldOptions.order) {
-      const sortField = props.fieldOptions.sort || "updated_at";
-      const orderDirection = props.fieldOptions.order || "asc";
-      _actions.push({
+      out.push({
         label: "",
         disabled: true,
-        description: `Sort: ${sortField}, Order: ${orderDirection}`,
+        description: `Sort: ${props.fieldOptions.sort || "updated_at"}, Order: ${props.fieldOptions.order || "asc"}`,
         icon: <ArrowUpDown />,
         onClick: (e: React.MouseEvent) => {
           e.preventDefault();
@@ -537,175 +360,238 @@ const ReferenceInput = (props: {
       !doctype?.is_system_generated &&
       !!referenceDoctype
     ) {
-      _actions.push({
+      out.push({
         label: "Create",
         icon: <PlusIcon />,
         onClick: async () => {
           if (!referenceDoctype) return;
-
-          // Unfocus the input when opening dialog
-          setIsFocused(false);
-
-          // Build prefill data from filters and formData
-          const prefill = buildPrefillData();
-
-          // Check if doctype is quick entry
           const isQuickEntry = referenceDoctypeDoc?.is_quick_entry === 1;
-
           if (isQuickEntry) {
-            // Use quick entry dialog
+            const prefill = buildPrefillData();
             const result = await popup(QuickEntryDialog, undefined, {
               doctype: referenceDoctype,
               fields: referenceFields as any,
               org: organizationId,
-              prefill: prefill
+              cbUrl: window.location.pathname,
+              fromField: props.fieldPath || props.fieldKey,
+              prefill: Object.keys(prefill).length ? prefill : undefined,
             });
-
             if (result?.id) {
-              // Set the created document ID as the value
               if (props.multiple) {
-                const newValue = appendValue(props.value || "", result.id);
-                props.onChange?.(newValue);
+                const cur = props.value || "";
+                const newVal = cur ? `${cur},${result.id}` : result.id;
+                props.onChange?.(props.fieldPath || "", newVal);
               } else {
-                props.onChange?.(result.id);
+                props.onChange?.(props.fieldPath || "", result.id);
               }
             }
           } else {
-            // Navigate to full form
-            setIsFocused(false);
-            router.push(`/desk/${organizationId}/doctypes/${referenceDoctype}/form`, {
-              state: {
-                cbUrl: window.location.pathname,
-                fromField: props.fieldPath || props.fieldKey,
-                fromDoc: props.formData,
-                prefill: prefill
-              },
-            });
+            const prefill = buildPrefillData();
+            router.push(
+              `/desk/${organizationId}/doctypes/${referenceDoctype}/form`,
+              {
+                state: {
+                  cbUrl: window.location.pathname,
+                  fromField: props.fieldPath || props.fieldKey,
+                  ...(Object.keys(prefill).length ? { prefill } : {}),
+                },
+              }
+            );
           }
         },
       });
-    }
-    return _actions;
-  }, [doctype, props.fieldOptions.reference, referenceDoctype, referenceDoctypeDoc, referenceFields, organizationId, props.multiple, props.value, props.onChange, props.fieldPath, props.fieldKey, props.formData, router, setIsFocused]);
 
-  const className = useMemo(() => {
-    return cn(
-      "zd:rounded zd:border-l-3 zd:font-bold",
-      !isVirtual ? "zd:hover:ring-primary zd:hover:ring-1" : "",
-    );
-  }, [isVirtual]);
+      // push Clear Value Action
+      out.push({
+        label: "Clear",
+        icon: <XIcon />,
+        onClick: () => {
+          props.onChange?.(props.fieldPath || "", "");
+          props.onBlur?.(props.fieldPath || "", "");
+        },
+      });
+    }
+    return out;
+  }, [
+    doctype,
+    referenceDoctype,
+    referenceDoctypeDoc,
+    referenceFields,
+    organizationId,
+    props.multiple,
+    props.value,
+    props.fieldPath,
+    props.fieldKey,
+    filters,
+    props.fieldOptions.sort,
+    props.fieldOptions.order,
+    buildPrefillData,
+    router,
+  ]);
+
+  const fieldPath = props.fieldPath || props.fieldKey || "";
+
+  // Display value: temp search text while user is typing, otherwise committed value
+  const displayValue =
+    searchText !== undefined ? searchText : (props.value ?? "");
+
+  const handleFocus = useCallback(() => {
+    const initial = props.value ?? "";
+    setSearchText(initial);
+    if (doctype) search(initial);
+  }, [doctype, search, props.value]);
+
+  const handleChange = useCallback(
+    (value: string) => {
+      setSearchText(value);
+      if (doctype) search(value);
+    },
+    [doctype, search]
+  );
+
+  const handleSelect = useCallback(
+    (option: { value: string; label: string; subtitle?: string }) => {
+      if (props.readonly) return;
+      if (props.multiple) {
+        const current = searchText ?? props.value ?? "";
+        const newValue = appendOrReplaceOnSelect(current, option.value);
+        props.onChange?.(fieldPath, newValue);
+        setSearchText(undefined);
+      } else {
+        props.onChange?.(fieldPath, option.value);
+        setSearchText(undefined);
+      }
+    },
+    [
+      props.readonly,
+      props.multiple,
+      props.value,
+      props.onChange,
+      fieldPath,
+      searchText,
+      appendOrReplaceOnSelect,
+    ]
+  );
+
+  const handleBlur = useCallback(
+    async (opts?: { reason: "selection" | "blur"; value: string }) => {
+      if (opts?.reason === "selection") return;
+      const currentValue = (opts?.value ?? searchText ?? "").trim();
+      setSearchText(undefined);
+
+      if (!currentValue) {
+        props.onChange?.(fieldPath, "");
+        props.onBlur?.(fieldPath, "");
+        return;
+      }
+
+      if (!referenceDoctype) {
+        props.onBlur?.(fieldPath, props.value);
+        return;
+      }
+
+      if (props.multiple) {
+        const ids = currentValue.split(",").map((s) => s.trim()).filter(Boolean);
+        const existing: string[] = [];
+        for (const id of ids) {
+          try {
+            const res = await zodula.doc.get_doc(
+              referenceDoctype as Zodula.DoctypeName,
+              id,
+              {}
+            );
+            if (res?.id) existing.push(res.id);
+          } catch {
+            // skip invalid id
+          }
+        }
+        const newValue = existing.join(",");
+        props.onChange?.(fieldPath, newValue);
+        props.onBlur?.(fieldPath, newValue);
+      } else {
+        try {
+          const docs = await zodula.doc.select_docs(referenceDoctype as any, {
+            limit: 1,
+            sort: "updated_at",
+            order: "asc",
+            filters: [["id", "=", currentValue], ...filters],
+          });
+          const doc = docs.docs[0];
+          if (doc?.id) {
+            props.onChange?.(fieldPath, doc.id);
+            props.onBlur?.(fieldPath, doc.id);
+          } else {
+            props.onChange?.(fieldPath, "");
+            props.onBlur?.(fieldPath, "");
+          }
+        } catch {
+          props.onChange?.(fieldPath, "");
+          props.onBlur?.(fieldPath, "");
+        }
+      }
+    },
+    [
+      fieldPath,
+      referenceDoctype,
+      props.multiple,
+      props.onChange,
+      props.onBlur,
+      searchText,
+    ]
+  );
+
+  const className = useMemo(
+    () =>
+      cn(
+        "zd:rounded zd:border-l-3 zd:font-bold",
+        !isVirtual ? "zd:hover:ring-primary zd:hover:ring-1" : ""
+      ),
+    [isVirtual]
+  );
 
   if (props.readonly) {
-    return <span className="zd:text-muted-foreground zd:h-8 zd:flex zd:items-center zd:gap-1 zd:bg-muted/50 zd:rounded-md zd:p-2">
-      <Link
-        to={`/desk/${organizationId}/doctypes/${referenceDoctype || ""}/form/${props.value || ""}`}
-        className={cn(
-          "zd:text-primary zd:hover:underline",
-        )}
-      >
-        {props.value}
-      </Link>
-    </span>
+    return (
+      <span className="zd:text-muted-foreground zd:h-8 zd:flex zd:items-center zd:gap-1 zd:bg-muted/50 zd:rounded-md zd:p-2">
+        <Link
+          to={`/desk/${organizationId}/doctypes/${referenceDoctype || ""}/form/${props.value || ""}`}
+          className="zd:text-primary zd:hover:underline  zd:whitespace-nowrap zd:truncate"
+        >
+          {props.value}
+        </Link>
+      </span>
+    );
   }
-
-  // When focused: show temp value (no onChange = no parent doc fetch). On blur: sync via onChange.
-  const displayValue = isFocused && tempValue !== undefined ? tempValue : props.value;
-  const effectiveValue = displayValue ?? "";
 
   return (
     <Select
       autocomplete={props.autocomplete}
       actions={actions}
       placeholder={props.placeholder || ""}
-      value={effectiveValue}
-      options={options.map((option) => ({
-        label: option.title,
-        value: option.id,
-        subtitle: option.subtitle,
+      value={displayValue}
+      options={options.map((o) => ({
+        label: o.title,
+        value: o.id,
+        subtitle: o.subtitle,
       }))}
-      onChange={(value) => {
-        if (props.readonly) return;
-        if (isFocused) {
-          // Flush immediately so Select shows new value before dropdown closes (avoids flash of old value)
-          flushSync(() => setTempValue(value));
-        } else {
-          props.onChange?.(value);
-        }
-      }}
-      onSelect={(option) => {
-        if (props.readonly) return;
-        if (props.multiple && option) {
-          // Compute append in Reference: tempValue is pre-selection (before Select's onChange)
-          const currentValue = tempValue ?? props.value ?? "";
-          const newValue = appendOrReplaceOnSelect(currentValue, option.value);
-          props.onChange?.(newValue);
-          setTempValue(newValue);
-        } else if (!props.multiple && option) {
-          setTempValue(option.value);
-          props.onChange?.(option.value);
-        }
-      }}
-      onBlur={async (opts) => {
-        // When blur is caused by selection (Enter or click), we already committed via onSelect
-        if (opts?.reason !== 'blur') {
-          setIsFocused(false);
-          return;
-        }
-
-        const currentValue = (tempValue ?? props.value ?? "").trim();
-        const isMultiple = props.multiple;
-
-        // Commit value synchronously BEFORE setIsFocused to ensure form receives it on first blur
-        if (isMultiple) {
-          props.onChange?.(currentValue);
-          props.onBlur?.(currentValue);
-          setIsFocused(false);
-          return;
-        }
-
-        if (!currentValue || !referenceDoctype) {
-          props.onChange?.("");
-          props.onBlur?.("");
-          setIsFocused(false);
-          return;
-        }
-
-        setIsFocused(false);
-        try {
-          await zodula.doc.get_doc(referenceDoctype as any, currentValue, {});
-          props.onChange?.(currentValue);
-          props.onBlur?.(currentValue);
-        } catch {
-          props.onChange?.("");
-          props.onBlur?.("");
-        }
-      }}
-      onFocus={() => {
-        setTempValue(props.value ?? "");
-        setIsFocused(true);
-        if (!doctype) return;
-        if (!props.value || options.length === 0) {
-          search(props.value || "");
-        }
-      }}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      onSelect={handleSelect}
+      onFocus={handleFocus}
       className={className}
       allowFreeText
       readOnly={props.readonly}
       clearable={false}
-      hideChevron={true}
+      hideChevron
+      searchable
       suffix={
-        <>
-          {!!props.value && !props.multiple && (
-            <Link
-              to={`/desk/${organizationId}/doctypes/${referenceDoctype || ""}/form/${props.value || ""}`}
-              className={cn(
-                "no-print",
-              )}
-            >
-              <ArrowRight />
-            </Link>
-          )}
-        </>
+        !!props.value && !props.multiple ? (
+          <Link
+            to={`/desk/${organizationId}/doctypes/${referenceDoctype || ""}/form/${props.value || ""}`}
+            className="no-print"
+          >
+            <ArrowRight />
+          </Link>
+        ) : undefined
       }
     />
   );
@@ -713,11 +599,21 @@ const ReferenceInput = (props: {
 
 export const ReferencePlugin = new FormPlugin({
   types: ["Reference", "Virtual Reference"],
-  supportOperators: ["=", "!=", "LIKE", "NOT LIKE", "IN", "NOT IN", "IS NULL", "IS NOT NULL"],
-  render: (props) => {
-    return <ReferenceInput {...props} />;
-  },
-  renderFilter: (props) => {
-    return <ReferenceInput {...props} multiple={props.operator === "IN" || props.operator === "NOT IN"} />;
-  }
+  supportOperators: [
+    "=",
+    "!=",
+    "LIKE",
+    "NOT LIKE",
+    "IN",
+    "NOT IN",
+    "IS NULL",
+    "IS NOT NULL",
+  ],
+  render: (props) => <ReferenceInput {...props} />,
+  renderFilter: (props) => (
+    <ReferenceInput
+      {...props}
+      multiple={props.operator === "IN" || props.operator === "NOT IN"}
+    />
+  ),
 });

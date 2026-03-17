@@ -63,7 +63,7 @@ export interface SelectProps {
   actions?: SelectAction[];
   onFocus?: () => void;
   /** Called when input blurs. reason: 'selection' = blur caused by selecting an option (Enter or click); 'blur' = normal blur (tab/click outside) */
-  onBlur?: (opts?: { reason: 'selection' | 'blur' }) => void;
+  onBlur?: (opts?: { reason: 'selection' | 'blur', value: string }) => void;
   allowFreeText?: boolean;
   validate?: boolean;
   displayMode?: "label" | "value" | "key";
@@ -216,10 +216,15 @@ const Select = ({
 
   // Calculate dropdown position
   const calculateDropdownPosition = () => {
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const viewportHeight = window.innerHeight;
-      const viewportWidth = window.innerWidth;
+    const targetRect =
+      inputRef.current?.getBoundingClientRect() ??
+      containerRef.current?.getBoundingClientRect();
+
+    if (targetRect) {
+      // Prefer visualViewport on mobile so we account for on-screen keyboard
+      const viewport = window.visualViewport ?? null;
+      const viewportHeight = viewport ? viewport.height : window.innerHeight;
+      const viewportWidth = viewport ? viewport.width : window.innerWidth;
 
       // Parse maxHeight to get numeric value for calculations
       const parseMaxHeight = (heightStr: string): number => {
@@ -235,8 +240,13 @@ const Select = ({
       const gap = 4; // Gap between input and dropdown
 
       // Calculate if dropdown should open above or below (default: below; above when not enough space below)
-      const spaceBelow = viewportHeight - rect.bottom - gap - 8;
-      const spaceAbove = rect.top - gap - 8;
+      // Adjust coordinates relative to visual viewport offset when keyboard is open
+      const offsetTop = viewport ? (viewport as any).offsetTop || 0 : 0;
+      const offsetLeft = viewport ? (viewport as any).offsetLeft || 0 : 0;
+
+      const spaceBelow =
+        viewportHeight - (targetRect.bottom - offsetTop) - gap - 8;
+      const spaceAbove = targetRect.top - offsetTop - gap - 8;
       const openAbove = spaceBelow < dropdownHeight && spaceAbove > spaceBelow;
 
       // Calculate available height for the dropdown (needed before setting top when openAbove)
@@ -252,16 +262,16 @@ const Select = ({
       let top: number;
       if (openAbove) {
         // When opening above, place dropdown so its bottom edge is just above the input (no overlap)
-        top = rect.top - gap - availableHeight;
+        top = targetRect.top - gap - availableHeight;
         top = Math.max(8, top);
       } else {
         // When opening below, position it just below the input
-        top = rect.bottom + gap;
+        top = targetRect.bottom + gap;
       }
 
       // Calculate horizontal position (fixed positioning uses viewport coordinates)
-      let left = rect.left;
-      const dropdownWidth = Math.max(rect.width, 200); // Minimum width
+      let left = targetRect.left;
+      const dropdownWidth = Math.max(targetRect.width, 200); // Minimum width
 
       // Adjust horizontal position if dropdown would exceed viewport
       if (left + dropdownWidth > viewportWidth) {
@@ -294,11 +304,12 @@ const Select = ({
     }
   };
 
-  // Handle input blur
+  // Handle input blur — do not invoke onBlur when dropdown was closed by selecting an option
   const handleInputBlur = () => {
     const reason = blurReasonRef.current ?? 'blur';
     blurReasonRef.current = null;
-    onBlur?.({ reason });
+    if (reason === 'selection') return;
+    onBlur?.({ reason, value: value || "" });
   };
 
   // Handle closing dropdown and validation
@@ -377,9 +388,7 @@ const Select = ({
       onSelect?.(option);
 
       handleDropdownClose();
-
-      // Unfocus the input
-      inputRef.current?.blur();
+      // Do not blur the input so onBlur is not triggered (selection is not a "blur" to the consumer)
     }
   };
 
@@ -468,13 +477,13 @@ const Select = ({
     inputRef.current?.focus();
   };
 
-  // Handle action click
+  // Handle action click — close dropdown and blur so it stays closed (focus would reopen it)
   const handleActionClick = (action: SelectAction, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!action.disabled) {
       action.onClick(e);
       handleDropdownClose();
-      inputRef.current?.focus();
+      inputRef.current?.blur();
     }
   };
 
@@ -502,22 +511,31 @@ const Select = ({
     }
   }, [isOpen]);
 
-  // Update dropdown position on scroll and resize
+  // Update dropdown position on open, scroll and resize
   useEffect(() => {
-    if (isOpen) {
-      const handleUpdatePosition = () => {
-        calculateDropdownPosition();
-      };
+    if (!isOpen) return;
 
-      window.addEventListener("scroll", handleUpdatePosition, true);
-      window.addEventListener("resize", handleUpdatePosition);
+    calculateDropdownPosition();
 
-      return () => {
-        window.removeEventListener("scroll", handleUpdatePosition, true);
-        window.removeEventListener("resize", handleUpdatePosition);
-      };
-    }
-  }, [isOpen]);
+    const handleUpdatePosition = () => {
+      calculateDropdownPosition();
+    };
+
+    window.addEventListener("scroll", handleUpdatePosition, true);
+    window.addEventListener("resize", handleUpdatePosition);
+
+    // Listen to visualViewport changes on mobile (keyboard show/hide, zoom)
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", handleUpdatePosition);
+    vv?.addEventListener("scroll", handleUpdatePosition);
+
+    return () => {
+      window.removeEventListener("scroll", handleUpdatePosition, true);
+      window.removeEventListener("resize", handleUpdatePosition);
+      vv?.removeEventListener("resize", handleUpdatePosition);
+      vv?.removeEventListener("scroll", handleUpdatePosition);
+    };
+  }, [isOpen, maxHeight]);
 
   // Scroll focused option into view
   useEffect(() => {
@@ -679,6 +697,10 @@ const Select = ({
                         focusedIndex === index ? "zd:bg-muted" : "",
                         optionClassName ?? ""
                       )}
+                      onMouseDown={(e) => {
+                        // Set before blur fires so handleInputBlur sees reason 'selection'
+                        if (!option.disabled) blurReasonRef.current = "selection";
+                      }}
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();

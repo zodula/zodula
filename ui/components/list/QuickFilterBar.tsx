@@ -77,6 +77,7 @@ export function QuickFilterBar({
 
   const applyQuickFilters = useCallback(
     (newValues: Record<string, string>) => {
+      console.log("newValues", newValues);
       const quickFilters: IFilter<any, any, IOperator>[] = quickFilterFields
         .filter((f) => {
           const v = newValues[f.name as string];
@@ -88,6 +89,7 @@ export function QuickFilterBar({
           const value = num !== undefined && !Number.isNaN(num) && v?.trim() !== "" ? num : v;
           return [f.name, "=" as IOperator, value] as IFilter<any, any, IOperator>;
         });
+      console.log("quickFilters", quickFilters);
       onApplyFilters([...otherFilters, ...quickFilters]);
     },
     [quickFilterFields, otherFilters, onApplyFilters]
@@ -95,6 +97,7 @@ export function QuickFilterBar({
 
   const handleChange = useCallback(
     (fieldName: string, value: string) => {
+      console.log("handleChange", fieldName, value);
       const next = { ...values, [fieldName]: value };
       setValues(next);
       applyQuickFilters(next);
@@ -119,8 +122,9 @@ export function QuickFilterBar({
             {plugin?.renderFilter ? (
               <plugin.renderFilter
                 fieldOptions={field}
+                fieldPath={fieldName}
                 value={value}
-                onChange={(v) => handleChange(fieldName, getQuickFilterValue(v))}
+                onChange={(_fieldPath, value) => handleChange(fieldName, value)}
                 operator="="
                 placeholder={t(field.label || field.name || "")}
               />

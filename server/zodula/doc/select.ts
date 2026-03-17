@@ -181,7 +181,7 @@ export class ZodulaDoctypeSelector<
         joinAliases.set(aliasKey, alias);
 
         // Build JOIN: LEFT JOIN child_table AS alias ON alias.child_field = main_table.id
-        const joinClause = `LEFT JOIN "${child.childDoctype}" AS "${alias}" ON "${alias}"."parentid" = "${doctype.name}"."id" AND "${alias}"."parentype" = "${doctype.name}" AND "${alias}"."parentfield" = "${parentField}"`;
+        const joinClause = `LEFT JOIN "${child.childDoctype}" AS "${alias}" ON "${alias}"."parentid" = "${doctype.name}"."id" AND "${alias}"."parentype" = '${doctype.name}' AND "${alias}"."parentfield" = '${parentField}'`;
         joins.push(joinClause);
       }
     }
@@ -189,16 +189,17 @@ export class ZodulaDoctypeSelector<
     return { joins, joinAliases };
   }
 
-  private buildWhereClause(
+  private buildWhereClause(options: {
     doctype: DoctypeMetadata,
     roles: string[],
     permissions: Zodula.SelectDoctype<"Doctype Permission">[],
     user: Zodula.SelectDoctype<"User">,
-    organization: string | null,
-    userOrganizationRoles: string[],
+    userOrganizations: string[],
+    userOrganization: string | null,
     joinAliases?: Map<string, string>
-  ): string {
+  }): string {
     const { filters = [], q } = this.options;
+    const { doctype, roles, permissions, user, userOrganizations, userOrganization, joinAliases } = options;
     const whereConditions: string[] = [];
 
     // Process regular filters
@@ -213,7 +214,7 @@ export class ZodulaDoctypeSelector<
         doctype
       );
       if (refTableChild && !fieldPath.includes(".")) {
-        const countSubquery = `(SELECT COUNT(*) FROM "${refTableChild.childDoctype}" WHERE "${refTableChild.childDoctype}"."parentid" = "${doctype.name}"."id" AND "${refTableChild.childDoctype}"."parentype" = "${doctype.name}" AND "${refTableChild.childDoctype}"."parentfield" = "${fieldPath}")`;
+        const countSubquery = `(SELECT COUNT(*) FROM "${refTableChild.childDoctype}" WHERE "${refTableChild.childDoctype}"."parentid" = "${doctype.name}"."id" AND "${refTableChild.childDoctype}"."parentype" = '${doctype.name}' AND "${refTableChild.childDoctype}"."parentfield" = '${fieldPath}')`;
         switch (operator) {
           case "=":
           case "!=":
@@ -285,11 +286,11 @@ export class ZodulaDoctypeSelector<
       }
     }
 
-    if (doctype.config.is_global !== 1 && organization !== "System Panel" && !this.options.bypass) {
-      whereConditions.push(`("${doctype.name}"."organization" = "${organization}" OR "${doctype.name}"."organization" = "System Panel")`);
+    if (doctype.config.is_global !== 1 && userOrganization !== "System Panel" && !this.options.bypass) {
+      whereConditions.push(`("${doctype.name}"."doc_organization" = "${userOrganization}" OR "${doctype.name}"."doc_organization" = "System Panel")`);
     }
-    if(doctype.name === "Organization" && !roles.includes("System Admin") && !this.options.bypass) {
-      whereConditions.push(`("${doctype.name}"."owner" = "${user?.id}" OR "${doctype.name}"."id" IN ("${userOrganizationRoles.join('","')}"))`);
+    if (doctype.name === "Organization" && userOrganization !== "System Panel" && !this.options.bypass) {
+      whereConditions.push(`("${doctype.name}"."owner" = "${user?.id}" OR "${doctype.name}"."id" IN ("${userOrganizations.join('","')}"))`);
     }
 
     // Process search query
@@ -328,7 +329,7 @@ export class ZodulaDoctypeSelector<
       if (can_own_select) {
         whereConditions.push(`"${doctype.name}"."owner" = "${user?.id}"`);
       } else {
-        whereConditions.push(`"${doctype.name}"."id" IS NULL`);
+        whereConditions.push(`"${doctype.name}"."id" IS NOT NULL`);
       }
     }
 
@@ -347,20 +348,20 @@ export class ZodulaDoctypeSelector<
       const doctype = loader.from("doctype").get(this.doctypeName);
       const session = new ZodulaSession();
       const user = await session.user(true);
-      const organization = await session.organization(true);
-      const userOrganizationRoles = await session.organizationRoles(undefined, true);
+      const userOrganization = await session.organization(true);
+      const userOrganizations = await session.organizations(true);
       const roles = await session.roles();
-      const permissions = await ZodulaDoctypeHelper.getPermissions(
+      const { can } = await ZodulaDoctypeHelper.checkPermission(
         this.doctypeName,
-        roles
+        "can_select",
+        {
+          doc_organization: userOrganization,
+        } as any,
+        { bypass: this.options.bypass, doctype }
       );
       if (
-        permissions?.every(
-          (permission) =>
-            permission.can_select !== 1 && permission.can_own_select !== 1
-        ) &&
-        !this.options.bypass &&
-        !roles?.includes("System Admin")
+        !can &&
+        !this.options.bypass
       ) {
         throw new ErrorWithCode(
           `You do not have permission to select ${this.doctypeName}`,
@@ -372,7 +373,7 @@ export class ZodulaDoctypeSelector<
 
       const { limit = -1, page = 1 } = this.options || {};
       const children = doctype.children;
-      
+
       // Find child field aliases from children (Reference Table and Extend fields)
       const childFieldAliases = new Set<string>();
       for (const child of children) {
@@ -382,8 +383,8 @@ export class ZodulaDoctypeSelector<
       const requestedFields =
         this.options.fields.length > 0
           ? this.options.fields
-              ?.map((field) => String(field))
-              ?.filter((field) => !childFieldAliases.has(field)) ?? []
+            ?.map((field) => String(field))
+            ?.filter((field) => !childFieldAliases.has(field)) ?? []
           : ["*"];
 
       // Build JOINs for reference table filters
@@ -408,15 +409,19 @@ export class ZodulaDoctypeSelector<
       // Build the main query with JOINs
       const selectClause = `SELECT DISTINCT ${selectFields} FROM "${doctype?.name}"`;
       const joinClause = joins.length > 0 ? joins.join(" ") : "";
-      const whereClause = this.buildWhereClause(
+      const permissions = await ZodulaDoctypeHelper.getPermissions(
+        this.doctypeName,
+        roles
+      );
+      const whereClause = this.buildWhereClause({
         doctype,
         roles,
         permissions,
         user,
-        organization || null,
-        userOrganizationRoles,
+        userOrganizations: userOrganizations as string[],
+        userOrganization: userOrganization,
         joinAliases
-      );
+      });
       const orderClause = this.options.sort
         ? `ORDER BY "${doctype?.name}"."${this.options.sort as string}" ${this.options.order}`
         : "";

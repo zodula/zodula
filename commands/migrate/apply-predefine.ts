@@ -132,13 +132,15 @@ async function upsertFieldsBatch(
       only_db: fieldSchema.only_db ? 1 : 0,
       width: fieldSchema.width || null,
       fetch_from: fieldSchema.fetch_from || null,
-      organization: "System Panel",
+      doc_organization: "System Panel",
       in_quick_entry: fieldSchema.in_quick_entry ? 1 : 0 || null,
       perm_level: fieldSchema.perm_level || "0",
       only_once: fieldSchema.only_once ? 1 : 0 || null,
       no_translate: fieldSchema.no_translate ? 1 : 0 || null,
-      organization_abbr: "SYS",
+      doc_organization_abbr: "SYS",
       is_quick_filter: fieldSchema.is_quick_filter ? 1 : 0 || null,
+      in_tree_view: fieldSchema.in_tree_view ? 1 : 0 || null,
+      height: fieldSchema.height || null,
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"Field">>;
 
@@ -241,8 +243,8 @@ async function upsertRelativesBatch(
       child_field_name: relativeItem.childFieldName,
       idx: relativeIdx++,
       vector: "[]",
-      organization: "System Panel",
-      organization_abbr: "SYS",
+      doc_organization: "System Panel",
+      doc_organization_abbr: "SYS",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"Doctype Relative">>;
 
@@ -338,8 +340,8 @@ async function upsertChildrenBatch(
       type: childItem.type,
       idx: childIdx++,
       vector: "[]",
-      organization: "System Panel",
-      organization_abbr: "SYS",
+      doc_organization: "System Panel",
+      doc_organization_abbr: "SYS",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"Doctype Children">>;
 
@@ -439,8 +441,8 @@ async function upsertApp(
       description: app.package.description || null,
       idx,
       vector: "[]",
-      organization: "System Panel",
-      organization_abbr: "SYS",
+      doc_organization: "System Panel",
+      doc_organization_abbr: "SYS",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"App">>;
 
@@ -558,6 +560,7 @@ async function upsertDoctype(
       json_model: JSON.stringify(doctype.schema, null, 2),
       app: doctype.appName,
       is_single: doctype.config.is_single ? 1 : 0,
+      is_organization_single: doctype.config.is_organization_single ? 1 : 0,
       naming_series: doctype.config.naming_series || null,
       is_submittable: doctype.config.is_submittable ? 1 : 0,
       track_changes: doctype.config.track_changes ? 1 : 0,
@@ -574,8 +577,8 @@ async function upsertDoctype(
       is_quick_entry: doctype.config.is_quick_entry ? 1 : 0,
       additional_connections: doctype.config.additional_connections || null,
       insert_tier_required: doctype.config.insert_tier_required as "0" | "1" | "2" | "3" | "4" | "5" | null,
-      organization: "System Panel",
-      organization_abbr: "SYS",
+      doc_organization: "System Panel",
+      doc_organization_abbr: "SYS",
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"Doctype">>;
 

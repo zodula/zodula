@@ -1,7 +1,7 @@
 import React from "react";
 import { Button } from "../components/ui/button";
 import { Drawer } from "../components/ui/drawer";
-import { Menu, MoreHorizontal } from "lucide-react";
+import { Menu, MoreHorizontal, ChevronDown } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +31,20 @@ export interface PrimaryAction {
   variant?: "solid" | "subtle" | "outline" | "ghost" | "success";
 }
 
+export interface SecondaryAction {
+  label: string;
+  icon?: React.ComponentType<any>;
+  onClick: () => void | Promise<void>;
+  disabled?: boolean;
+  variant?: "outline" | "ghost" | "solid" | "subtle" | "success";
+  items?: Array<{
+    label: string;
+    icon?: React.ComponentType<any>;
+    onClick: () => void | Promise<void>;
+    disabled?: boolean;
+  }>;
+}
+
 export interface SidebarLayoutProps {
   children: React.ReactNode;
   title?: React.ReactNode;
@@ -38,6 +52,7 @@ export interface SidebarLayoutProps {
   sidebarContent?: React.ReactNode;
   actionSection?: React.ReactNode;
   primaryAction?: PrimaryAction | PrimaryAction[];
+  secondaryActions?: SecondaryAction[];
   actions?: ActionItem[];
   defaultOpen?: boolean;
 }
@@ -99,6 +114,7 @@ export const SidebarLayout = ({
   sidebarContent,
   actionSection,
   primaryAction,
+  secondaryActions = [],
   actions = [],
   defaultOpen = false,
 }: SidebarLayoutProps) => {
@@ -135,6 +151,54 @@ export const SidebarLayout = ({
             {action.label}
           </Button>
         ))}
+        {secondaryActions.map((button, index) => {
+          if (button.items && button.items.length > 0) {
+            const Icon = button.icon;
+            return (
+              <DropdownMenu key={`secondary-${index}`}>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant={button.variant || "outline"}
+                    className="no-print zd:h-8"
+                    disabled={button.disabled}
+                  >
+                    {Icon && <Icon className="zd:w-4 zd:h-4 zd:mr-1" />}
+                    {button.label}
+                    <ChevronDown className="zd:w-4 zd:h-4 zd:ml-1" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {button.items.map((item, itemIndex) => {
+                    const ItemIcon = item.icon;
+                    return (
+                      <DropdownMenuItem
+                        key={itemIndex}
+                        onClick={item.onClick}
+                        disabled={item.disabled}
+                      >
+                        {ItemIcon && <ItemIcon className="zd:w-4 zd:h-4 zd:mr-1" />}
+                        {item.label}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            );
+          }
+          const Icon = button.icon;
+          return (
+            <Button
+              key={`secondary-${index}`}
+              variant={button.variant || "outline"}
+              onClick={button.onClick}
+              disabled={button.disabled}
+              className="no-print zd:h-8"
+            >
+              {Icon && <Icon className="zd:w-4 zd:h-4 zd:mr-1" />}
+              {button.label}
+            </Button>
+          );
+        })}
         {actions.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

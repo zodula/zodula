@@ -1,12 +1,16 @@
 import { Command } from "nailgun";
-import { watch } from "fs";
+import { watch, type FSWatcher } from "fs";
 import path from "path";
 import { startup } from "@/zodula/server/startup";
 
 let proc: Bun.Subprocess | null = null
 let debounceTimer: NodeJS.Timeout | null = null
+let appsWatcher: FSWatcher | null = null
+let triggerWatcher: FSWatcher | null = null
+let signalsRegistered = false
+let nextRestartNeedsStartup = false
 
-const DEBOUNCE_DELAY = 20 // ms
+const DEBOUNCE_DELAY = 100 // ms
 
 function restartServer() {
     if (proc) {
@@ -24,14 +28,20 @@ function restartServer() {
     })
 }
 
-function debouncedRestart() {
+function queueRestart(withStartup: boolean) {
+    nextRestartNeedsStartup = nextRestartNeedsStartup || withStartup
+
     if (debounceTimer) {
         clearTimeout(debounceTimer)
     }
 
     debounceTimer = setTimeout(async () => {
-        console.log("🔄 File change detected, restarting server...")
-        await startup()
+        const doStartup = nextRestartNeedsStartup
+        nextRestartNeedsStartup = false
+        console.log("🔄 File change detected, restarting server...", doStartup ? "(with startup)" : "")
+        if (doStartup) {
+            await startup()
+        }
         restartServer()
     }, DEBOUNCE_DELAY)
 }
@@ -41,16 +51,21 @@ export default new Command("dev")
     .action(async () => {
         await startup()
 
-        // Start the server initially
         restartServer()
 
-        // Watch the apps folder for changes
+        if (appsWatcher) {
+            appsWatcher.close()
+        }
+        if (triggerWatcher) {
+            triggerWatcher.close()
+        }
+
         const appsPath = path.join(process.cwd(), "apps")
         console.log(`👀 Watching ${appsPath} for changes...`)
 
-        watch(appsPath, { recursive: true }, (eventType, filename) => {
+        appsWatcher = watch(appsPath, { recursive: true }, (eventType, filename) => {
             if (filename && !filename.includes('node_modules') && !filename.includes('.git') && !filename.includes('fixture.json')) {
-                debouncedRestart()
+                queueRestart(false)
             }
         })
 
@@ -67,19 +82,33 @@ export default new Command("dev")
             await Bun.write(watchTriggerPath, "")
         }
 
-        watch(watchTriggerPath, (eventType) => {
+        triggerWatcher = watch(watchTriggerPath, (eventType) => {
             if (eventType === 'change') {
-                console.log("🔄 Migration trigger detected, restarting server...")
-                debouncedRestart()
+                console.log("🔄 Migration trigger detected, restarting server with startup...")
+                queueRestart(true)
             }
         })
 
-        // Handle graceful shutdown
-        process.on('SIGINT', () => {
-            console.log('\n🛑 Shutting down development server...')
-            if (proc) {
-                proc.kill()
+        if (!signalsRegistered) {
+            signalsRegistered = true
+
+            const shutdown = () => {
+                console.log('\n🛑 Shutting down development server...')
+                if (proc) {
+                    proc.kill()
+                }
+                if (appsWatcher) {
+                    appsWatcher.close()
+                    appsWatcher = null
+                }
+                if (triggerWatcher) {
+                    triggerWatcher.close()
+                    triggerWatcher = null
+                }
+                process.exit(0)
             }
-            process.exit(0)
-        })
+
+            process.on('SIGTERM', shutdown)
+            process.on('SIGINT', shutdown)
+        }
     });

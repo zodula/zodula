@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Button } from "@/zodula/ui/components/ui/button";
-import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
 import type { IFilter, IOperator } from "@/zodula/server/zodula/type";
-import { Checkbox } from "@/zodula/ui/components/ui/checkbox";
 import { FormControl } from "@/zodula/ui/components/ui/form-control";
-import { Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { ClientFieldHelper } from "@/zodula/client/field";
 import { useOrganization } from "@/zodula/ui/hooks/use-organization";
 import { useParams } from "react-router";
 import { FilterContent } from "@/zodula/ui/components/list/FilterContent";
+import { ListTable, type ListColumn } from "@/zodula/ui/components/list/ListTable";
+import { zodula } from "@/zodula/client";
+import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
 
 export interface MultiSelectDoctypeDialogInitialData {
   doctype: Zodula.DoctypeName;
@@ -17,32 +18,71 @@ export interface MultiSelectDoctypeDialogInitialData {
   defaultFilters?: IFilter<any, any, IOperator>[];
   limit?: number;
   labelField?: string;
-  /** Field names for standard filter grid and table columns; when set, overrides doctype list view fields */
-  list_view_fields?: string[];
+  /** Field names for the standard filter form (filter grid); when set, overrides doctype list view fields for filters */
+  standard_filter_fields?: string[];
+  /** Field names for table columns (e.g. product_name, customer_name, price, uom, from_date, until_date) */
+  columns?: string[];
+  /** When true, only one item can be selected; onClose receives string | null instead of string[] | null */
+  single?: boolean;
+  /** When true (default), the filters section starts collapsed; pass false to open it by default */
+  defaultFiltersCollapsed?: boolean;
 }
 
 interface MultiSelectDoctypeDialogProps {
   isOpen: boolean;
-  onClose: (result?: string[]) => void;
+  onClose: (result?: string[] | string | null) => void;
   initialData?: MultiSelectDoctypeDialogInitialData;
 }
 
-/** Build initial standard filter values from defaultFilters where operator is "=" */
-function defaultFiltersToStandardValues(defaultFilters: IFilter<any, any, IOperator>[]): Record<string, any> {
+function defaultFiltersToStandardValues(filters: IFilter<any, any, IOperator>[]): Record<string, any> {
   const out: Record<string, any> = {};
-  for (const f of defaultFilters || []) {
-    if (f[1] === "=" && f[0] != null && f[2] !== undefined && f[2] !== "") {
-      out[f[0] as string] = f[2];
-    }
+  for (const f of filters || []) {
+    if (f[1] === "=" && f[0] != null && f[2] !== undefined && f[2] !== "") out[f[0] as string] = f[2];
   }
   return out;
 }
 
-/** Build filters from standard filter field values (equality only) */
-function standardValuesToFilters(standardFilterValues: Record<string, any>): IFilter<any, any, IOperator>[] {
-  return Object.entries(standardFilterValues)
-    .filter(([, v]) => v !== undefined && v !== null && v !== "")
-    .map(([field, value]) => [field, "=" as IOperator, value] as IFilter<any, any, IOperator>);
+function standardValuesToFilters(v: Record<string, any>): IFilter<any, any, IOperator>[] {
+  return Object.entries(v)
+    .filter(([, val]) => val !== undefined && val !== null && val !== "")
+    .map(([field, value]) => [field, "LIKE" as IOperator, value] as IFilter<any, any, IOperator>);
+}
+
+function filterDocsClientSide<T extends Record<string, any>>(docs: T[], filters: IFilter<any, any, IOperator>[]): T[] {
+  if (!filters.length) return docs;
+  return docs.filter((doc) => {
+    for (const [field, op, val] of filters) {
+      const docVal = doc[field];
+      const strVal = String(val ?? "").toLowerCase();
+      const strDocVal = String(docVal ?? "").toLowerCase();
+      const match =
+        op === "=" ? (docVal === val || strDocVal === strVal) :
+          op === "!=" ? (docVal !== val && strDocVal !== strVal) :
+            op === ">" ? (docVal != null && val != null && Number(docVal) > Number(val)) || (docVal != null && val == null) :
+              op === ">=" ? (docVal != null && val != null && Number(docVal) >= Number(val)) || (docVal != null && val == null) :
+                op === "<" ? docVal != null && val != null && Number(docVal) < Number(val) :
+                  op === "<=" ? docVal != null && val != null && Number(docVal) <= Number(val) :
+                    op === "LIKE" ? strDocVal.includes(strVal.replace(/%/g, "")) :
+                      op === "NOT LIKE" ? !strDocVal.includes(strVal.replace(/%/g, "")) :
+                        op === "IN" ? Array.isArray(val) && val.includes(docVal) :
+                          op === "NOT IN" ? !Array.isArray(val) || !val.includes(docVal) :
+                            op === "IS NULL" ? (docVal == null) === (val === 1 || val === "1") :
+                              op === "IS NOT NULL" ? (docVal != null) === (val === 1 || val === "1") :
+                                docVal === val;
+      if (!match) return false;
+    }
+    return true;
+  });
+}
+
+function dedupeFilters(filters: IFilter<any, any, IOperator>[]): IFilter<any, any, IOperator>[] {
+  const seen = new Set<string>();
+  return filters.filter((f) => {
+    const key = `${f[0]}|${f[1]}|${JSON.stringify(f[2])}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export function MultiSelectDoctypeDialog({
@@ -53,9 +93,15 @@ export function MultiSelectDoctypeDialog({
   const { t } = useTranslation();
   const doctype = initialData?.doctype;
   const limit = initialData?.limit ?? 500;
-  const labelField = initialData?.labelField ?? "id";
-  const defaultFilters = initialData?.defaultFilters ?? [];
-  const listViewFieldNames = initialData?.list_view_fields;
+  const defaultFilters = useMemo(() => initialData?.defaultFilters ?? [], [initialData?.defaultFilters]);
+  /** Advanced filters: default filters with operator other than "=" (e.g. from_date <= x, until_date >= y) */
+  const initialAdvancedFilters = useMemo(
+    () => defaultFilters.filter((f) => f[1] !== "="),
+    [defaultFilters]
+  );
+  const standardFilterFieldNames = initialData?.standard_filter_fields;
+  const columnsFieldNames = initialData?.columns;
+  const single = initialData?.single === true;
   const { organization } = useOrganization();
   const params = useParams();
   const org = organization?.id ?? params?.org ?? "";
@@ -64,48 +110,58 @@ export function MultiSelectDoctypeDialog({
   const [standardFilterValues, setStandardFilterValues] = useState<Record<string, any>>(() =>
     defaultFiltersToStandardValues(defaultFilters)
   );
-  /** Applied filters for the list; defaults only pre-fill the form, we do not use them as filters until user clicks Apply */
-  const [appliedFilters, setAppliedFilters] = useState<IFilter<any, any, IOperator>[]>([]);
+  /** Initial applied filters from defaults so first fetch uses them (avoids double fetch from debounce) */
+  const initialAppliedFilters = useMemo(
+    () =>
+      dedupeFilters([
+        ...standardValuesToFilters(defaultFiltersToStandardValues(defaultFilters)),
+        ...initialAdvancedFilters,
+      ]),
+    [defaultFilters, initialAdvancedFilters]
+  );
+  /** Applied filters for the list; when changed, we re-fetch from server */
+  const [appliedFilters, setAppliedFilters] = useState<IFilter<any, any, IOperator>[]>(() => initialAppliedFilters);
   /** Current advanced filter rows from FilterContent (so we can Apply even when advanced section is empty) */
-  const [currentAdvancedFilters, setCurrentAdvancedFilters] = useState<IFilter<any, any, IOperator>[]>([]);
+  const [currentAdvancedFilters, setCurrentAdvancedFilters] = useState<IFilter<any, any, IOperator>[]>(initialAdvancedFilters);
+  const [docs, setDocs] = useState<Record<string, any>[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [filtersExpanded, setFiltersExpanded] = useState(() => !(initialData?.defaultFiltersCollapsed ?? true));
 
   const { docs: fieldDocs } = useDocList(
     {
       doctype: "Field" as Zodula.DoctypeName,
-      limit: -1,
-      filters: doctype ? [["doctype", "=", doctype]] : [],
+      limit: 500,
       sort: "idx",
       order: "asc",
+      filters: (doctype ? [["doctype", "=", doctype]] : [["doctype", "=", ""]]) as IFilter<any, any, any>[],
     },
     [doctype]
   );
 
   const allFields = useMemo(() => {
     return (fieldDocs || [])
-      .filter((f: any) => !ClientFieldHelper.isStandardField(f.name || ""))
       .filter((f: any) => f.type !== "Reference Table" && f.type !== "Extend")
       .sort((a: any, b: any) => (a.idx || 0) - (b.idx || 0));
   }, [fieldDocs]);
 
   const standardFilterFields = useMemo(() => {
-    if (listViewFieldNames?.length) {
-      const nameSet = new Set(listViewFieldNames);
-      return listViewFieldNames
+    if (standardFilterFieldNames?.length) {
+      return standardFilterFieldNames
         .map((name) => allFields.find((f: any) => f.name === name))
         .filter((f): f is NonNullable<typeof f> => !!f);
     }
     const inList = allFields.filter((f: any) => f.in_list_view === 1);
     if (inList.length >= 4) return inList.slice(0, 6);
     return allFields.slice(0, 6);
-  }, [allFields, listViewFieldNames]);
+  }, [allFields, standardFilterFieldNames]);
 
-  const standardFilterFieldNames = useMemo(() => new Set(standardFilterFields.map((f: any) => f.name)), [standardFilterFields]);
-
-  /** Advanced filters: only default filters whose field is NOT in standard (so e.g. Source Warehouse doesn't appear twice) */
-  const initialAdvancedFilters = useMemo(
-    () => defaultFilters.filter((f) => !standardFilterFieldNames.has(f[0] as string)),
-    [defaultFilters, standardFilterFieldNames]
-  );
+  const filtersCount = useMemo(() => {
+    const standard = Object.entries(standardFilterValues).filter(
+      ([, v]) => v !== undefined && v !== null && v !== ""
+    ).length;
+    return standard + currentAdvancedFilters.length;
+  }, [standardFilterValues, currentAdvancedFilters]);
 
   /** All fields for FilterContent (include Reference Table for dropdown) */
   const allFieldsForFilter = useMemo(
@@ -117,31 +173,65 @@ export function MultiSelectDoctypeDialog({
     [fieldDocs]
   );
 
-  const { docs, loading, error } = useDocList(
-    doctype
-      ? { doctype, filters: appliedFilters, limit, sort: "updated_at", order: "desc" }
-      : { doctype: "Doctype" as Zodula.DoctypeName, limit: 0 },
-    [isOpen, doctype, JSON.stringify(appliedFilters), limit]
-  );
+  const fetchDocs = useCallback(async () => {
+    if (!doctype) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await zodula.doc.select_docs(doctype as any, {
+        limit,
+        sort: "updated_at",
+        order: "desc",
+        filters: appliedFilters,
+      });
+      const list = (res?.docs ?? []) as Record<string, any>[];
+      setDocs(list);
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to load");
+      setDocs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [doctype, limit, appliedFilters]);
 
-  const immediateApplySkipRuns = useRef(0);
+  useEffect(() => {
+    if (!isOpen || !doctype) return;
+    fetchDocs();
+  }, [isOpen, doctype, fetchDocs]);
+
   useEffect(() => {
     if (!isOpen) {
-      immediateApplySkipRuns.current = 0;
       setSelected(new Set());
+      setDocs([]);
       setStandardFilterValues(defaultFiltersToStandardValues(defaultFilters));
-      setAppliedFilters([]);
+      setCurrentAdvancedFilters(initialAdvancedFilters);
+      const fromStandard = standardValuesToFilters(defaultFiltersToStandardValues(defaultFilters));
+      const next = dedupeFilters([...fromStandard, ...initialAdvancedFilters]);
+      appliedFiltersJsonRef.current = JSON.stringify(next);
+      setAppliedFilters(next);
+    } else {
+      setFiltersExpanded(!(initialData?.defaultFiltersCollapsed ?? true));
     }
-  }, [isOpen, defaultFilters]);
+  }, [isOpen, defaultFilters, initialAdvancedFilters, initialData?.defaultFiltersCollapsed]);
 
-  /** Immediate apply: sync appliedFilters from standard + advanced; skip first 2 runs (mount + FilterContent initial sync) so we don't apply defaults */
+  /** Debounce 500ms: apply filters after user stops typing in standard filters or FilterContent */
+  const applyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appliedFiltersJsonRef = useRef<string>(JSON.stringify(initialAppliedFilters));
   useEffect(() => {
-    if (immediateApplySkipRuns.current < 2) {
-      immediateApplySkipRuns.current += 1;
-      return;
-    }
-    const fromStandard = standardValuesToFilters(standardFilterValues);
-    setAppliedFilters(dedupeFilters([...fromStandard, ...currentAdvancedFilters]));
+    applyDebounceRef.current && clearTimeout(applyDebounceRef.current);
+    applyDebounceRef.current = setTimeout(() => {
+      const fromStandard = standardValuesToFilters(standardFilterValues);
+      const next = dedupeFilters([...fromStandard, ...currentAdvancedFilters]);
+      const nextJson = JSON.stringify(next);
+      if (nextJson !== appliedFiltersJsonRef.current) {
+        appliedFiltersJsonRef.current = nextJson;
+        setAppliedFilters(next);
+      }
+      applyDebounceRef.current = null;
+    }, 500);
+    return () => {
+      if (applyDebounceRef.current) clearTimeout(applyDebounceRef.current);
+    };
   }, [standardFilterValues, currentAdvancedFilters]);
 
   const setStandardFilter = (fieldName: string, value: any) => {
@@ -153,19 +243,11 @@ export function MultiSelectDoctypeDialog({
     });
   };
 
-  const dedupeFilters = (filters: IFilter<any, any, IOperator>[]) => {
-    const seen = new Set<string>();
-    return filters.filter((f) => {
-      const key = `${f[0]}|${f[1]}|${JSON.stringify(f[2])}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  };
-
   const handleApplyFiltersFromAdvanced = (advancedFilters: IFilter<any, any, IOperator>[]) => {
     const fromStandard = standardValuesToFilters(standardFilterValues);
-    setAppliedFilters(dedupeFilters([...fromStandard, ...advancedFilters]));
+    const next = dedupeFilters([...fromStandard, ...advancedFilters]);
+    appliedFiltersJsonRef.current = JSON.stringify(next);
+    setAppliedFilters(next);
   };
 
   const handleClearAdvancedFilters = () => {
@@ -175,125 +257,153 @@ export function MultiSelectDoctypeDialog({
   const toggle = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (single) {
+        if (next.has(id)) return new Set();
+        return new Set([id]);
+      }
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   };
 
-  const toggleAll = () => {
-    if (selected.size === docs.length) setSelected(new Set());
-    else setSelected(new Set(docs.map((d) => String((d as any).id ?? ""))));
-  };
+  const tableColumnFields = useMemo(() => {
+    if (columnsFieldNames?.length) {
+      return columnsFieldNames
+        .map((name) => allFields.find((f: any) => f.name === name))
+        .filter((f): f is NonNullable<typeof f> => !!f);
+    }
+    return standardFilterFields;
+  }, [allFields, columnsFieldNames, standardFilterFields]);
 
-  const handleAdd = () => {
-    onClose(Array.from(selected));
-  };
-
-  const getLabel = (doc: Record<string, any>) => {
-    if (labelField && doc[labelField] != null) return String(doc[labelField]);
-    return doc.name ?? doc.id ?? "";
-  };
+  const listColumns: ListColumn[] = useMemo(
+    () =>
+      tableColumnFields.map((col: any) => ({
+        key: col.name,
+        label: t(col.label || col.name || ""),
+        sortable: false,
+        render: (doc: any) => doc[col.name] != null ? String(doc[col.name]) : "",
+      })),
+    [tableColumnFields, t]
+  );
 
   if (!doctype) return null;
 
   return (
-    <div className="zd:flex zd:flex-col zd:gap-4 zd:min-h-[200px]">
-      {/* Standard filter fields (form-style, with fieldConfig via FormControl) */}
-      <div className="zd:space-y-3">
-        <div className="zd:grid zd:grid-cols-2 zd:gap-x-4 zd:gap-y-3 lg:zd:grid-cols-3">
-          {standardFilterFields.map((field: any) => (
-            <FormControl
-              key={field.name}
-              fieldKey={field.name}
-              field={field}
-              label={t(field.label || field.name || "")}
-              value={standardFilterValues[field.name]}
-              onChange={(fieldName, value) => setStandardFilter(fieldName, value)}
-              readonly={false}
-              formData={standardFilterValues}
-              org={org}
-              hideFormControl={false}
+    <div className="zd:flex zd:flex-col zd:gap-5 zd:min-h-[200px] zd:w-full zd:min-w-0">
+      {/* Filters panel (collapsible) */}
+      <div className="zd:rounded-lg zd:border zd:border-border zd:bg-muted/30 zd:w-full zd:min-w-0 zd:overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setFiltersExpanded((v) => !v)}
+          className="zd:flex zd:w-full zd:items-center zd:gap-2 zd:px-4 zd:py-3 zd:text-left zd:hover:bg-muted/50 zd:transition-colors"
+        >
+          {filtersExpanded ? (
+            <ChevronDown className="zd:h-4 zd:w-4 zd:shrink-0 zd:text-muted-foreground" />
+          ) : (
+            <ChevronRight className="zd:h-4 zd:w-4 zd:shrink-0 zd:text-muted-foreground" />
+          )}
+          <span className="zd:text-xs zd:font-medium zd:uppercase zd:tracking-wider zd:text-muted-foreground">
+            {t("Filters")}
+            {filtersCount > 0 && (
+              <span className="zd:ml-1.5 zd:font-normal zd:normal-case zd:tracking-normal">
+                ({filtersCount})
+              </span>
+            )}
+          </span>
+        </button>
+        <div
+          className={filtersExpanded ? "zd:space-y-4 zd:border-t zd:border-border zd:px-4 zd:pb-4 zd:pt-3" : "zd:overflow-hidden zd:border-t-0 zd:h-0 zd:opacity-0 zd:pointer-events-none zd:invisible"}
+          aria-hidden={!filtersExpanded}
+        >
+          <div className="zd:grid zd:grid-cols-2 zd:gap-x-4 zd:gap-y-3 lg:zd:grid-cols-3">
+            {standardFilterFields.map((field: any) => (
+              <FormControl
+                key={field.name}
+                fieldKey={field.name}
+                fieldPath={field.name}
+                field={field}
+                label={t(field.label || field.name || "")}
+                value={standardFilterValues[field.name]}
+                onChange={(fieldName, value) => setStandardFilter(fieldName, value)}
+                readonly={false}
+                formData={standardFilterValues}
+                org={org}
+                hideFormControl={false}
+              />
+            ))}
+          </div>
+          <div className="zd:border-t zd:border-border zd:pt-3">
+            <p className="zd:mb-2 zd:text-xs zd:font-medium zd:uppercase zd:tracking-wider zd:text-muted-foreground">
+              {t("Advanced filters")}
+            </p>
+            <FilterContent
+              fields={allFieldsForFilter as Zodula.Field[]}
+              filters={initialAdvancedFilters}
+              onApplyFilters={handleApplyFiltersFromAdvanced}
+              onClearFilters={handleClearAdvancedFilters}
+              onFiltersChange={setCurrentAdvancedFilters}
+              doctype={doctype}
+              inline
+              addLabel={t("Add a Filter")}
+              showBorderTop={false}
+              applyImmediately={true}
+              className="zd:w-full"
             />
-          ))}
-        </div>
-
-        {/* Advanced filters; applyImmediately so changes apply without an Apply button */}
-        <div className="zd:border-t zd:pt-3">
-          <FilterContent
-            fields={allFieldsForFilter as Zodula.Field[]}
-            filters={initialAdvancedFilters}
-            onApplyFilters={handleApplyFiltersFromAdvanced}
-            onClearFilters={handleClearAdvancedFilters}
-            onFiltersChange={setCurrentAdvancedFilters}
-            doctype={doctype}
-            inline
-            addLabel={t("Add a Filter")}
-            showBorderTop={true}
-            applyImmediately
-          />
+          </div>
         </div>
       </div>
 
-      {/* Results table */}
-      {loading && (
-        <div className="zd:flex zd:items-center zd:justify-center zd:py-8">
-          <Loader2 className="zd:h-8 zd:w-8 zd:animate-spin zd:text-muted-foreground" />
-        </div>
-      )}
-      {error && <p className="zd:text-sm zd:text-destructive">{String(error)}</p>}
-      {!loading && !error && docs.length === 0 && (
-        <p className="zd:text-sm zd:text-muted-foreground">{t("No records found. Adjust filters and click Apply.")}</p>
-      )}
-      {!loading && docs.length > 0 && (
-        <>
-          <div className="zd:border zd:rounded-md zd:overflow-hidden">
-            <table className="zd:w-full zd:text-sm">
-              <thead>
-                <tr className="zd:border-b zd:bg-muted/50">
-                  <th className="zd:w-10 zd:px-3 zd:py-2 zd:text-left">
-                    <Checkbox checked={selected.size === docs.length} onCheckedChange={toggleAll} />
-                  </th>
-                  {standardFilterFields.slice(0, 5).map((col: any) => (
-                    <th key={col.name} className="zd:px-3 zd:py-2 zd:text-left zd:font-medium zd:text-muted-foreground">
-                      {t(col.label || col.name || "")}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {docs.map((doc: any) => {
-                  const id = String(doc.id ?? "");
-                  return (
-                    <tr
-                      key={id}
-                      className="zd:border-b zd:cursor-pointer hover:zd:bg-muted/50"
-                      onClick={() => toggle(id)}
-                    >
-                      <td className="zd:w-10 zd:px-3 zd:py-2" onClick={(e) => e.stopPropagation()}>
-                        <Checkbox checked={selected.has(id)} onCheckedChange={() => toggle(id)} />
-                      </td>
-                      {standardFilterFields.slice(0, 5).map((col: any) => (
-                        <td key={col.name} className="zd:px-3 zd:py-2">
-                          {doc[col.name] != null ? String(doc[col.name]) : ""}
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {/* Results */}
+      <div className="zd:flex zd:flex-1 zd:flex-col zd:min-h-0 zd:w-full zd:min-w-0">
+        <p className="zd:mb-2 zd:text-xs zd:font-medium zd:uppercase zd:tracking-wider zd:text-muted-foreground">
+          {t("Results")}
+          {!loading && !error && docs.length > 0 && (
+            <span className="zd:ml-1.5 zd:font-normal zd:normal-case zd:tracking-normal">
+              ({docs.length})
+            </span>
+          )}
+        </p>
+        {loading && (
+          <div className="zd:flex zd:flex-1 zd:items-center zd:justify-center zd:rounded-lg zd:border zd:border-dashed zd:border-border zd:py-12">
+            <Loader2 className="zd:h-8 zd:w-8 zd:animate-spin zd:text-muted-foreground" />
           </div>
-          <div className="zd:flex zd:justify-end zd:gap-2">
-            <Button variant="outline" onClick={() => onClose()}>
-              {t("Cancel")}
-            </Button>
-            <Button onClick={handleAdd} disabled={selected.size === 0}>
-              {t("Get Items")} {selected.size > 0 && `(${selected.size})`}
-            </Button>
+        )}
+        {error && (
+          <div className="zd:rounded-lg zd:border zd:border-destructive/50 zd:bg-destructive/10 zd:px-4 zd:py-3">
+            <p className="zd:text-sm zd:text-destructive">{String(error)}</p>
           </div>
-        </>
-      )}
+        )}
+        {!loading && !error && docs.length === 0 && (
+          <div className="zd:flex zd:flex-1 zd:items-center zd:justify-center zd:rounded-lg zd:border zd:border-dashed zd:border-border zd:bg-muted/20 zd:py-12">
+            <p className="zd:text-sm zd:text-muted-foreground">{t("No records found. Adjust filters above.")}</p>
+          </div>
+        )}
+        {!loading && docs.length > 0 && (
+          <>
+            <ListTable
+              columns={listColumns}
+              docs={docs}
+              selected={selected}
+              setSelected={setSelected}
+              compact
+              single={single}
+              onRowClick={(doc) => toggle(String(doc.id ?? ""))}
+            />
+            <div className="zd:flex zd:justify-end zd:gap-2 zd:pt-3 zd:border-t zd:border-border zd:mt-4">
+              <Button variant="outline" onClick={() => onClose()}>{t("Cancel")}</Button>
+              <Button
+                onClick={() => {
+                  if (single) onClose(selected.size ? Array.from(selected)[0] ?? null : null);
+                  else onClose(Array.from(selected));
+                }}
+                disabled={selected.size === 0}
+              >
+                {t("Get")} {selected.size > 0 && (single ? "" : `(${selected.size})`)}
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

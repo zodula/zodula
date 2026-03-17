@@ -1,12 +1,13 @@
 import { BaseWorkspaceItemPlugin } from "./base"
-import { Input } from "../ui/input"
+import { FormControl } from "../ui/form-control"
 
 export const TextPlugin = new BaseWorkspaceItemPlugin(
     "zd:flex-[2]",
     (props) => {
+        const content = props.item?.text ?? props.item?.value ?? ""
         return (
             <span className="zd:flex zd:text-foreground zd:flex zd:items-center zd:gap-2 zd:p-2 zd:justify-between zd:h-full zd:flex-[2]">
-                {props.value}
+                {content}
             </span>
         )
     },
@@ -14,20 +15,15 @@ export const TextPlugin = new BaseWorkspaceItemPlugin(
         name: "Text",
         description: "Text"
     },
-    // renderEditValue
     (props) => (
-        <Input
-            value={props.value || ""}
-            onChange={(e) => props.onChange(e.target.value)}
+        <FormControl
+            field={{ type: "Text", label: "Text" }}
+            label="Text"
+            value={props.item?.text ?? props.item?.value ?? ""}
+            fieldKey="text"
+            onChange={(_k, value) => props.onChange("text", value)}
             placeholder="Enter text content"
         />
     ),
-    // renderEditOptions
-    (props) => (
-        <Input
-            value={props.value || ""}
-            onChange={(e) => props.onChange(e.target.value)}
-            placeholder="Enter additional options"
-        />
-    )
+    undefined
 )

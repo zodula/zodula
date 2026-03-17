@@ -11,7 +11,7 @@ export const EditorPlugin = new FormPlugin({
                 readOnly={props.readonly}
                 value={props.value}
                 onChange={(value) => {
-                    props.onChange?.(value);
+                    props.onChange?.(props.fieldPath || "", value);
                 }}
             />
         );

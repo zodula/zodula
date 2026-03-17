@@ -24,7 +24,7 @@ export async function naming<TN extends Zodula.DoctypeName>(
    * {SS} (second)
    * {SSS} (millisecond)
    * {T} (timestamp)
-   * {{organization_abbr}} (organization abbreviation)
+   * {{doc_organization_abbr}} (organization abbreviation)
    * {HEX} (random 16 characters hex string)
    * {8HEX} (random 8 characters hex string)
    * {16HEX} (random 16 characters hex string)
@@ -37,10 +37,20 @@ export async function naming<TN extends Zodula.DoctypeName>(
   if (doctypeMetadata?.schema.is_single) {
     id = doctypeMetadata?.name;
   }
+  if (doctypeMetadata?.schema.is_organization_single) {
+    id = `${doctypeMetadata?.name} - ${organizationName}`;
+  }
+
+  // If naming_series starts with "field:", use the doc's field value as the series template
+  if (typeof namingSeries === "string" && namingSeries.startsWith("field:")) {
+    const fieldName = namingSeries.slice(6).trim();
+    namingSeries = (data as Record<string, unknown>)[fieldName] as string | undefined;
+  }
+
 
   if (!!namingSeries) {
-    namingSeries = namingSeries.replaceAll("{{organization_abbr}}", organizationAbbr);
-    namingSeries = namingSeries.replaceAll("{{organization}}", organizationName);
+    namingSeries = namingSeries.replaceAll("{{doc_organization_abbr}}", organizationAbbr);
+    namingSeries = namingSeries.replaceAll("{{doc_organization}}", organizationName);
     // Use the improved getFieldValueFromDoc function to handle both field and utility patterns
     let tempId = getFieldValueFromDoc(namingSeries, data as any);
     id = tempId;
@@ -84,7 +94,18 @@ export async function naming<TN extends Zodula.DoctypeName>(
       id = id.replace(runingNumberSqure, squareCount);
 
     }
+    // must suport thai and other languages and support ( and )
+    if (id.match(/[^a-zA-Z0-9\s\-\_\.\:\/\'\"\`\&\s\@ก-ฮ\u0E00-\u0E7F\u0F00-\u0F03\u0F10-\u0F17\u0F19\u0F3A-\u0F3D\u0F40-\u0F47\u0F49-\u0F69\u0F71-\u0F84\u0F86-\u0F87\u0F90-\u0F97\u0F99-\u0FBC\u0FBE-\u0FD4\u0FD9-\u0FDA\(\)]/)) {
+      throw new ErrorWithCode("ID cannot contain special characters. " + id, {
+        status: 400,
+      });
+    }
     id = id.replaceAll("/", "⧸");
+    id = id.replaceAll("'", "＇");
+    id = id.replaceAll("`", "′");
+    id = id.replaceAll(`"`, "＂");
+    id = id.replaceAll("&", "＆");
+
     id = id.trimEnd().trimStart();
     if (id.startsWith("-")) {
       throw new ErrorWithCode("ID cannot start with '-'", {

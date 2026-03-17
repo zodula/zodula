@@ -1,14 +1,14 @@
 import { BaseWorkspaceItemPlugin } from "./base"
-import { Textarea } from "../ui/textarea"
-import MyEditor from "../custom/editor"
+import { FormControl } from "../ui/form-control"
 
 export const HtmlPlugin = new BaseWorkspaceItemPlugin(
     "zd:w-[100%]",
     (props) => {
+        const content = props.item?.html ?? props.item?.value ?? ""
         return (
             <div
                 className="zd:prose zd:max-w-none"
-                dangerouslySetInnerHTML={{ __html: props.value || '' }}
+                dangerouslySetInnerHTML={{ __html: content }}
             />
         )
     },
@@ -16,22 +16,14 @@ export const HtmlPlugin = new BaseWorkspaceItemPlugin(
         name: "HTML",
         description: "HTML"
     },
-    // renderEditValue
     (props) => (
-        <MyEditor
-            value={props.value || ""}
-            onChange={(value) => props.onChange(value)}
-            language="html"
-            height={280}
+        <FormControl
+            field={{ type: "Code", label: "HTML", options: "html" }}
+            label="HTML"
+            value={props.item?.html ?? props.item?.value ?? ""}
+            fieldKey="html"
+            onChange={(_k, value) => props.onChange("html", value)}
         />
     ),
-    // renderEditOptions
-    (props) => (
-        <Textarea
-            value={props.value || ""}
-            onChange={(e) => props.onChange(e.target.value)}
-            placeholder="Enter additional options"
-            rows={3}
-        />
-    )
+    undefined
 )

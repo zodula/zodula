@@ -35,6 +35,9 @@ export class ZodulaDoc {
     }
 
     get_doc = async <DN extends Zodula.DoctypeName = Zodula.DoctypeName>(doctype: DN, id?: string, options?: GetDocOptions) => {
+        if(!id){
+            return null
+        }
         const response = await this.api.get(`/api/resources/${doctype}${id ? `/${id}` : ""}`, {
             params: options
         })

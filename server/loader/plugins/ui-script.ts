@@ -30,6 +30,10 @@ export class UiScriptLoader implements BasePlugin<UiScriptMetadata> {
             const app = loader.from("app").getAppByPath(scriptPath);
             const importName = replaceSpecialCharacters(scriptPath);
             const importModule = await import(path.resolve(scriptPath));
+
+            if(!importModule.default) {
+                continue;
+            }
             
             this.scripts.push({
                 name: path.basename(scriptPath, ".tsx"),

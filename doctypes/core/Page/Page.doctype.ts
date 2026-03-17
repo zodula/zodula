@@ -1,12 +1,14 @@
 export default $doctype({
-    name: $f.Text({
+    name: {
+        type: "Text",
         label: "Name",
         required: 1,
-    }),
-    href: $f.Text({
+    },
+    href: {
+        type: "Text",
         label: "Href",
         required: 1
-    })
+    }
 }, {
     label: "Page",
     display_field: "name",

@@ -64,17 +64,27 @@ export default $doctype<"Print Template Item">({
   nested_field: {
     type: "Text",
     label: "Nested Field",
-    description: "Reference field on child rows (e.g. delivery_order). When set, nested rows are rendered below each main row.",
+    description: "Reference field on child rows (e.g. delivery_note). When set, nested rows are rendered below each main row.",
   },
   nested_table_field: {
     type: "Text",
     label: "Nested Table Field",
     description: "Field name on the nested doctype that holds the child table (e.g. items). When empty, auto-detected from schema.",
   },
+  nested_table_field_doctype: {
+    type: "Text",
+    label: "Nested Table Field Doctype",
+    description: "Doctype of the nested table (e.g. Delivery Note Item). Use when schema cannot be loaded, to override auto-detection.",
+  },
   nested_columns: {
     type: "Text",
     label: "Nested Columns (JSON)",
-    description: "Column field names from the nested doctype's child table (e.g. delivery_order_items). Rendered to the right of main columns.",
+    description: "Column field names from the nested doctype's child table (e.g. delivery_note_items). Rendered to the right of main columns.",
+  },
+  height: {
+    type: "Integer",
+    label: "Min height (px)",
+    description: "Minimum height in pixels for this reference table in PDF/print.",
   },
   table_config: {
     type: "Text",
@@ -191,7 +201,9 @@ export default $doctype<"Print Template Item">({
           { type: "field", value: "columns", align: "left" },
           { type: "field", value: "nested_field", align: "left" },
           { type: "field", value: "nested_table_field", align: "left" },
+          { type: "field", value: "nested_table_field_doctype", align: "left" },
           { type: "field", value: "nested_columns", align: "left" },
+          { type: "field", value: "height", align: "left" },
           { type: "field", value: "reference_doctype", align: "left" },
           { type: "field", value: "reference_id_filter", align: "left" },
           { type: "field", value: "reference_field", align: "left" },

@@ -1,5 +1,5 @@
 export const standardFields = {
-    organization: {
+    doc_organization: {
         type: "Reference",
         label: "Organization",
         reference: "Organization",
@@ -7,7 +7,7 @@ export const standardFields = {
         in_list_view: 1,
         no_print: 1,
     },
-    organization_abbr: {
+    doc_organization_abbr: {
         type: "Text",
         label: "Organization Abbreviation",
         allow_on_submit: 1,
@@ -61,9 +61,9 @@ export const standardFields = {
     },
     doc_status: {
         type: "Select",
-        options: "Draft\nSubmitted\nCancelled",
+        options: "\nDraft\nSubmitted\nCancelled",
         required: 1,
-        default: "0",
+        default: "Draft",
         label: "Document Status",
         allow_on_submit: 1,
         no_print: 1,
@@ -147,7 +147,7 @@ export class ClientFieldHelper {
             if (!field.name) continue;
 
             const fieldPermLevel = parseInt(String(field.perm_level || 0));
-            
+
             // Only check permissions for fields with perm_level > 0
             if (fieldPermLevel > 0) {
                 // Find permission record matching this field's perm_level and user's roles

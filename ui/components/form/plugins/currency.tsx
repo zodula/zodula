@@ -8,7 +8,7 @@ export const CurrencyPlugin = new FormPlugin({
     supportOperators: ["=", "!=", ">", ">=", "<", "<=", "IS NULL", "IS NOT NULL"],
     render: (props) => {
     const { organization: currentOrganization } = useOrganization();
-    const { organization: formOrganization } = useOrganizationById(props.formData?.organization);
+    const { organization: formOrganization } = useOrganizationById(props.formData?.doc_organization);
     const organization = formOrganization ?? currentOrganization;
     return (
         <Input
@@ -20,7 +20,7 @@ export const CurrencyPlugin = new FormPlugin({
             onChange={(e) => {
                 // Don't allow changes if readonly
                 if (!props.readonly) {
-                    props.onChange?.(e.target.value);
+                    props.onChange?.(props.fieldPath || "", e.target.value);
                 }
             }}
         />
@@ -50,7 +50,7 @@ export const CurrencyPlugin = new FormPlugin({
             value={props.value || ""}
             prefix={organization?.currency || "$"}
             onChange={(e) => {
-                props.onChange?.(e.target.value);
+                props.onChange?.(props.fieldPath || "", e.target.value);
             }}
             className="zd:flex-1"
         />

@@ -37,7 +37,7 @@ export default $doctype({
 }, {
   label: "Letter Head",
   is_quick_entry: 1,
-  naming_series: "{{name}} - {{organization}}",
+  naming_series: "{{name}} - {{doc_organization}}",
   tabs: JSON.stringify([
     {
       type: "Tab",
