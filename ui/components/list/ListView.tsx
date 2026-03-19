@@ -133,7 +133,7 @@ export function ListView({
       (field: any) => field.name === displayField
     );
     const displayPlugin = plugins.find((plugin) =>
-      plugin.types.includes(displayFieldInfo?.type)
+      plugin.types.includes(displayFieldInfo?.type as never)
     );
 
     if (displayField !== "id") {
@@ -174,7 +174,7 @@ export function ListView({
       if (field.name !== displayField) {
         // Find the plugin for this field type
         const plugin = plugins.find((plugin) =>
-          plugin.types.includes(field.type)
+          plugin.types.includes(field.type as never)
         );
 
         cols.push({

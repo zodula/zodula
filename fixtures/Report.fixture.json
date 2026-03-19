@@ -1,0 +1,32 @@
+[
+  {
+    "id": "zodula-example-script-report",
+    "idx": 0,
+    "name": "Delivery Note Script",
+    "doctype": "Delivery Note",
+    "is_script": 1,
+    "script": "const selected = await $zodula\n  .doctype('Delivery Note')\n  .select()\n  .limit(ctx.limit || 50)\n  .sort('price_project', 'asc');\n\nconst sourceRows = selected.docs || [];\nconst groupedRows = [];\nlet currentPriceProject = null;\n\nfor (const row of sourceRows) {\n  const priceProject = row.price_project || 'No Price Project';\n  if (priceProject !== currentPriceProject) {\n    groupedRows.push({\n      id: `group-${priceProject}`,\n      price_project: `Price Project: ${priceProject}`,\n      customer_name: '',\n      posting_date: null,\n      grand_total: null,\n    });\n    currentPriceProject = priceProject;\n  }\n\n  groupedRows.push(row);\n}\n\nreturn {\n  rows: groupedRows,\n  columns: [\n    { key: 'price_project', label: 'Price Project', sortable: true },\n    { key: 'id', label: 'Delivery Note', sortable: true },\n    { key: 'customer_name', label: 'Customer', sortable: true },\n    { key: 'posting_date', label: 'Posting Date', sortable: true },\n    { key: 'grand_total', label: 'Grand Total', sortable: true },\n  ],\n  count: sourceRows.length,\n};",
+    "default_filters": "[]",
+    "aggregation": "{\"groupBy\":null,\"aggregateFunction\":\"Count\",\"aggregateField\":null}",
+    "sort": "updated_at",
+    "order": "desc",
+    "parentid": null,
+    "parentype": null,
+    "parentfield": null
+  },
+  {
+    "id": "zodula-example-query-report",
+    "idx": 0,
+    "name": "Delivery Note Summary",
+    "doctype": "Delivery Note",
+    "is_script": 0,
+    "script": "",
+    "default_filters": "[]",
+    "aggregation": "{\"groupBy\":\"customer\",\"aggregateFunction\":\"Sum\",\"aggregateField\":\"grand_total\"}",
+    "sort": "posting_date",
+    "order": "desc",
+    "parentid": null,
+    "parentype": null,
+    "parentfield": null
+  }
+]

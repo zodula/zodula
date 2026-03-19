@@ -54,6 +54,7 @@ interface TableHeaderCellProps {
   onRemoveColumn: (columnKey: string) => void;
   onResize: (columnKey: string, width: number) => void;
   t: (key: string) => string;
+  readonly?: boolean;
 }
 
 function TableHeaderCell({
@@ -73,6 +74,7 @@ function TableHeaderCell({
   onRemoveColumn,
   onResize,
   t,
+  readonly = false,
 }: TableHeaderCellProps) {
   const isFirstColumn = index === 0;
   const { handleResizeStart } = useColumnResize({
@@ -101,7 +103,8 @@ function TableHeaderCell({
         {col.sortable ? (
           <button
             className="zd:flex-1 zd:inline-flex zd:items-center zd:gap-1 zd:hover:text-foreground zd:text-left zd:cursor-grab zd:active:cursor-grabbing"
-            onClick={() => onSort?.(columnKey)}
+            onClick={() => !readonly && onSort?.(columnKey)}
+            disabled={readonly}
           >
             <span className="zd:truncate">{col.label}</span>
             <span className="zd:text-xs zd:opacity-60 zd:flex-shrink-0">
@@ -120,7 +123,7 @@ function TableHeaderCell({
         ) : (
           <span className="zd:flex-1 zd:truncate">{col.label}</span>
         )}
-        <DropdownMenu>
+        {!readonly && <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
@@ -149,13 +152,13 @@ function TableHeaderCell({
               {t("Remove Column")}
             </DropdownMenuItem>
           </DropdownMenuContent>
-        </DropdownMenu>
+        </DropdownMenu>}
       </div>
       {/* Resize handle */}
-      <div
+      {!readonly && <div
         className="zd:absolute zd:top-0 zd:right-0 zd:w-1 zd:h-full zd:cursor-col-resize zd:hover:bg-blue-500 zd:z-30"
         onMouseDown={handleResizeStart}
-      />
+      />}
     </th>
   );
 }
@@ -167,6 +170,7 @@ import {
   DropdownMenuSeparator,
 } from "../ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { Input } from "../ui/input";
 
 interface SheetViewProps {
   doctype: string;
@@ -192,6 +196,11 @@ interface SheetViewProps {
   selected: Set<string>;
   setSelected: (selected: Set<string>) => void;
   hideDocStatus?: boolean;
+  hideToolbar?: boolean;
+  readonly?: boolean;
+  strictColumns?: boolean;
+  stateKey?: string;
+  onVisibleColumnsChange?: (columns: string[]) => void;
 }
 
 /** Escape a value for CSV (wrap in quotes if contains comma, newline, or quote). */
@@ -205,7 +214,13 @@ function escapeCsvValue(value: unknown): string {
 
 export interface SheetViewExportHandle {
   exportCSV(): void;
+  getVisibleColumns(): string[];
+  setVisibleColumns(columns: string[]): void;
+  resetVisibleColumns(): void;
 }
+
+type ColumnFilterOperator = "=" | "LIKE";
+type ColumnFilterState = Record<string, { operator: ColumnFilterOperator; value: string }>;
 
 export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps>(function SheetView(
   {
@@ -232,6 +247,11 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
     selected,
     setSelected,
     hideDocStatus = false,
+    hideToolbar = false,
+    readonly = false,
+    strictColumns = false,
+    stateKey,
+    onVisibleColumnsChange,
   },
   ref
 ) {
@@ -241,7 +261,8 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
   const tableRef = useRef<HTMLTableElement>(null);
 
   // Sheet view state management
-  const sheetView = useSheetView(doctype);
+  const viewStateKey = stateKey || doctype;
+  const sheetView = useSheetView(viewStateKey);
   const [aggregationPopupOpen, setAggregationPopupOpen] = useState(false);
   // Pending aggregation config (only applied on Apply button)
   const [pendingAggregationConfig, setPendingAggregationConfig] =
@@ -262,6 +283,7 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
 
   const [hasActiveFilter, setHasActiveFilter] = useState(false);
   const [searchInput, setSearchInput] = useState(searchQuery);
+  const [columnFilters, setColumnFilters] = useState<ColumnFilterState>({});
   const [filterPopupOpen, setFilterPopupOpen] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({
@@ -293,9 +315,26 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
     setHasActiveFilter(!!searchQuery || (filters?.length ?? 0) > 0);
   }, [searchQuery, filters]);
 
-  // Get all available columns (all fields, not just list view fields)
+  // Get all available columns:
+  // - strictColumns (script report): use provided columns exactly
+  // - query/default: available columns include all doctype fields; provided columns are treated as initial/default selection
   const allAvailableColumns: ListColumn[] = useMemo(() => {
+    if (strictColumns && Array.isArray(columns)) {
+      return columns.map((col) => ({
+        key: col.key,
+        label: col.label,
+        sortable: col.sortable ?? true,
+      }));
+    }
+
     if (!doctypeDoc || !fields.length) {
+      if (Array.isArray(columns)) {
+        return columns.map((col) => ({
+          key: col.key,
+          label: col.label,
+          sortable: col.sortable ?? true,
+        }));
+      }
       // Fallback: infer columns from first doc keys
       const sample = docs[0] || {};
       return Object.keys(sample)
@@ -332,11 +371,30 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
       }
     });
 
-    return cols;
-  }, [docs, columns, doctypeDoc, fields]);
+    if (!Array.isArray(columns)) {
+      return cols;
+    }
+
+    const merged = [...cols];
+    for (const reportCol of columns) {
+      const key = String(reportCol.key);
+      if (!merged.find((col) => String(col.key) === key)) {
+        merged.unshift({
+          key,
+          label: reportCol.label || key,
+          sortable: reportCol.sortable ?? true,
+        });
+      }
+    }
+
+    return merged;
+  }, [docs, columns, doctypeDoc, fields, strictColumns]);
 
   // Get default columns (system defined - only in_list_view and required fields)
   const defaultColumns = useMemo(() => {
+    if (Array.isArray(columns)) {
+      return columns.map((col) => String(col.key));
+    }
     if (!doctypeDoc || !fields.length) {
       return allAvailableColumns.map((col) => col.key);
     }
@@ -360,7 +418,7 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
 
   // Use shared column settings hook with validation
   const columnSettings = useColumnSettings(
-    doctype,
+    viewStateKey,
     defaultColumns,
     allAvailableColumns
   );
@@ -371,6 +429,10 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
     setHasCustomColumns,
     resetVisibleColumns,
   } = columnSettings;
+
+  useEffect(() => {
+    onVisibleColumnsChange?.(visibleColumns || []);
+  }, [visibleColumns, onVisibleColumnsChange]);
 
   // Initialize column order on mount or when visibleColumns changes
   useEffect(() => {
@@ -475,6 +537,30 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
     }));
   }, [allAvailableColumns, visibleColumns, sheetView, t]);
 
+  // UI-only column filters applied in-memory (does not call server)
+  const filteredDocs = useMemo(() => {
+    const visibleFilterColumns = new Set(derivedColumns.map((col) => String(col.key)));
+    const activeFilters = Object.entries(columnFilters).filter(
+      ([key, cfg]) => visibleFilterColumns.has(key) && String(cfg?.value || "").trim().length > 0
+    );
+
+    if (activeFilters.length === 0) {
+      return docs;
+    }
+
+    return docs.filter((doc) =>
+      activeFilters.every(([key, cfg]) => {
+        const targetValue = String(doc?.[key] ?? "").trim().toLowerCase();
+        const inputValue = String(cfg.value ?? "").trim().toLowerCase();
+        if (!inputValue) return true;
+        if (cfg.operator === "=") {
+          return targetValue === inputValue;
+        }
+        return targetValue.includes(inputValue);
+      })
+    );
+  }, [docs, derivedColumns, columnFilters]);
+
   // Keep latest data for imperative exportCSV
   const exportDataRef = useRef({
     docs: [] as any[],
@@ -557,8 +643,17 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
         URL.revokeObjectURL(link.href);
         toast.success(t("CSV exported"));
       },
+      getVisibleColumns() {
+        return visibleColumns || [];
+      },
+      setVisibleColumns(columns: string[]) {
+        setVisibleColumns(columns);
+      },
+      resetVisibleColumns() {
+        resetVisibleColumns();
+      },
     }),
-    [doctype, t]
+    [doctype, t, visibleColumns, setVisibleColumns, resetVisibleColumns]
   );
 
   // Get available sort fields from columns - pass full field metadata for FilterPopup
@@ -580,10 +675,10 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
   const aggregatedData = useMemo(() => {
     const aggregationConfig = sheetView.aggregationConfig;
     if (!aggregationConfig.groupBy) {
-      return docs;
+      return filteredDocs;
     }
 
-    const grouped = docs.reduce(
+    const grouped = filteredDocs.reduce(
       (acc, doc) => {
         const groupKey = String(doc[aggregationConfig.groupBy!] || "null");
         if (!acc[groupKey]) {
@@ -700,7 +795,7 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
     }
 
     return aggregatedRows;
-  }, [docs, sheetView.aggregationConfig, t]);
+  }, [filteredDocs, sheetView.aggregationConfig, t]);
 
   // Keep ref in sync for exportCSV when in aggregation mode
   useEffect(() => {
@@ -1099,6 +1194,7 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
     });
 
   const handleSelectAll = (checked: boolean) => {
+    if (readonly) return;
     if (checked) {
       const allIds = new Set<string>();
       selectableRows.forEach((doc) => {
@@ -1112,6 +1208,7 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
   };
 
   const handleRowSelect = (docId: string, checked: boolean) => {
+    if (readonly) return;
     const newSelected = new Set(selected);
     if (checked) {
       newSelected.add(docId);
@@ -1122,6 +1219,7 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
   };
 
   const handleAggregatedRowSelect = (doc: any, checked: boolean) => {
+    if (readonly) return;
     const ids = doc._docIds ?? [];
     if (ids.length === 0) return;
     const newSelected = new Set(selected);
@@ -1167,6 +1265,7 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
 
   return (
     <div className="zd:flex zd:flex-col zd:gap-4 zd:pb-12 zd:h-full">
+      {!hideToolbar && (
       <div className="zd:flex zd:items-center zd:gap-2 zd:w-full">
         <ListToolbar
           hasActiveFilter={hasActiveFilter}
@@ -1180,8 +1279,8 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
           onApplyFilters={onApplyFilters}
           filterPopupOpen={filterPopupOpen}
           onFilterPopupOpenChange={handleFilterPopupOpenChange}
-          onColumnSettings={handleColumnSettings}
-          hasCustomColumns={hasCustomColumns}
+          onColumnSettings={undefined}
+          hasCustomColumns={false}
           allFields={fields}
           doctype={doctype as any}
         />
@@ -1322,6 +1421,7 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
           </PopoverContent>
         </Popover>
       </div>
+      )}
 
       {error ? (
         <div className="zd:text-red-600 zd:text-sm zd:mb-2">{t(error)}</div>
@@ -1346,10 +1446,10 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
           }
         }}
       >
-        <div className="zd:inline-block  zd:min-h-[50vh]">
+        <div className="zd:relative zd:inline-block zd:min-h-[50vh]">
           <table
             ref={tableRef}
-            className="zd:text-sm zd:rounded"
+            className="zd:text-sm zd:rounded zd:absolute zd:top-0 zd:left-0 zd:w-full"
             style={{ width: "max-content" }}
           >
             <thead className="zd:z-20 zd:bg-muted">
@@ -1362,6 +1462,7 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
                   <Checkbox
                     checked={selectAll}
                     onCheckedChange={handleSelectAll}
+                    disabled={readonly}
                   />
                 </th>
                 {/* Data columns */}
@@ -1396,7 +1497,76 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
                       onRemoveColumn={handleRemoveColumn}
                       onResize={(key, width) => sheetView.setColumnWidth(key, width)}
                       t={t}
+                      readonly={readonly}
                     />
+                  );
+                })}
+              </tr>
+              <tr className="zd:border-b zd:border-dashed">
+                <th
+                  className="zd:z-30 zd:px-2 zd:py-1 zd:bg-muted zd:border-b zd:border-r zd:border-border"
+                  style={{ width: 40, minWidth: 40, maxWidth: 40 }}
+                />
+                {derivedColumns.map((col) => {
+                  const columnKey = String(col.key);
+                  const columnWidth =
+                    columnKey === "_count"
+                      ? 100
+                      : sheetView.getColumnWidth(columnKey);
+                  const filterConfig = columnFilters[columnKey] || {
+                    operator: "LIKE" as ColumnFilterOperator,
+                    value: "",
+                  };
+                  return (
+                    <th
+                      key={`${columnKey}-filter`}
+                      className="zd:px-1 zd:py-1 zd:bg-muted zd:border-b zd:border-r zd:border-border"
+                      style={{
+                        width: columnWidth,
+                        minWidth: columnWidth,
+                        maxWidth: columnWidth,
+                      }}
+                    >
+                      <div className="zd:flex zd:items-center zd:gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="zd:h-6 zd:min-w-0 zd:px-1.5 zd:text-xs"
+                          onClick={() => {
+                            setColumnFilters((prev) => {
+                              const current = prev[columnKey] || {
+                                operator: "LIKE" as ColumnFilterOperator,
+                                value: "",
+                              };
+                              return {
+                                ...prev,
+                                [columnKey]: {
+                                  ...current,
+                                  operator: current.operator === "=" ? "LIKE" : "=",
+                                },
+                              };
+                            });
+                          }}
+                        >
+                          {filterConfig.operator}
+                        </Button>
+                        <Input
+                          value={filterConfig.value}
+                          onChange={(e) => {
+                            const nextValue = e.target.value;
+                            setColumnFilters((prev) => ({
+                              ...prev,
+                              [columnKey]: {
+                                operator: prev[columnKey]?.operator || "LIKE",
+                                value: nextValue,
+                              },
+                            }));
+                          }}
+                          className="zd:h-7"
+                        />
+                      </div>
+                    </th>
                   );
                 })}
               </tr>
@@ -1438,6 +1608,7 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
                             onCheckedChange={(checked) =>
                               handleRowSelect(doc.id, checked as boolean)
                             }
+                            disabled={readonly}
                           />
                         )}
                         {isAggregated && !isTotals && doc._docIds?.length > 0 && (
@@ -1446,6 +1617,7 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
                             onCheckedChange={(checked) =>
                               handleAggregatedRowSelect(doc, checked as boolean)
                             }
+                            disabled={readonly}
                           />
                         )}
                       </td>
@@ -1505,18 +1677,20 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
                             )}
                             style={{ width, minWidth: width, maxWidth: width }}
                             onMouseDown={(e) =>
-                              handleCellMouseDown(e, idx, columnKey, doc)
+                              readonly ? undefined : handleCellMouseDown(e, idx, columnKey, doc)
                             }
                             onMouseEnter={() =>
-                              handleCellMouseEnter(idx, columnKey, doc)
+                              readonly ? undefined : handleCellMouseEnter(idx, columnKey, doc)
                             }
                             onContextMenu={(e) =>
-                              handleCellContextMenu(
-                                e,
-                                cellValue,
-                                idx,
-                                columnKey
-                              )
+                              readonly
+                                ? undefined
+                                : handleCellContextMenu(
+                                  e,
+                                  cellValue,
+                                  idx,
+                                  columnKey
+                                )
                             }
                           >
                             {cellDisplayValue}
@@ -1557,7 +1731,7 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
       </div>
 
       {/* Context Menu for Cells - DropdownMenu positioned at cursor */}
-      <DropdownMenu
+      {!readonly && <DropdownMenu
         open={contextMenuOpen}
         onOpenChange={setContextMenuOpen}
       >
@@ -1585,7 +1759,7 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
               : t("Copy")}
           </DropdownMenuItem>
         </DropdownMenuContent>
-      </DropdownMenu>
+      </DropdownMenu>}
     </div>
   );
 });

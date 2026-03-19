@@ -106,26 +106,28 @@ export function ListToolbar({
                     {orderValue === "asc" ? <SortAscIcon className="zd:w-4 zd:h-4" /> : <SortDescIcon className="zd:w-4 zd:h-4" />}
                 </Button>
 
-                {/* Column Settings Dropdown */}
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="zd:relative zd:w-8 zd:h-8 zd:p-0">
-                            <Settings className="zd:w-4 zd:h-4" />
-                            {hasCustomColumns && (
-                                <div className="zd:absolute zd:right-0 zd:top-0 zd:w-2 zd:h-2 zd:bg-amber-500 zd:rounded-full"></div>
-                            )}
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={onColumnSettings} className="zd:flex zd:items-center zd:gap-2">
-                            <Columns3CogIcon className="zd:h-4 zd:w-4" />
-                            {t("Column Settings")}
-                            {hasCustomColumns && (
-                                <div className="zd:absolute zd:right-0 zd:top-0 zd:w-2 zd:h-2 zd:bg-amber-500 zd:rounded-full"></div>
-                            )}
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                {/* Column Settings Dropdown (only when enabled) */}
+                {onColumnSettings && (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="zd:relative zd:w-8 zd:h-8 zd:p-0">
+                                <Settings className="zd:w-4 zd:h-4" />
+                                {hasCustomColumns && (
+                                    <div className="zd:absolute zd:right-0 zd:top-0 zd:w-2 zd:h-2 zd:bg-amber-500 zd:rounded-full"></div>
+                                )}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={onColumnSettings} className="zd:flex zd:items-center zd:gap-2">
+                                <Columns3CogIcon className="zd:h-4 zd:w-4" />
+                                {t("Column Settings")}
+                                {hasCustomColumns && (
+                                    <div className="zd:absolute zd:right-0 zd:top-0 zd:w-2 zd:h-2 zd:bg-amber-500 zd:rounded-full"></div>
+                                )}
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )}
 
             </div>
         </div>

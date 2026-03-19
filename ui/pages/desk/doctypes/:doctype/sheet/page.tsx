@@ -14,7 +14,7 @@ import {
     DropdownMenuTrigger,
 } from "@/zodula/ui/components/ui/dropdown-menu";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { confirm, popup } from "@/zodula/ui/components/ui/popit";
+import { confirm, popup, prompt } from "@/zodula/ui/components/ui/popit";
 import { zodula } from "@/zodula/client";
 import { useAuth } from "@/zodula/ui/hooks/use-auth";
 import { FixtureDialog } from "@/zodula/ui/components/dialogs/fixture-dialog";
@@ -24,6 +24,7 @@ import { useTranslation } from "@/zodula/ui/hooks/use-translation";
 import ErrorView from "@/zodula/ui/views/error-view";
 import { Button } from "@/zodula/ui/components/ui/button";
 import { ViewSelector, getDoctypeViewOptions, type FieldLike } from "@/zodula/ui/components/view-selector";
+import { Select } from "@/zodula/ui/components/ui/select";
 
 export default function DoctypeSheetPage() {
     const { params, push, replace, search, location } = useRouter()
@@ -33,6 +34,7 @@ export default function DoctypeSheetPage() {
     const [isRefreshing, setIsRefreshing] = useState(false)
     const sheetViewRef = useRef<SheetViewExportHandle | null>(null);
     const {
+        updateSearchParams,
         limit,
         sort,
         order,
@@ -49,13 +51,108 @@ export default function DoctypeSheetPage() {
         setSelected
     } = useListParams();
 
+    const selectedReportId = typeof search.report === "string" ? search.report : "";
+    const [rows, setRows] = useState<any[]>([]);
+    const [columns, setColumns] = useState<any[]>([]);
+    const [count, setCount] = useState(0);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [reloadToken, setReloadToken] = useState(0);
+
     const {
-        docs,
-        count,
-        loading,
-        error,
-        reload
-    } = useDocList({ doctype, limit, sort, order, q, filters });
+        docs: reportOptions,
+    } = useDocList({
+        doctype: "Report",
+        limit: 1000,
+        sort: "updated_at",
+        order: "desc",
+        filters: [["doctype", "=", doctype] as any],
+    });
+
+    const selectedReport = useMemo(() => {
+        return reportOptions.find((report) => report.id === selectedReportId) || null;
+    }, [reportOptions, selectedReportId]);
+
+    const [reportEditBaseline, setReportEditBaseline] = useState<{
+        reportId: string;
+        sort: string | null;
+        order: "asc" | "desc" | null;
+        filters: any[];
+        columns: string[];
+    } | null>(null);
+    const [sheetVisibleColumns, setSheetVisibleColumns] = useState<string[]>([]);
+
+    useEffect(() => {
+        if (!selectedReportId || !selectedReport || selectedReport.is_script === 1) {
+            setReportEditBaseline(null);
+            return;
+        }
+
+        // Only initialize baseline when report changes (or first load),
+        // so edits to filters/sort/order/columns can be detected correctly.
+        if (reportEditBaseline?.reportId === selectedReportId) {
+            return;
+        }
+
+        let reportFilters: any[] = [];
+        try {
+            reportFilters = JSON.parse(selectedReport.default_filters || "[]");
+        } catch {
+            reportFilters = [];
+        }
+
+        const reportItems = ((selectedReport as any).report_items || []) as any[];
+        const baselineColumns = reportItems
+            .map((item) => String(item?.doctype_field || ""))
+            .filter(Boolean);
+        const actionColumns = (columns || []).map((col) => String(col?.key || "")).filter(Boolean);
+
+        setReportEditBaseline({
+            reportId: selectedReportId,
+            sort: selectedReport.sort ?? "updated_at",
+            order: (selectedReport.order as "asc" | "desc" | undefined) ?? "desc",
+            filters: reportFilters,
+            columns: baselineColumns.length > 0 ? baselineColumns : actionColumns,
+        });
+    }, [selectedReportId, selectedReport, columns, reportEditBaseline]);
+
+    useEffect(() => {
+        let cancelled = false;
+        setLoading(true);
+        setError(null);
+        zodula
+            .action("zodula.report.get" as any, {
+                data: {
+                    doctype,
+                    report: selectedReportId || undefined,
+                    limit: limit || 20,
+                    sort: sort || undefined,
+                    order: order || undefined,
+                    q: q || "",
+                    filters: filters || [],
+                },
+            })
+            .then((res) => {
+                if (cancelled) return;
+                setRows(res.rows || []);
+                setColumns(res.columns || []);
+                setCount(res.count || 0);
+            })
+            .catch((e: any) => {
+                if (cancelled) return;
+                setRows([]);
+                setColumns([]);
+                setCount(0);
+                setError(e?.message || "Failed to load sheet data");
+            })
+            .finally(() => {
+                if (cancelled) return;
+                setLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [doctype, selectedReportId, limit, sort, order, q, filters, reloadToken]);
 
     // Fetch all fields with persistent caching, then filter client-side
     const { docs: allFields, reload: reloadFields } = useDocListAll({
@@ -84,28 +181,8 @@ export default function DoctypeSheetPage() {
     useEffect(() => {
         reloadFields();
         reloadDoctype();
-        reload()
+        setReloadToken((prev) => prev + 1);
     }, [doctype, search]);
-
-    const columns = useMemo(() => {
-        const displayFieldName = doctypeDoc?.display_field || "id";
-        const displayField = fields.find((field) => field.name === displayFieldName);
-        const _columns = fields.filter((field) => {
-            return (field.in_list_view === 1 || field.required === 1) && field.name !== displayFieldName && !zodula.utils.isStandardField(field.name)
-        }
-        ).map((field) => ({
-            key: field.name,
-            label: field.label || field.name,
-            sortable: true,
-        }))
-        return [
-            {
-                key: displayFieldName,
-                label: displayField?.label || displayFieldName,
-                sortable: true,
-            },
-            ..._columns]
-    }, [fields]);
 
     const isSubmittable = doctypeDoc?.is_submittable === 1;
 
@@ -122,7 +199,7 @@ export default function DoctypeSheetPage() {
             return;
         }
         setIsRefreshing(true);
-        reload();
+        setReloadToken((prev) => prev + 1);
         await new Promise(resolve => setTimeout(resolve, 50));
         setIsRefreshing(false);
     };
@@ -147,7 +224,7 @@ export default function DoctypeSheetPage() {
                 await zodula.doc.cancel_doc(doctype, id).catch((error) => { })
             }
             setSelected(new Set());
-            reload();
+            setReloadToken((prev) => prev + 1);
         }
     };
 
@@ -189,18 +266,41 @@ export default function DoctypeSheetPage() {
             setSelected(new Set());
         }
 
-        reload();
+        setReloadToken((prev) => prev + 1);
     };
 
     const handleSwitchToListView = () => {
         push(`/desk/doctypes/${doctype}/list${location.search}`);
     };
 
+    const isScriptReport = selectedReport?.is_script === 1;
+    const isQueryReport = !!selectedReport && !isScriptReport;
+    const isReadonlySheet = isScriptReport;
+    const hasQueryReportChanges = useMemo(() => {
+        if (!isQueryReport || !reportEditBaseline || reportEditBaseline.reportId !== selectedReportId) {
+            return false;
+        }
+        const currentFilters = JSON.stringify(filters || []);
+        const baselineFilters = JSON.stringify(reportEditBaseline.filters || []);
+        const currentColumns = JSON.stringify(
+            (sheetVisibleColumns.length > 0 ? sheetVisibleColumns : (columns || []).map((col) => String(col?.key || "")))
+                .filter(Boolean)
+        );
+        const baselineColumns = JSON.stringify((reportEditBaseline.columns || []).filter(Boolean));
+        return (
+            (sort ?? null) !== (reportEditBaseline.sort ?? null) ||
+            (order ?? null) !== (reportEditBaseline.order ?? null) ||
+            currentFilters !== baselineFilters ||
+            currentColumns !== baselineColumns
+        );
+    }, [isQueryReport, reportEditBaseline, selectedReportId, sort, order, filters, sheetVisibleColumns, columns]);
+
     const primaryActions: PrimaryAction[] = [
         {
             label: t("Create"),
             icon: <Plus className="zd:h-4 zd:w-4" />,
-            onClick: handleCreate
+            onClick: handleCreate,
+            disabled: isReadonlySheet,
         },
         {
             label: "",
@@ -252,12 +352,163 @@ export default function DoctypeSheetPage() {
         return <ErrorView message="Doctype not found" status={404} />
     }
 
+    const setReportInUrl = (reportId: string) => {
+        const params = new URLSearchParams(location.search);
+        if (reportId) {
+            params.set("report", reportId);
+        } else {
+            params.delete("report");
+        }
+        const query = params.toString();
+        push(`/desk/doctypes/${doctype}/sheet${query ? `?${query}` : ""}`, { replace: true });
+        setSelected(new Set());
+    };
+
     return <NavbarLayout>
         <SidebarLayout
             title={t(`${doctypeDoc?.label || doctype}`)}
             defaultOpen={false}
             primaryAction={primaryActions}
-            actions={selected.size > 0 ? actions : []}
+            actions={selected.size > 0 && !isReadonlySheet ? actions : []}
+            sidebarContent={
+                <div className="zd:flex zd:flex-col zd:gap-3">
+                    <div>
+                        <div className="zd:text-sm zd:font-medium zd:mb-1">{t("Report")}</div>
+                        <Select
+                            options={[
+                                { value: "", label: t("Default Sheet") },
+                                ...reportOptions.map((report) => ({
+                                    value: report.id,
+                                    label: report.name || report.id,
+                                    subtitle: report.is_script === 1 ? t("Script") : t("Query"),
+                                })),
+                            ]}
+                            value={selectedReportId}
+                            onChange={setReportInUrl}
+                            displayMode="label"
+                            clearable
+                        />
+                    </div>
+                    <div className="zd:flex zd:gap-2 zd:flex-wrap zd:justify-end">
+                    {isQueryReport && (
+                        <Button
+                            variant="solid"
+                            disabled={!hasQueryReportChanges}
+                            onClick={async () => {
+                                if (!selectedReport) return;
+                                const currentColumnKeys = (
+                                    sheetVisibleColumns.length > 0
+                                        ? sheetVisibleColumns
+                                        : (columns || []).map((col) => String(col?.key || ""))
+                                ).filter(Boolean);
+                                const reportItems = currentColumnKeys
+                                    .filter((fieldName) => !!fields.find((field) => field.name === fieldName))
+                                    .map((fieldName, idx) => {
+                                        const field = fields.find((f) => f.name === fieldName);
+                                        const colFromReport = (columns || []).find((c) => String(c?.key) === fieldName);
+                                        const sortable = colFromReport
+                                            ? (colFromReport.sortable !== false ? 1 : 0)
+                                            : (field?.type !== "Reference Table" && field?.type !== "Extend" ? 1 : 0);
+                                        return {
+                                            idx,
+                                            doctype_field: fieldName,
+                                            label: field?.label || fieldName,
+                                            sortable,
+                                        };
+                                    });
+                                await zodula.doc.update_doc("Report", selectedReport.id as any, {
+                                    default_filters: JSON.stringify(filters || []),
+                                    sort: sort || "updated_at",
+                                    order: order || "desc",
+                                    report_items: reportItems,
+                                } as any).catch(() => { });
+                                setReportEditBaseline({
+                                    reportId: selectedReport.id as string,
+                                    sort: sort ?? null,
+                                    order: order ?? null,
+                                    filters: filters || [],
+                                    columns: currentColumnKeys,
+                                });
+                                toast?.success?.(t("Report saved"));
+                            }}
+                        >
+                            {t("Save Report")}
+                        </Button>
+                    )}
+                    {!selectedReport && (
+                        <Button
+                            variant="outline"
+                            onClick={async () => {
+                                const reportName = await prompt({
+                                    title: t("Save as Report"),
+                                    message: t("Enter report name"),
+                                    placeholder: `${doctype} Sheet`,
+                                    defaultValue: ``,
+                                    required: true,
+                                    confirmText: t("Save"),
+                                });
+                                if (!reportName) return;
+                                const currentColumnKeys = (
+                                    sheetVisibleColumns.length > 0
+                                        ? sheetVisibleColumns
+                                        : (columns || []).map((col) => String(col?.key || ""))
+                                ).filter(Boolean);
+                                const reportItems = currentColumnKeys
+                                    .filter((fieldName) => !!fields.find((field) => field.name === fieldName))
+                                    .map((fieldName, idx) => {
+                                        const field = fields.find((f) => f.name === fieldName);
+                                        const colFromReport = (columns || []).find((c) => String(c?.key) === fieldName);
+                                        const sortable = colFromReport
+                                            ? (colFromReport.sortable !== false ? 1 : 0)
+                                            : (field?.type !== "Reference Table" && field?.type !== "Extend" ? 1 : 0);
+                                        return {
+                                            idx,
+                                            doctype_field: fieldName,
+                                            label: field?.label || fieldName,
+                                            sortable,
+                                        };
+                                    });
+                                const newReport = await zodula.doc.create_doc(
+                                    "Report" as any,
+                                    {
+                                        name: reportName,
+                                        doctype,
+                                        is_script: 0,
+                                        default_filters: JSON.stringify(filters || []),
+                                        sort: sort || "updated_at",
+                                        order: order || "desc",
+                                        report_items: reportItems,
+                                    } as any
+                                ).catch(() => null);
+                                if (newReport?.id) {
+                                    setReportInUrl(newReport.id as string);
+                                    toast?.success?.(t("Report created"));
+                                }
+                            }}
+                        >
+                            {t("Save as Report")}
+                        </Button>
+                    )}
+                    {selectedReport && selectedReport.is_script !== 1 && (
+                        <Button
+                            variant="outline"
+                            disabled={!hasQueryReportChanges}
+                            onClick={() => {
+                                if (!reportEditBaseline) return;
+                                updateSearchParams({
+                                    sort: reportEditBaseline.sort,
+                                    order: reportEditBaseline.order,
+                                    filters: reportEditBaseline.filters as any,
+                                });
+                                sheetViewRef.current?.setVisibleColumns(reportEditBaseline.columns || []);
+                            }}
+                        >
+                            {t("Reset Report")}
+                        </Button>
+                    )}
+                    </div>
+                </div>
+            }
             actionSection={
                 <ViewSelector
                     views={getDoctypeViewOptions(t, fields as FieldLike[], doctype)}
@@ -285,7 +536,7 @@ export default function DoctypeSheetPage() {
                 hideDocStatus={doctypeDoc?.is_submittable !== 1}
                 doctype={doctype}
                 columns={columns}
-                docs={docs}
+                docs={rows}
                 count={count}
                 loading={loading}
                 error={error}
@@ -304,6 +555,11 @@ export default function DoctypeSheetPage() {
                 onClearFilter={onClearFilter}
                 selected={selected}
                 setSelected={setSelected}
+                hideToolbar={isScriptReport}
+                readonly={isReadonlySheet}
+                strictColumns={isScriptReport}
+                stateKey={selectedReportId ? `${doctype}::${selectedReportId}` : doctype}
+                onVisibleColumnsChange={setSheetVisibleColumns}
             />
         </SidebarLayout>
     </NavbarLayout>
