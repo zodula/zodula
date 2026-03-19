@@ -30,7 +30,7 @@ const MyComponent = () => {
   } = useDnd({
     items,
     onReorder: (fromId, toId, type) => {
-      console.log(`Moving ${fromId} ${type} ${toId}`)
+
     }
   })
 

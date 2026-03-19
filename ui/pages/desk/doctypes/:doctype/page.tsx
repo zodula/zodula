@@ -3,6 +3,7 @@ import { useRouter } from "@/zodula/ui/components/router";
 import { useDocAll } from "@/zodula/ui/hooks/use-doc-all";
 import { DocFormView } from "@/zodula/ui/views/doc-form-view";
 import ErrorView from "@/zodula/ui/views/error-view";
+import LoadingView from "@/zodula/ui/views/loading-view";
 
 export default function DoctypePage() {
     const { params, push, replace } = useRouter();
@@ -22,9 +23,7 @@ export default function DoctypePage() {
 
     if (loading) {
         return (
-            <div className="zd:flex zd:items-center zd:justify-center zd:h-64">
-                <div className="zd:text-muted-foreground">Loading...</div>
-            </div>
+            <LoadingView />
         );
     }
 
@@ -38,5 +37,5 @@ export default function DoctypePage() {
     }
 
     // This should not render as we redirect above, but just in case
-    return <ErrorView message="Something went wrong" status={404} />
+    return <></>
 }

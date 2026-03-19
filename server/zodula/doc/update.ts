@@ -759,8 +759,6 @@ export class ZodulaDoctypeUpdate<
             { fieldName: changedField.fieldName, value: changedField.newValue },
           ]);
 
-          console.log(`Vector data:`, vectorData);
-
           // TODO: Implement embeddings processing
           // const embeddings = await ZodulaDoctypeHelper.processVectorEmbeddings(vectorData)
           // Store embeddings back to the document field

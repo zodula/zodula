@@ -73,7 +73,9 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
     private async _delete() {
         const db = Database("main")
         const doctype = loader.from("doctype").get(this.doctypeName)
-        const user = await zodula.session.user()
+    // Use bypass=true so internal deletes (e.g. from doctype hooks) don't
+    // require a real cookie-based session.
+    const user = await zodula.session.user(true)
         let old = await zodula.doctype(this.doctypeName).get(this.id).bypass(true).unsafe()
         // Validate document exists
         if (!old) {
@@ -150,7 +152,8 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
     }
 
     private async createAuditTrail(old: Zodula.SelectDoctype<TN>, prepared: Zodula.SelectDoctype<TN>) {
-        const user = await zodula.session.user()
+        // Same rationale as _delete(): avoid requiring cookies for internal flow.
+        const user = await zodula.session.user(true)
         await ZodulaDoctypeHelper.createAuditTrail(
             this.doctypeName,
             old,

@@ -246,19 +246,6 @@ export const ExtendPlugin = new FormPlugin({
                 newValue = parentFormData;
             }
 
-            // Execute child doctype scripts if enabled
-            if (doctypeDoc?.id) {
-                console.log(`Extend script: Executing scripts for field_change on ${fieldName} in ${doctypeDoc.id}`);
-                // await execute('field_change', fieldName, {
-                //     fieldName: fieldName,
-                //     value: value,
-                //     oldValue: oldValue,
-                //     formData: newValue,
-                //     getValue: (fieldName: string) => newValue[fieldName],
-                //     getValues: () => newValue
-                // });
-            }
-
             props.onChange?.(props.fieldPath || "", newValue);
         };
 

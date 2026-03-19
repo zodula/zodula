@@ -147,7 +147,7 @@ export function useDocAll<DT extends Zodula.DoctypeName = Zodula.DoctypeName, TD
     }, [doctype, effectiveId, cache, getDoc, cacheTTL]);
 
     const [doc, setDocState] = useState<TDoc | null>(cachedDoc);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const initializedRef = useRef<string | null>(null);
 

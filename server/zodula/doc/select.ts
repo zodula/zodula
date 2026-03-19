@@ -340,7 +340,6 @@ export class ZodulaDoctypeSelector<
       const session = new ZodulaSession();
       const user = await session.user(true);
       const roles = await session.roles();
-      console.log(user, "user", roles, "roles")
       const { can } = await ZodulaDoctypeHelper.checkPermission(
         this.doctypeName,
         "can_select",

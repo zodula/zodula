@@ -53,7 +53,7 @@ export function useDocList<DT extends Zodula.DoctypeName = Zodula.DoctypeName, T
 ): useDocListResult<TDoc> {
     const [docs, setDocs] = useState<TDoc[]>([]);
     const [count, setCount] = useState(0);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     // Use external params directly

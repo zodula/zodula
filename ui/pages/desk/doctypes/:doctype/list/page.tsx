@@ -77,7 +77,7 @@ export default function DoctypeListPage() {
         [allFields, doctype]
     );
 
-    const { doc: doctypeDoc, reload: reloadDoctype } = useDocAll({
+    const { doc: doctypeDoc, reload: reloadDoctype, loading: loadingDoctype } = useDocAll({
         doctype: "Doctype",
         id: doctype,
     });
@@ -353,7 +353,7 @@ export default function DoctypeListPage() {
         variant: "destructive"
     });
 
-    if (!doctypeDoc?.id && !loading) {
+    if (!doctypeDoc?.id && !loadingDoctype) {
         return <ErrorView message="Doctype not found" status={404} />
     }
 
@@ -371,8 +371,8 @@ export default function DoctypeListPage() {
                         location.pathname.includes("/sheet")
                             ? "sheet"
                             : location.pathname.includes("/tree")
-                              ? "tree"
-                              : "list"
+                                ? "tree"
+                                : "list"
                     }
                     onChange={(value) => {
                         if (value === "list") {

@@ -11,6 +11,7 @@ import { zodula } from "@/zodula/client";
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
 import ErrorView from "@/zodula/ui/views/error-view";
 import { QuickEntryDialog } from "@/zodula/ui/components/dialogs/quick-entry-dialog";
+import LoadingView from "@/zodula/ui/views/loading-view";
 
 function buildTree<T extends Record<string, any>>(
   docs: T[],
@@ -195,7 +196,7 @@ export default function DoctypeTreePage() {
           />
           {loading && (
             <div className="zd:absolute zd:inset-0 zd:flex zd:items-center zd:justify-center zd:bg-background/50">
-              <span className="zd:text-sm zd:text-muted-foreground">{t("Loading...")}</span>
+              <LoadingView />
             </div>
           )}
           {error && (

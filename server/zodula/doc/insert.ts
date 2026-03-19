@@ -60,8 +60,6 @@ export class ZodulaDoctypeInsert<
       // Prepare the document data
       let prepared = await this.prepareDocumentData(user, doctype);
 
-      console.log(prepared, "prepared", this.input)
-
       // Validate readonly fields
       ZodulaDoctypeHelper.validateDoc(
         prepared,

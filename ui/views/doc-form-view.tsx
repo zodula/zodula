@@ -1502,7 +1502,6 @@ export function DocFormView({
     return (
       <NavbarLayout>
         <div className="zd:flex zd:items-center zd:justify-center zd:h-64">
-          <div className="zd:text-muted-foreground">Loading...</div>
         </div>
       </NavbarLayout>
     );

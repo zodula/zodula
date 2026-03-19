@@ -10,7 +10,6 @@ export default $action(async ctx => {
     throw new Error("Not authenticated");
   }
   const userDoc = await $zodula.doctype("User").get(user.id as any).bypass(true).fields(["password"]).unsafe()
-  console.log("userDoc", userDoc, password);
   if (!userDoc?.password) {
     throw new Error("User not found");
   }
