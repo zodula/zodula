@@ -24,16 +24,13 @@ export default $action(async ctx => {
         });
     });
     try {
-        const { doctype, print_template, ids: idsString, lang, letter_head, from_organization } = ctx.query;
-        ctx.headers["x-organization"] = from_organization ?? "System Panel";
+        const { doctype, print_template, ids: idsString, lang, letter_head } = ctx.query;
         const ids = idsString ? JSON.parse(idsString) : [];
 
         const doctypeDoc = loader.from("doctype").get(doctype as any);
         const printTemplateDoc = print_template ? await $zodula.doctype("Print Template").get(print_template as any) : null;
         const letterHeadDoc = letter_head ? await $zodula.doctype("Letter Head").get(letter_head as any) : null;
-        const orgDoc = from_organization
-            ? await $zodula.doctype("Organization").get(from_organization as any).bypass(true).fields(["doc_status_watermark"])
-            : null;
+        const orgDoc = await $zodula.doctype("Organization").get("Organization").bypass(true).fields(["doc_status_watermark"]);
 
         const printTemplateHeightmm = printTemplateDoc?.custom_height ?? PAGE_FORMATS[printTemplateDoc?.format ?? "A4"]?.height ?? 297;
         const printTemplateHeightpx = printTemplateHeightmm * 96 / 25.4;
@@ -260,7 +257,6 @@ export default $action(async ctx => {
         ids: z.string().optional(),
         lang: z.string().optional(),
         letter_head: z.string().optional(),
-        from_organization: z.string().optional(),
     }),
     method: "GET"
 })

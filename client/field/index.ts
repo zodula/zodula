@@ -1,19 +1,4 @@
 export const standardFields = {
-    doc_organization: {
-        type: "Reference",
-        label: "Organization",
-        reference: "Organization",
-        allow_on_submit: 1,
-        in_list_view: 1,
-        no_print: 1,
-    },
-    doc_organization_abbr: {
-        type: "Text",
-        label: "Organization Abbreviation",
-        allow_on_submit: 1,
-        in_list_view: 1,
-        no_print: 1,
-    },
     id: {
         type: "Text",
         label: "ID",
@@ -61,7 +46,7 @@ export const standardFields = {
     },
     doc_status: {
         type: "Select",
-        options: "\nDraft\nSubmitted\nCancelled",
+        options: "Draft\nSubmitted\nCancelled",
         required: 1,
         default: "Draft",
         label: "Document Status",

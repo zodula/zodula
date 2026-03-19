@@ -11,6 +11,5 @@ export default $doctype({
     },
 }, {
     label: "User Role",
-    is_global: 1,
     is_child_doctype: 1,
 });

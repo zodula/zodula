@@ -31,9 +31,9 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
         return this
     }
 
-    private async deleteFiles(doctype: any, org: string) {
+    private async deleteFiles(doctype: any) {
         try {
-            const filesDir = path.join(process.cwd(), ".zodula_data", "files", org, this.doctypeName, this.id)
+            const filesDir = path.join(process.cwd(), ".zodula_data", "files", this.doctypeName, this.id)
 
             // Check if the directory exists
             try {
@@ -75,10 +75,6 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
         const doctype = loader.from("doctype").get(this.doctypeName)
         const user = await zodula.session.user()
         let old = await zodula.doctype(this.doctypeName).get(this.id).bypass(true).unsafe()
-        const organization = old?.doc_organization || "System Panel"
-        if(!old?.doc_organization) {
-            old.doc_organization = organization
-        }
         // Validate document exists
         if (!old) {
             throw new Error(`Document with id ${this.id} not found`, { cause: 404 })
@@ -119,7 +115,7 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
         const result = await db.delete(doctype?.name).where("id", "=", this.id).returning("*").execute()
 
         // Delete associated files
-        await this.deleteFiles(doctype, old?.doc_organization)
+        await this.deleteFiles(doctype)
 
         // Create audit trail for delete action
         await this.createAuditTrail(old, prepared)

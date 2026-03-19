@@ -204,12 +204,11 @@ export const ExtendPlugin = new FormPlugin({
 
                                 // Check if the RECEIVING field is an Image Preview field that should construct a file path
                                 if (receivingFieldConfig?.type === "Image Preview" && fetchedValue !== undefined && fetchedValue !== null && fetchedValue !== "") {
-                                    // Construct file path: /files/<parent_organization>/<referenced_doctype>/<referenced_id>/<field_name>/<field_value>
+                                    // Construct file path: /files/<referenced_doctype>/<referenced_id>/<field_name>/<field_value>
                                     // fetchPath might be nested like "customer.logo" or just "logo"
                                     const fetchPathParts = dependentField.fetchPath.split('.');
                                     const parentFieldName = fetchPathParts[fetchPathParts.length - 1];
-                                    const organization = props.formData?.doc_organization || "System Panel";
-                                    const filePath = `/files/${organization}/${sourceField.reference}/${value}/${parentFieldName}/${fetchedValue}`;
+                                    const filePath = `/files/${sourceField.reference}/${value}/${parentFieldName}/${fetchedValue}`;
                                     newValue[dependentField.fieldName] = filePath;
                                 } else if (fetchedValue !== undefined && fetchedValue !== null) {
                                     // Regular field update (for non-Image Preview fields)

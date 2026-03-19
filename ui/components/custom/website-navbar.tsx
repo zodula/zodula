@@ -5,7 +5,7 @@ import { LayoutDashboard } from "lucide-react";
 import { cn } from "@/zodula/ui/lib/utils";
 
 export interface WebsiteNavbarProps {
-  /** Current page label (e.g. "Pricing") */
+  /** Current page label (e.g. "Home") */
   currentPage?: string;
   /** Logo URL; if not set, no logo is shown */
   logoUrl?: string | null;
@@ -15,7 +15,7 @@ export interface WebsiteNavbarProps {
 }
 
 export function WebsiteNavbar({
-  currentPage = "Pricing",
+  currentPage,
   logoUrl,
   showDeskButton = true,
   className,
@@ -48,17 +48,6 @@ export function WebsiteNavbar({
             )}
           >
             Home
-          </Link>
-          <Link
-            to="/pricing"
-            className={cn(
-              "zd:px-3 zd:py-2 zd:rounded-md zd:text-sm zd:font-medium zd:transition-colors",
-              currentPage === "Pricing"
-                ? "zd:text-foreground zd:bg-muted/60"
-                : "zd:text-muted-foreground zd:hover:text-foreground zd:hover:bg-muted/40"
-            )}
-          >
-            Pricing
           </Link>
         </nav>
       </div>

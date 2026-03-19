@@ -51,7 +51,6 @@ export default $doctype<"User">({
 }, {
     label: "User",
     search_fields: "email\nname\nid",
-    is_global: 1,
     naming_series: "{{email}}",
 })
     .on("before_change", async ({ doc, old, input }) => {

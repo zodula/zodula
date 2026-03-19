@@ -239,7 +239,6 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
   const { t } = useTranslation();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
-  const { org } = useParams();
 
   // Sheet view state management
   const sheetView = useSheetView(doctype);

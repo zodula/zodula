@@ -194,12 +194,10 @@ export class ZodulaDoctypeSelector<
     roles: string[],
     permissions: Zodula.SelectDoctype<"Doctype Permission">[],
     user: Zodula.SelectDoctype<"User">,
-    userOrganizations: string[],
-    userOrganization: string | null,
     joinAliases?: Map<string, string>
   }): string {
     const { filters = [], q } = this.options;
-    const { doctype, roles, permissions, user, userOrganizations, userOrganization, joinAliases } = options;
+    const { doctype, roles, permissions, user, joinAliases } = options;
     const whereConditions: string[] = [];
 
     // Process regular filters
@@ -286,13 +284,6 @@ export class ZodulaDoctypeSelector<
       }
     }
 
-    if (doctype.config.is_global !== 1 && userOrganization !== "System Panel" && !this.options.bypass) {
-      whereConditions.push(`("${doctype.name}"."doc_organization" = "${userOrganization}" OR "${doctype.name}"."doc_organization" = "System Panel")`);
-    }
-    if (doctype.name === "Organization" && userOrganization !== "System Panel" && !this.options.bypass) {
-      whereConditions.push(`("${doctype.name}"."owner" = "${user?.id}" OR "${doctype.name}"."id" IN ("${userOrganizations.join('","')}"))`);
-    }
-
     // Process search query
     if (q) {
       const searchFields = doctype.config.search_fields
@@ -348,15 +339,12 @@ export class ZodulaDoctypeSelector<
       const doctype = loader.from("doctype").get(this.doctypeName);
       const session = new ZodulaSession();
       const user = await session.user(true);
-      const userOrganization = await session.organization(true);
-      const userOrganizations = await session.organizations(true);
       const roles = await session.roles();
+      console.log(user, "user", roles, "roles")
       const { can } = await ZodulaDoctypeHelper.checkPermission(
         this.doctypeName,
         "can_select",
-        {
-          doc_organization: userOrganization,
-        } as any,
+        {} as any,
         { bypass: this.options.bypass, doctype }
       );
       if (
@@ -418,8 +406,6 @@ export class ZodulaDoctypeSelector<
         roles,
         permissions,
         user,
-        userOrganizations: userOrganizations as string[],
-        userOrganization: userOrganization,
         joinAliases
       });
       const orderClause = this.options.sort
@@ -510,15 +496,14 @@ export class ZodulaDoctypeSelector<
 
   // thenable
   then(
-    resolve: (value: {
+    resolve: <T extends {
       docs: Zodula.SelectDoctype<TN>[];
       limit: number;
       page: number;
       count: number;
-    }) => void,
-    reject: (reason: any) => void
+    }>(value: T) => any,
   ) {
-    return this._select().then(resolve, reject);
+    return this._select().then(resolve);
   }
 
   catch(reject: (reason: any) => void) {

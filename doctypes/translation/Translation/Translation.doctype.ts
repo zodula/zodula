@@ -29,6 +29,5 @@ export default $doctype({
     }
 }, {
     label: "Translation",
-    is_system_generated: 1,
-    is_global: 1
+    is_system_generated: 1
 })

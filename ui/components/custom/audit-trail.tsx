@@ -35,7 +35,6 @@ export function AuditTrail({
 }: AuditTrailProps) {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const { org } = useParams();
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -332,9 +331,7 @@ export function AuditTrail({
                         to={`/desk/doctypes/User/form/${trail.created_by}`}
                         className="zd:text-muted-foreground zd:hover:text-primary zd:transition-colors"
                       >
-                        {trail.created_by
-                          ? `${trail.created_by}`
-                          : "System Panel"}
+                        {trail.created_by || "Unknown"}
                       </Link>
                       <span className="zd:text-muted-foreground">
                         {" "}
@@ -350,7 +347,7 @@ export function AuditTrail({
                       </span>
                       {" "}
                       <Link
-                        to={`/desk/${org}/doctypes/Audit Trail/form/${trail.id}`}
+                        to={`/desk/doctypes/Audit Trail/form/${trail.id}`}
                         className="zd:text-primary zd:hover:text-primary zd:transition-colors zd:opacity-0 zd:group-hover:opacity-100 zd:align-middle"
                       >
                         <ExternalLinkIcon className="zd:w-3 zd:h-3 zd:inline-block" />

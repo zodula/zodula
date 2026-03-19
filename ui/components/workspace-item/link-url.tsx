@@ -2,7 +2,7 @@ import { ExternalLink, Link2Icon } from "lucide-react"
 import { BaseWorkspaceItemPlugin } from "./base"
 import { Input } from "../ui/input"
 import { cn } from "../../lib/utils"
-import { Link, useParams } from "react-router"
+import { Link } from "react-router"
 import { FormControl } from "../ui/form-control"
 import { useMemo } from "react"
 
@@ -12,11 +12,9 @@ export const LinkUrlPlugin = new BaseWorkspaceItemPlugin(
         const item = props.item
         const url = item?.url ?? item?.value ?? ""
         const external = url?.startsWith("http")
-        const { org } = useParams()
         const toUrl = useMemo(() => {
-            if (external) return url
-            return (url || "").replace("{{org}}", org || "")
-        }, [url, org])
+            return url
+        }, [url])
         const label = item?.label ?? url
         return (
             <Link
@@ -49,7 +47,7 @@ export const LinkUrlPlugin = new BaseWorkspaceItemPlugin(
             label="URL"
             value={props.item?.url ?? props.item?.value ?? ""}
             fieldKey="url"
-            helperText={`Example: "https://www.google.com" or internal link like "/desk/{{org}}/doctypes/Doctype/list"`}
+            helperText={`Example: "https://www.google.com" or internal link like "/desk/doctypes/Doctype/list"`}
             onChange={(_fieldKey, value) => props.onChange("url", value)}
         />
     ),

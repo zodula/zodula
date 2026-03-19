@@ -171,10 +171,9 @@ function validateRequiredFields(
 }
 
 const UserLink = ({ userId, name }: { userId: string; name: string }) => {
-  const { org } = useParams();
   return (
     <Link
-      to={`/desk/${org}/doctypes/User/form/${userId}`}
+      to={`/desk/doctypes/User/form/${userId}`}
       className="zd:hover:text-primary zd:transition-colors zd:text-sm"
     >
       {name}
@@ -238,7 +237,6 @@ export function DocFormView({
 }: DocFormViewProps) {
   // ===== ROUTER & STATE =====
   const { push, replace, pathname, location, back } = useRouter();
-  const { org } = useParams();
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter()
   // ===== AUTH & TRANSLATION =====
@@ -246,7 +244,6 @@ export function DocFormView({
   const { t } = useTranslation();
   // ===== FORM PERSISTENCE =====
   const { saveFormValues, getFormValues, clearFormValues } = useCreateFormPersistenceStore();
-  const [formOrganization, setFormOrganization] = useState<string | undefined>(undefined);
 
   // ===== DOCTYPE & DOC DATA =====
   const { doc: doctypeDoc } = useDocAll({
@@ -654,6 +651,15 @@ export function DocFormView({
 
   const getFormValue = useCallback((field: string) => getNestedFormValue(formData, field), [formData]);
 
+  const clearTable = useCallback((tableFieldName: string) => {
+    setFormData((prev) => {
+      const next = { ...prev, [tableFieldName]: [] };
+      formDataCache[formId] = next;
+      return next;
+    });
+    setReferenceTableIndexFields((prev) => ({ ...prev, [tableFieldName]: [] }));
+  }, [formId]);
+
   const buildFormContext = useCallback((overrides: {
     doctype?: any;
     doc?: any;
@@ -663,6 +669,7 @@ export function DocFormView({
     set_value?: (field: string, value: any) => void;
     set_df_property?: (fieldPath: string, property: string, value: any) => void;
     get_df_property?: (fieldPath: string, property: string) => any;
+    clear_table?: (tableFieldName: string) => void;
   } = {}) => ({
     doctype: overrides.doctype ?? (doctype as any),
     doc: overrides.doc ?? (formDataRef.current as any),
@@ -673,7 +680,8 @@ export function DocFormView({
     set_df_property: overrides.set_df_property ?? handleSetDfProperty,
     get_df_property: overrides.get_df_property ?? handleGetDfProperty,
     reload,
-  }), [doctype, id, handleFieldChange, handleSetDfProperty, handleGetDfProperty, reload]);
+    clear_table: overrides.clear_table ?? clearTable,
+  }), [doctype, id, handleFieldChange, handleSetDfProperty, handleGetDfProperty, reload, clearTable]);
   buildFormContextRef.current = buildFormContext;
 
   const secondaryButtons = useMemo(() => {
@@ -754,7 +762,6 @@ export function DocFormView({
       replace(pathname, { state: rest });
     }
 
-    console.log("nextFormData", formFieldsOverride);
     // get default value for every fields (only when current value is missing; do not overwrite loaded doc)
     for (const f of Object.values(formFieldsOverride) as any[]) {
       if (f?.type === "Reference Table" || f?.type === "Extend") continue;
@@ -900,7 +907,6 @@ export function DocFormView({
           setFormData(formDataCache[formId] ?? docForForm ?? {});
         }
         if (cancelled) return;
-        if (docForForm?.doc_organization) setFormOrganization(docForForm.doc_organization);
       }
       const computed = applyFieldPermissions(fields, docForForm ?? doc);
       if (!computed || cancelled) return;
@@ -966,11 +972,6 @@ export function DocFormView({
         setReferenceTableFields(computed.referenceTableFields);
         setExtendFields(computed.extendFields);
       }
-
-      // Keep organization selector in sync (System Panel)
-      if (d.doc_organization) {
-        setFormOrganization(d.doc_organization);
-      }
     }
   };
 
@@ -1016,12 +1017,12 @@ export function DocFormView({
   }, [formData, fields]);
 
   const handleDuplicate = useCallback(() => {
-    if (!doc || !fields || !org) return;
+    if (!doc || !fields) return;
     const prefill = duplicatePrefill();
-    push(`/desk/${org}/doctypes/${doctype}/form`, {
+    push(`/desk/doctypes/${doctype}/form`, {
       state: { prefill },
     });
-  }, [doc, fields, org, doctype, duplicatePrefill]);
+  }, [doc, fields, doctype, duplicatePrefill]);
 
   const handleSubmit = async () => {
     const payload = getUpdatePayload();
@@ -1179,7 +1180,7 @@ export function DocFormView({
       if (updatedDoc.id !== id && !isSingle) {
         formDataCache[formId] = undefined;
         formDataCache[updatedDoc.id] = updatedDoc;
-        replace(`/desk/${org}/doctypes/${doctype}/form/${updatedDoc.id}`);
+        replace(`/desk/doctypes/${doctype}/form/${updatedDoc.id}`);
       } else {
         handleReload();
       }
@@ -1194,19 +1195,6 @@ export function DocFormView({
       // Get the latest form data directly from the store to ensure we have the most recent values
       // This ensures we capture all user input, not just the memoized formData
       const latestFormData = formData;
-
-      // When in System Panel, require organization to be selected
-      if (org === "System Panel") {
-        if (!formOrganization) {
-          await alert({
-            title: "Organization Required",
-            message: "Please select an Organization before creating this document.",
-            variant: "warning",
-          });
-          setIsLoading(false);
-          return;
-        }
-      }
 
       // Normalize Reference Table fields (empty arrays/undefined -> null)
       const normalizedFormData = normalizeReferenceTableFields(latestFormData);
@@ -1225,15 +1213,12 @@ export function DocFormView({
         doctype as Zodula.DoctypeName,
         {
           ...normalizedFormData,
-          doc_organization: formOrganization,
         }
       );
       if (createdDoc) {
         handleReload();
         // Clear saved form values after successful creation
-        if (org) {
-          clearFormValues(doctype, org);
-        }
+        clearFormValues(doctype);
 
         if (cbUrl) {
           const state = {
@@ -1245,7 +1230,7 @@ export function DocFormView({
             state: state
           });
         } else {
-          replace(`/desk/${org}/doctypes/${doctype}/form/${createdDoc.id}`);
+          replace(`/desk/doctypes/${doctype}/form/${createdDoc.id}`);
         }
       }
     } catch (error) {
@@ -1359,7 +1344,7 @@ export function DocFormView({
                   return (
                     <Link
                       className="zd:flex zd:items-center zd:justify-between zd:gap-2 zd:rounded-md zd:px-3 zd:py-2 zd:text-sm zd:text-foreground zd:bg-muted/40 zd:border zd:border-transparent zd:hover:bg-muted/70 zd:hover:border-border zd:transition-colors"
-                      to={`/desk/${org}/doctypes/${connection.doctype}/list?filters=${filterQuery}`}
+                      to={`/desk/doctypes/${connection.doctype}/list?filters=${filterQuery}`}
                       key={`${connection.doctype}-${index}`}
                     >
                       <span className="zd:truncate zd:font-medium">
@@ -1380,19 +1365,6 @@ export function DocFormView({
               {t("Metadata")}
             </h3>
             <div className="zd:rounded-lg zd:border zd:border-border zd:bg-muted/30 zd:divide-y zd:divide-border zd:overflow-hidden">
-              <div className="zd:flex zd:flex-col zd:gap-0.5 zd:px-3 zd:py-2.5">
-                <span className="zd:text-xs zd:text-muted-foreground">
-                  {t("Organization")}
-                </span>
-                <span
-                  className={cn(
-                    "zd:text-sm zd:font-medium",
-                    !doc?.doc_organization && "zd:italic zd:text-muted-foreground"
-                  )}
-                >
-                  {doc?.doc_organization || "—"}
-                </span>
-              </div>
               <div className="zd:flex zd:flex-col zd:gap-0.5 zd:px-3 zd:py-2.5">
                 <span className="zd:text-xs zd:text-muted-foreground">
                   {t("Owner")}
@@ -1602,7 +1574,7 @@ export function DocFormView({
           ) : (
             <div className="zd:flex zd:items-center zd:gap-2">
               {mode === "edit" && (
-                <Button variant="outline" href={`/desk/${org}/print?doctype=${doctype}&ids=["${id}"]`}>
+                <Button variant="outline" href={`/desk/print?doctype=${doctype}&ids=["${id}"]`}>
                   <Printer className="zd:w-4 zd:h-4" />
                 </Button>
               )}
@@ -1680,27 +1652,6 @@ export function DocFormView({
         }
       >
         <div data-form-doctype={doctype} data-form-is-dirty={isDirty ? "true" : "false"}>
-          {org === "System Panel" && (
-            <div className="zd:flex zd:gap-4 zd:pb-4">
-              <FormControl
-                readonly={mode === "edit"}
-                required={true}
-                placeholder="Select Organization"
-                className="zd:max-w-[200px]"
-                fieldKey="doc_organization"
-                value={formOrganization}
-                onChange={(fieldName, value) => {
-                  setFormOrganization(value);
-                }}
-                formData={formData}
-                org={org}
-                field={{
-                  type: "Reference",
-                  reference: "Organization"
-                }}
-              />
-            </div>
-          )}
           {/* Form Content */}
           <div className="zd:flex zd:flex-col zd:gap-8 zd:rounded-lg zd:px-4 zd:md:px-8 zd:py-4 zd:shadow-lg zd:border-t zd:border-dashed">
             <Form

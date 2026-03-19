@@ -50,13 +50,15 @@ export class ZodulaDoctypeGetter<
       const doctype = loader.from("doctype").get(this.doctypeName);
       const children = doctype.children;
       const session = new ZodulaSession();
-      const organization = await session.organization(true);
-      const isGlobal = doctype.config.is_global === 1;
+      let old = (await db.get(
+        `SELECT * FROM "${doctype?.name}" WHERE "id" = '${this.id}'`
+      )) as any;
+      if (!old && doctype?.config?.is_single === 1) {
+        old = await zodula.doctype(doctype?.name as any).insert({
+          id: doctype?.name as any,
+        }).bypass(true) as any
+      }
       if (!this.options.bypass) {
-        const user = await session.user(true);
-        const old = (await db.get(
-          `SELECT * FROM "${doctype?.name}" WHERE "id" = '${this.id}' AND (${isGlobal ? "1=1" : `("doc_organization" = "${organization}" OR "doc_organization" = "System Panel")`})`
-        )) as any;
 
         const { can } =
           await ZodulaDoctypeHelper.checkPermission(
@@ -69,12 +71,7 @@ export class ZodulaDoctypeGetter<
             }
           );
 
-        if (
-          !can &&
-          !["Organization", "Organization Role"].includes(
-            this.doctypeName
-          )
-        ) {
+        if (!can) {
           throw new ErrorWithCode(
             `You do not have permission to get ${this.doctypeName}/${this.id}`,
             {

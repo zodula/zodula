@@ -5,7 +5,7 @@ import { Database } from "../database/database";
 export class ZodulaSession {
   private getSystemUser() {
     return {
-      name: "System Panel",
+      name: "System",
       email: "system@example.com",
       password: "password",
       is_active: 1,
@@ -16,78 +16,7 @@ export class ZodulaSession {
       updated_by: "1",
       doc_status: "Submitted",
       owner: "1",
-      doc_organization: "System Panel",
     } satisfies Zodula.SelectDoctype<"User">;
-  }
-
-  async organizations(bypass?: boolean) {
-    const db = Database("main");
-    const user = await this.user(true);
-    const organizationsOwner = (await db
-      .select("*")
-      .from("Organization")
-      .where("owner", "=", user.id)
-      .execute()) as Zodula.SelectDoctype<"Organization">[];
-    const organizationsUser = (await db
-      .select("*")
-      .from("Organization Role")
-      .where("user", "=", user.id)
-      .execute()) as Zodula.SelectDoctype<"Organization Role">[];
-    return [
-      ...organizationsOwner?.map((organization) => organization.id),
-      ...organizationsUser.map((organization) => organization.parentid),
-    ];
-  }
-
-  async organizationRoles(organization?: string, bypass?: boolean): Promise<string[]> {
-    const db = Database("main");
-    const user = await this.user(true);
-    const org = organization || (await this.organization(true));
-    if (!org) {
-      return [];
-    }
-    const organizationRoles = await db
-      .select("*")
-      .from("Organization Role")
-      .where("userId", "=", user.id)
-      .where("parentid", "=", org)
-      .where("parentype", "=", "Organization")
-      .where("parentfield", "=", "organization_roles")
-      .execute();
-      
-    return organizationRoles.map(
-      (organizationRole) => organizationRole.roleId
-    );
-  }
-
-  async organization(bypass?: boolean) {
-    const ctx = ctxContext.getStore()?.ctx;
-    const headers = ctx?.headers;
-    if (!headers) {
-      return null;
-    }
-    const organization_id = headers?.["x-organization"];
-    if (!organization_id) {
-      return null;
-    }
-    const db = Database("main");
-    const organizationRoles = (await db
-      .select("*")
-      .from("Organization Role")
-      .where("parentid", "=", organization_id)
-      .where("parentype", "=", "Organization")
-      .where("parentfield", "=", "organization_roles")
-      .execute()) as Zodula.SelectDoctype<"Organization Role">[];
-    const organizationOwner = (await db
-      .select("*")
-      .from("Organization")
-      .where("id", "=", organization_id)
-      .execute()) as Zodula.SelectDoctype<"Organization">[];
-
-    if (organizationOwner.length > 0 || organizationRoles.length > 0) {
-      return organization_id;
-    }
-    return null;
   }
 
   async user(bypass?: boolean) {
@@ -134,12 +63,9 @@ export class ZodulaSession {
     return user;
   }
 
-  async roles(organization?: string | null, bypass?: boolean) {
+  async roles(bypass?: boolean) {
     const db = Database("main");
     const user = await this.user(true);
-    const org = organization ?? (await this.organization(true));
-    const organizationRoles = await this.organizationRoles(org ?? undefined, true);
-    const organizationDoc = await $zodula.doctype("Organization").get(org ?? "").bypass()
 
     const roles = await db
       .select("*")
@@ -155,10 +81,7 @@ export class ZodulaSession {
     } else {
       _roles.indexOf("Anonymous") === -1 && _roles.push("Anonymous");
     }
-    if(organizationDoc?.owner === user.id) {
-      _roles.push("Organization Owner");
-    }
-    return [..._roles, ...organizationRoles];
+    return _roles;
   }
 
   async isAuthenticated(bypass?: boolean) {
@@ -167,7 +90,7 @@ export class ZodulaSession {
   }
 
   async hasRoles(roles: string[]) {
-    const userRoles = await this.roles(undefined, true);
+    const userRoles = await this.roles(true);
     return roles.some((role) => userRoles.includes(role));
   }
 }

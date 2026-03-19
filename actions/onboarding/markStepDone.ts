@@ -7,15 +7,13 @@ export default $action(async (ctx) => {
     }
 
     const user = await $zodula.session.user();
-    const org = await $zodula.session.organization(true);
-    if (!org || !user) {
+    if (!user) {
         throw new Error("Unauthorized");
     }
 
     const existing = await $zodula.doctype("Onboarding Step Completion")
         .select()
         .where("user", "=", user.id)
-        .where("organization", "=", org)
         .where("onboarding_step_id", "=", onboarding_step_id.trim())
         .bypass(true);
 
@@ -25,7 +23,6 @@ export default $action(async (ctx) => {
 
     await $zodula.doctype("Onboarding Step Completion").insert({
         user: user.id,
-        organization: org,
         onboarding_step_id: onboarding_step_id.trim(),
     }).bypass(true);
 

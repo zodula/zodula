@@ -4,11 +4,30 @@ import { genRanHex } from "../utils";
 import { getFieldValueFromDoc } from "../../../client/utils";
 import { ErrorWithCode } from "@/zodula/error";
 
+async function resolveOrganizationTokens(template: string) {
+  if (!template) return template;
+  const needsOrg =
+    template.includes("{organization_name}") ||
+    template.includes("{organization_abbr}");
+  if (!needsOrg) return template;
+
+  const db = Database("main");
+  const org = (await db.get(
+    `SELECT organization_name, abbr FROM "Organization" WHERE id = ?`,
+    ["Organization"]
+  )) as { organization_name?: string | null; abbr?: string | null } | undefined;
+
+  const orgName = String(org?.organization_name ?? "").trim();
+  const orgAbbr = String(org?.abbr ?? "").trim();
+
+  return template
+    .replaceAll("{organization_name}", orgName)
+    .replaceAll("{organization_abbr}", orgAbbr);
+}
+
 export async function naming<TN extends Zodula.DoctypeName>(
   doctypeName: TN,
   data: Zodula.InsertDoctype<TN>,
-  organizationAbbr: string,
-  organizationName: string
 ) {
   const doctypeMetadata = loader.from("doctype").get(doctypeName);
 
@@ -24,7 +43,6 @@ export async function naming<TN extends Zodula.DoctypeName>(
    * {SS} (second)
    * {SSS} (millisecond)
    * {T} (timestamp)
-   * {{doc_organization_abbr}} (organization abbreviation)
    * {HEX} (random 16 characters hex string)
    * {8HEX} (random 8 characters hex string)
    * {16HEX} (random 16 characters hex string)
@@ -37,9 +55,6 @@ export async function naming<TN extends Zodula.DoctypeName>(
   if (doctypeMetadata?.schema.is_single) {
     id = doctypeMetadata?.name;
   }
-  if (doctypeMetadata?.schema.is_organization_single) {
-    id = `${doctypeMetadata?.name} - ${organizationName}`;
-  }
 
   // If naming_series starts with "field:", use the doc's field value as the series template
   if (typeof namingSeries === "string" && namingSeries.startsWith("field:")) {
@@ -47,10 +62,11 @@ export async function naming<TN extends Zodula.DoctypeName>(
     namingSeries = (data as Record<string, unknown>)[fieldName] as string | undefined;
   }
 
+  if (typeof namingSeries === "string" && namingSeries) {
+    namingSeries = await resolveOrganizationTokens(namingSeries);
+  }
 
   if (!!namingSeries) {
-    namingSeries = namingSeries.replaceAll("{{doc_organization_abbr}}", organizationAbbr);
-    namingSeries = namingSeries.replaceAll("{{doc_organization}}", organizationName);
     // Use the improved getFieldValueFromDoc function to handle both field and utility patterns
     let tempId = getFieldValueFromDoc(namingSeries, data as any);
     id = tempId;

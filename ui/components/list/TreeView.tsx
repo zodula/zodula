@@ -12,6 +12,12 @@ export interface TreeViewColumn {
   label: string;
 }
 
+export type TreeViewCheckboxState = {
+  checked: boolean;
+  indeterminate?: boolean;
+  disabled?: boolean;
+};
+
 interface TreeViewProps<T extends Record<string, any>> {
   nodes: TreeNode<T>[];
   displayField: string;
@@ -21,6 +27,16 @@ interface TreeViewProps<T extends Record<string, any>> {
   onRowClick?: (doc: T) => void;
   renderCell?: (doc: T, key: string) => React.ReactNode;
   className?: string;
+  /** Default expanded state when no localStorage is available yet. */
+  defaultExpanded?: "all" | string[];
+  /** Persist expanded state to localStorage (default true). */
+  persistExpanded?: boolean;
+  /** Optional checkbox selection mode */
+  checkbox?: {
+    getState: (doc: T) => TreeViewCheckboxState;
+    onToggle: (doc: T, nextChecked: boolean) => void;
+    ariaLabel?: string;
+  };
 }
 
 const EXPANDED_STORAGE_KEY_PREFIX = "zodula-tree-expanded-";
@@ -34,15 +50,41 @@ export function TreeView<T extends Record<string, any>>({
   onRowClick,
   renderCell,
   className,
+  defaultExpanded,
+  persistExpanded = true,
+  checkbox,
 }: TreeViewProps<T>) {
   const storageKey = `${EXPANDED_STORAGE_KEY_PREFIX}${typeof window !== "undefined" ? window.location.pathname : "default"}`;
+
+  const collectAllIds = (ns: TreeNode<T>[], out: string[]) => {
+    for (const n of ns) {
+      out.push(getDocId(n.doc));
+      if (n.children?.length) collectAllIds(n.children, out);
+    }
+  };
 
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
     try {
-      const saved = localStorage.getItem(storageKey);
-      return saved ? new Set(JSON.parse(saved)) : new Set();
+      if (persistExpanded) {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) return new Set(JSON.parse(saved));
+      }
+      if (defaultExpanded === "all") {
+        const ids: string[] = [];
+        collectAllIds(nodes, ids);
+        return new Set(ids);
+      }
+      if (Array.isArray(defaultExpanded)) {
+        return new Set(defaultExpanded);
+      }
+      return new Set();
     } catch {
+      if (defaultExpanded === "all") {
+        const ids: string[] = [];
+        collectAllIds(nodes, ids);
+        return new Set(ids);
+      }
       return new Set();
     }
   });
@@ -52,9 +94,11 @@ export function TreeView<T extends Record<string, any>>({
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(Array.from(next)));
-      } catch {}
+      if (persistExpanded) {
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(Array.from(next)));
+        } catch {}
+      }
       return next;
     });
   };
@@ -65,6 +109,7 @@ export function TreeView<T extends Record<string, any>>({
     const hasChildren = node.children.length > 0;
     const isExpanded = expanded.has(id);
     const displayValue = doc[displayField] ?? doc.id ?? id;
+    const cbState = checkbox ? checkbox.getState(doc) : null;
 
     return (
       <div key={id} className="zd:flex zd:flex-col">
@@ -97,6 +142,23 @@ export function TreeView<T extends Record<string, any>>({
             </button>
           ) : (
             <span className="zd:w-5 zd:inline-block zd:shrink-0" />
+          )}
+          {checkbox && (
+            <input
+              type="checkbox"
+              checked={!!cbState?.checked}
+              disabled={!!cbState?.disabled}
+              aria-label={checkbox.ariaLabel ?? "Select"}
+              ref={(el) => {
+                if (el) el.indeterminate = !!cbState?.indeterminate;
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                e.stopPropagation();
+                checkbox.onToggle(doc, e.target.checked);
+              }}
+              className="zd:shrink-0"
+            />
           )}
           <span className="zd:flex-1 zd:truncate zd:font-medium zd:min-w-0">
             {String(displayValue)}
@@ -151,6 +213,7 @@ export function TreeView<T extends Record<string, any>>({
           {/* Header row - flex layout matching data rows (align with level-0 row: pl-2 + indent) */}
           <div className="zd:flex zd:items-center zd:gap-1 zd:py-2 zd:px-2 zd:border-b zd:border-dashed zd:bg-muted/30 zd:font-medium zd:text-sm">
             <span className="zd:w-5 zd:shrink-0" />
+            {checkbox && <span className="zd:w-4 zd:shrink-0" />}
             <span className="zd:flex-1 zd:truncate zd:min-w-0">{displayLabel}</span>
             {columns.map((col) => (
               <span

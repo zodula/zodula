@@ -13,8 +13,7 @@ export function extendFile() {
     bxo.get("/files/*", async (ctx) => {
         try {
             const rest = ctx.params.wildcard
-            const [org, doctype, docId, fieldName, _filename] = rest.split("/")
-            ctx.headers["x-organization"] = org || ""
+            const [doctype, docId, fieldName, _filename] = rest.split("/")
             ctxContext.enterWith({
                 ctx: ctx as any
             })
@@ -23,7 +22,7 @@ export function extendFile() {
                 const files = await fs.readdir(path.join(process.cwd(), ".zodula_data", "files", rest))
                 filename = files[0]
             }
-            const url = `/${org}/${doctype}/${docId}/${fieldName}/${filename}`
+            const url = `/${doctype}/${docId}/${fieldName}/${filename}`
             const canDoc = await zodula?.doctype(doctype as Zodula.DoctypeName).get(docId!)
             const isPublicFile = loader.from("doctype").get(doctype as Zodula.DoctypeName)?.schema?.fields[fieldName as any]?.is_public === 1
 

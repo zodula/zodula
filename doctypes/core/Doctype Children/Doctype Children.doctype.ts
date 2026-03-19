@@ -25,5 +25,4 @@ export default $doctype({
     },
 }, {
     label: "Doctype Children",
-    is_global: 1,
 })

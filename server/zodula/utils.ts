@@ -111,7 +111,6 @@ export async function getDoctypeConnections(doctype: Zodula.DoctypeName, id: str
 }
 
 export async function get_image_base64(options: {
-    org: string
     doctype: Zodula.DoctypeName
     docId: string
     fieldName: string
@@ -120,7 +119,7 @@ export async function get_image_base64(options: {
     width?: number
     height?: number
 }): Promise<string | null> {
-    const { org, doctype, docId, fieldName, filename, bypass, width, height } = options
+    const { doctype, docId, fieldName, filename, bypass, width, height } = options
 
     try {
         const dtMeta = loader.from("doctype").get(doctype)
@@ -131,7 +130,7 @@ export async function get_image_base64(options: {
             throw new Error("You are not authorized to access this file")
         }
 
-        const baseDir = path.join(process.cwd(), ".zodula_data", "files", org, doctype, docId, fieldName)
+        const baseDir = path.join(process.cwd(), ".zodula_data", "files", doctype, docId, fieldName)
         let finalFilename = filename
 
         if (!finalFilename) {

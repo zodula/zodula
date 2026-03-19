@@ -32,7 +32,6 @@ export default $doctype<"Workspace">({
     }
 }, {
     label: "Workspace",
-    is_global: 1,
     display_field: "name",
     search_fields: "name",
 })

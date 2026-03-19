@@ -19,5 +19,4 @@ export default $doctype({
     },
 }, {
     label: "Doctype Relative",
-    is_global: 1,
 })

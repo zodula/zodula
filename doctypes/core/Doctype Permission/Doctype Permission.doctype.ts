@@ -137,7 +137,6 @@ export default $doctype({
     }
 }, {
     label: "Doctype Permission",
-    is_global: 1,
     display_field: "doctype",
     tabs: JSON.stringify([
         {

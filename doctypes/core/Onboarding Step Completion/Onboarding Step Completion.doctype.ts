@@ -29,7 +29,6 @@ export default $doctype<"Onboarding Step Completion">({
     },
 }, {
     label: "Onboarding Step Completion",
-    is_global: 1,
     search_fields: "user\norganization\nonboarding_step_id",
     tabs: JSON.stringify([
         {

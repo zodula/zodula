@@ -22,13 +22,10 @@ const ReferenceInput = (props: {
   formData?: any;
   fieldPath?: string;
   autocomplete?: "on" | "off";
-  org?: string;
   doctype?: Zodula.DoctypeConfig;
   placeholder?: string;
 }) => {
   const router = useRouter();
-  const { org } = router.params;
-  const organizationId = props.org || org || "";
   const [options, setOptions] = useState<
     { id: string; title: string; subtitle: string; doc: any }[]
   >([]);
@@ -371,7 +368,6 @@ const ReferenceInput = (props: {
             const result = await popup(QuickEntryDialog, undefined, {
               doctype: referenceDoctype,
               fields: referenceFields as any,
-              org: organizationId,
               cbUrl: window.location.pathname,
               fromField: props.fieldPath || props.fieldKey,
               prefill: Object.keys(prefill).length ? prefill : undefined,
@@ -388,7 +384,7 @@ const ReferenceInput = (props: {
           } else {
             const prefill = buildPrefillData();
             router.push(
-              `/desk/${organizationId}/doctypes/${referenceDoctype}/form`,
+              `/desk/doctypes/${referenceDoctype}/form`,
               {
                 state: {
                   cbUrl: window.location.pathname,
@@ -417,7 +413,6 @@ const ReferenceInput = (props: {
     referenceDoctype,
     referenceDoctypeDoc,
     referenceFields,
-    organizationId,
     props.multiple,
     props.value,
     props.fieldPath,
@@ -553,7 +548,7 @@ const ReferenceInput = (props: {
     return (
       <span className="zd:text-muted-foreground zd:h-8 zd:flex zd:items-center zd:gap-1 zd:bg-muted/50 zd:rounded-md zd:p-2">
         <Link
-          to={`/desk/${organizationId}/doctypes/${referenceDoctype || ""}/form/${props.value || ""}`}
+          to={`/desk/doctypes/${referenceDoctype || ""}/form/${props.value || ""}`}
           className="zd:text-primary zd:hover:underline  zd:whitespace-nowrap zd:truncate"
         >
           {props.value}
@@ -586,7 +581,7 @@ const ReferenceInput = (props: {
       suffix={
         !!props.value && !props.multiple ? (
           <Link
-            to={`/desk/${organizationId}/doctypes/${referenceDoctype || ""}/form/${props.value || ""}`}
+            to={`/desk/doctypes/${referenceDoctype || ""}/form/${props.value || ""}`}
             className="no-print"
           >
             <ArrowRight />

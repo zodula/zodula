@@ -40,11 +40,11 @@ type TourState = {
     stepIndex: number;
 };
 
-/** Resolves step route: replaces {{org}} with current org; relative paths get /desk/{org}/ prefix. */
-function getStepHref(route: string | null, org: string | undefined): string | null {
-    if (!route || !org) return null;
-    const withOrg = route.replace(/\{\{org\}\}/gi, org);
-    const path = withOrg.startsWith("/") ? withOrg : `/desk/${org}/${withOrg}`;
+/** Resolves step route: removes {{org}} placeholders; relative paths get /desk/ prefix. */
+function getStepHref(route: string | null): string | null {
+    if (!route) return null;
+    const withoutOrg = route.replace(/\{\{org\}\}/gi, "");
+    const path = withoutOrg.startsWith("/") ? withoutOrg : `/desk/${withoutOrg}`;
     return path.replace(/\/Sheet$/i, "/sheet");
 }
 
@@ -53,10 +53,9 @@ function escapeRegex(s: string): string {
     return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** True if pathname matches completion_value: empty = any path; else regex ({{org}} replaced with escaped org). */
-function pathnameMatches(pattern: string | null | undefined, pathname: string, org: string | undefined): boolean {
+/** True if pathname matches completion_value: empty = any path; else regex. */
+function pathnameMatches(pattern: string | null | undefined, pathname: string): boolean {
     if (!pattern?.trim()) return true;
-    const source = org != null ? pattern.replace(/\{\{org\}\}/gi, escapeRegex(org)) : pattern;
     const pathDecoded = (() => {
         try {
             return decodeURIComponent(pathname);
@@ -65,7 +64,7 @@ function pathnameMatches(pattern: string | null | undefined, pathname: string, o
         }
     })();
     try {
-        return new RegExp(source).test(pathDecoded);
+        return new RegExp(pattern).test(pathDecoded);
     } catch {
         return false;
     }
@@ -81,20 +80,8 @@ function valueMatchesPattern(text: string, pattern: string | null | undefined): 
     }
 }
 
-/** Get current org from route params or pathname (e.g. /desk/MyOrg/... -> MyOrg). */
-function useOrgFromDesk(): string | undefined {
-    const params = useParams();
-    const location = useLocation();
-    const pathname = location?.pathname ?? "";
-    if (params?.org) return params.org as string;
-    if (!pathname.startsWith("/desk/")) return undefined;
-    const segments = pathname.split("/").filter(Boolean);
-    return segments.length >= 2 ? decodeURIComponent(segments[1] as string) : undefined;
-}
-
 export function OnboardingChecklistBox() {
     const { t } = useTranslation();
-    const org = useOrgFromDesk();
     const location = useLocation();
     const pathname = location?.pathname ?? "";
     const router = useRouter();
@@ -110,11 +97,6 @@ export function OnboardingChecklistBox() {
     const pathStepMarkedRef = useRef<string | null>(null);
 
     useEffect(() => {
-        if (!org) {
-            setChecklist([]);
-            setLoading(false);
-            return;
-        }
         setLoading(true);
         zui.onboarding
             .getChecklist()
@@ -123,7 +105,10 @@ export function OnboardingChecklistBox() {
             })
             .catch(() => setChecklist([]))
             .finally(() => setLoading(false));
-    }, [org]);
+        // run only once on mount to avoid refetch loops
+        // zui object reference is not stable across renders
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const itemsWithPending = useMemo(
         () =>
@@ -142,7 +127,7 @@ export function OnboardingChecklistBox() {
     const hasAnyOnboarding = checklist.length > 0;
     const itemsToShow = showCompleted ? checklist : itemsWithPending;
     const hasCompletedGroups = checklist.length > itemsWithPending.length;
-    const showCard = !loading && !!org;
+    const showCard = !loading;
 
     const toggleGroup = (id: string) => {
         setOpenGroupIds((prev) => {
@@ -183,8 +168,8 @@ export function OnboardingChecklistBox() {
         setSpotlightRect(null);
     };
 
-    const openInAppHref = currentTourStep?.route && org
-        ? getStepHref(currentTourStep.route, org)
+    const openInAppHref = currentTourStep?.route
+        ? getStepHref(currentTourStep.route)
         : null;
 
     const openInApp = () => {
@@ -293,11 +278,11 @@ export function OnboardingChecklistBox() {
     useEffect(() => {
         if (!tour || !currentTourStep || currentTourStep.completion_mode !== "auto_on_path") return;
         const pattern = currentTourStep.completion_value;
-        if (!pathnameMatches(pattern, pathname, org)) return;
+        if (!pathnameMatches(pattern, pathname)) return;
         if (pathStepMarkedRef.current === currentTourStep.id) return;
         pathStepMarkedRef.current = currentTourStep.id;
         markDoneAndNext();
-    }, [tour, currentTourStep?.id, currentTourStep?.completion_mode, currentTourStep?.completion_value, pathname, org]);
+    }, [tour, currentTourStep?.id, currentTourStep?.completion_mode, currentTourStep?.completion_value, pathname]);
 
     // Auto-advance when form is not dirty (completion_value = doctype name, e.g. Organization)
     useEffect(() => {
@@ -324,7 +309,7 @@ export function OnboardingChecklistBox() {
 
     return (
         <>
-            {/* Floating checklist card - always show on desk when org is set */}
+            {/* Floating checklist card - always show on desk */}
             <div
                 className={cn(
                     "zd:fixed zd:bottom-6 zd:right-6 zd:z-50 zd:rounded-lg zd:border zd:bg-background zd:shadow-lg zd:overflow-hidden zd:max-w-[280px] zd:w-[90vw]"
@@ -419,13 +404,13 @@ export function OnboardingChecklistBox() {
                                                             >
                                                                 {t(step.title)}
                                                             </span>
-                                                            {getStepHref(step.route, org) && (
+                                                            {getStepHref(step.route) && (
                                                                 <Button
                                                                     variant="ghost"
                                                                     size="sm"
                                                                     className="zd:shrink-0 zd:h-6 zd:px-1.5 zd:min-w-0"
                                                                     onClick={() => {
-                                                                        const href = getStepHref(step.route, org);
+                                                                        const href = getStepHref(step.route);
                                                                         if (href) router.push(href);
                                                                     }}
                                                                 >

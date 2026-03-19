@@ -49,9 +49,9 @@ function PrintTemplateSettingsPopup({
 }: {
   isOpen: boolean;
   onClose: (result?: PrintTemplateSettingsValues) => void;
-  initialData?: { org?: string; values: PrintTemplateSettingsValues; onApply: (v: PrintTemplateSettingsValues) => void };
+  initialData?: { values: PrintTemplateSettingsValues; onApply: (v: PrintTemplateSettingsValues) => void };
 }) {
-  const { org, values: initial, onApply } = initialData ?? { org: "", values: null as any, onApply: () => { } };
+  const { values: initial, onApply } = initialData ?? { values: null as any, onApply: () => { } };
   const [name, setName] = React.useState(initial?.name ?? "");
   const [format, setFormat] = React.useState(initial?.format ?? "A4");
   const [customWidth, setCustomWidth] = React.useState<number | "">(initial?.customWidth ?? "");
@@ -135,7 +135,6 @@ function PrintTemplateSettingsPopup({
             field={{ type: "Reference", reference: "Letter Head" }}
             value={defaultLetterHead}
             onChange={(_k, v) => setDefaultLetterHead(v ?? "")}
-            org={org}
           />
           <FormControl
             label="Default Language"
@@ -143,7 +142,6 @@ function PrintTemplateSettingsPopup({
             field={{ type: "Reference", reference: "Language" }}
             value={defaultLanguage}
             onChange={(_k, v) => setDefaultLanguage(v ?? "")}
-            org={org}
           />
         </div>
       </section>
@@ -284,7 +282,7 @@ function docToItem(doc: any): PrintTemplateBuilderItem {
 }
 
 export default function PrintTemplateFormPage() {
-  const { id, org } = useParams();
+  const { id } = useParams();
   const navigate = useNavigate();
   const { doc, loading, reload } = useDoc({
     doctype: PRINT_TEMPLATE_DOCTYPE,
@@ -376,8 +374,8 @@ export default function PrintTemplateFormPage() {
       toast.success("Saved");
       fetchedItemsJsonRef.current = JSON.stringify(items);
 
-      if (newId && newId !== id && org) {
-        navigate(`/desk/${org}/doctypes/Print Template/form/${newId}`, { replace: true });
+      if (newId && newId !== id) {
+        navigate(`/desk/doctypes/Print Template/form/${newId}`, { replace: true });
       } else {
         reload();
       }
@@ -386,7 +384,7 @@ export default function PrintTemplateFormPage() {
     } finally {
       setSaving(false);
     }
-  }, [id, doc, isHtml, name, heading, docNameExpr, format, customWidth, customHeight, marginTop, marginRight, marginBottom, marginLeft, isDefault, defaultLetterHead, defaultLanguage, html, css, js, items, reload, navigate]);
+  }, [id, doc, isHtml, name, heading, docNameExpr, format, customWidth, customHeight, marginTop, marginRight, marginBottom, marginLeft, isDefault, defaultLetterHead, defaultLanguage, html, css, js, items, reload, navigate, showIdQrCode]);
 
   const doctypeForPalette = useMemo(() => (doc as any)?.doctype ?? "", [(doc as any)?.doctype]);
 
@@ -443,7 +441,6 @@ export default function PrintTemplateFormPage() {
       PrintTemplateSettingsPopup as React.ComponentType<{ isOpen: boolean; onClose: (r?: PrintTemplateSettingsValues) => void; initialData?: any }>,
       { title: "Print template settings", description: "Defaults, margin and page size.", width: "90vw", maxWidth: "680px" },
       {
-        org: org ?? "",
         values: {
           name,
           sectionTitle: heading,
@@ -479,7 +476,7 @@ export default function PrintTemplateFormPage() {
         },
       }
     );
-  }, [org, name, heading, docNameExpr, format, customWidth, customHeight, marginTop, marginRight, marginBottom, marginLeft, isDefault, defaultLetterHead, defaultLanguage]);
+  }, [name, heading, docNameExpr, format, customWidth, customHeight, marginTop, marginRight, marginBottom, marginLeft, isDefault, defaultLetterHead, defaultLanguage]);
 
   const actionSection = (
     <>

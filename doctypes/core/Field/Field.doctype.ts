@@ -200,7 +200,6 @@ export default $doctype({
 }, {
     label: "Field",
     is_system_generated: 1,
-    is_global: 1,
 })
 
     .on("after_cancel", () => { })

@@ -30,7 +30,6 @@ export default $doctype({
     label: "Currency",
     naming_series: "{{currency_code}}",
     search_fields: "currency_code\ncurrency_name",
-    is_global: 1,
     tabs: JSON.stringify([
         {
             type: "Tab", 

@@ -78,7 +78,7 @@ export class ZodulaDoctypeHelper {
             }
 
             if (["Check"].includes(config.type as any)) {
-                value = value === "1" ? 1 : 0
+                value = (value === "1" || value === 1) ? 1 : 0
             }
 
             if (["Float", "Currency"].includes(config.type as any)) {
@@ -264,35 +264,12 @@ export class ZodulaDoctypeHelper {
             return { can: true }
         }
         const user = await zodula.session.user(true);
-        const userRoles = await zodula.session.roles(data?.doc_organization);
-        const userOrganizations = await zodula.session.organizations(true)
-        const userOrganization = await zodula.session.organization(true)
-        const userOrganzationDoc = await zodula.doctype("Organization").get(userOrganization || "").bypass(true)
-        const doctype = loader.from("doctype").get(doctypeName);
-        let can = await ZodulaDoctypeHelper.can(doctypeName, action, data?.owner === user.id, userRoles, bypass)
-        if (can && (action !== "can_get" && action !== "can_select")) {
-            if (!userOrganizations.includes(data?.doc_organization || "System Panel")) {
-                can = false
-            }
-            if (userRoles?.includes("System Admin") && userOrganization === "System Panel") {
-                can = true
-            }
-            if (doctype?.name === "Organization" && data?.doc_organization === "System Panel") {
-                can = true
-            }
+        const userRoles = await zodula.session.roles();
+        // System Admin can do anything
+        if (userRoles?.includes("System Admin")) {
+            return { can: true }
         }
-        if (doctype?.config?.is_global !== 1 && userRoles?.includes("Organization Owner") && data?.doc_organization === userOrganization) {
-            can = true
-        }
-
-        if (userRoles?.includes("System Admin") && userOrganization === "System Panel") {
-            can = true
-        }
-
-        if (doctype?.config?.is_organization_single === 1 && userOrganization !== data?.doc_organization) {
-            can = false
-        }
-
+        const can = await ZodulaDoctypeHelper.can(doctypeName, action, data?.owner === user.id, userRoles, bypass)
         return { can }
     }
 
@@ -350,12 +327,6 @@ export class ZodulaDoctypeHelper {
         //         status: 400,
         //     })
         // }
-
-        if (doctype.is_global == 1 && input.doc_organization !== "System Panel") {
-            throw new ErrorWithCode(`Global doctype can only be created in System Panel organization`, {
-                status: 400,
-            })
-        }
 
         // check for required
         for (const [fieldName, fieldConfig] of Object.entries(doctype.fields)) {

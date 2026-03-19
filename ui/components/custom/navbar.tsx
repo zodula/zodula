@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router";
+import { Link } from "react-router";
 import { Select, type SelectOption } from "../ui/select";
 import { useEffect, useState, useMemo } from "react";
 import { zodula } from "@/zodula/client";
@@ -23,7 +23,7 @@ import { useNavbar } from "../../hooks/use-navbar";
 import { cn } from "../../lib/utils";
 import { LanguageSelection } from "./language-selection";
 import { Breadcrumb } from "./breadcrumb";
-import { useOrganizationById } from "../../hooks/use-organization";
+import { useOrganization } from "../../hooks/use-organization";
 
 export interface NavbarProps {
   children?: React.ReactNode;
@@ -34,7 +34,6 @@ export const Navbar = ({ children }: NavbarProps) => {
     doctype: "Global Setting",
     id: "Global Setting"
   });
-  const { org } = useParams();
   const [searchTerm, setSearchTerm] = useState<string>("");
   const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
@@ -112,13 +111,10 @@ export const Navbar = ({ children }: NavbarProps) => {
 
     // Add doctype results
     doctypeResults.docs.forEach((doc) => {
-      if (doc.is_global === 1 && org !== "System Panel") {
-        return;
-      }
       const translatedLabel = t(doc.label || doc.name);
       combinedOptions.push({
         label: translatedLabel,
-        value: `/desk/${org}/doctypes/${doc.name}/list`,
+        value: `/desk/doctypes/${doc.name}/list`,
         icon: "BookIcon",
       });
     });
@@ -172,7 +168,7 @@ export const Navbar = ({ children }: NavbarProps) => {
     });
   };
 
-  const { organization: orgDoc, loading: orgLoading, error: orgError } = useOrganizationById(org);
+  const { organization: orgDoc, loading: orgLoading } = useOrganization();
 
   return (
     <>
@@ -186,7 +182,7 @@ export const Navbar = ({ children }: NavbarProps) => {
         >
           <div className="zd:relative zd:group zd:flex zd:items-center zd:gap-2 zd:flex-1">
             <Link
-              to={`/desk/${org}`}
+              to={`/desk`}
               className={cn(
                 "zd:text-xl zd:font-bold zd:flex zd:items-center zd:gap-2  zd:w-10 zd:h-10"
               )}
@@ -246,7 +242,7 @@ export const Navbar = ({ children }: NavbarProps) => {
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    href={`/desk/${org}/doctypes/Organization/form/${org}`}
+                    href={`/desk/doctypes/Organization`}
                     data-onboarding-id="org-settings-menu"
                   >
                     {t("Organization Setting")}
@@ -261,9 +257,6 @@ export const Navbar = ({ children }: NavbarProps) => {
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={handleAboutZodula}>
                     {t("About")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem href="/desk">
-                    {t("Change Organization")}
                   </DropdownMenuItem>
                   <DropdownMenuItem href="/">
                     {t("Go To Website")}

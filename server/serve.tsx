@@ -13,29 +13,31 @@ import extendRealtime from "./serve/extend/realtime";
 import { doMigrate } from "../commands/migrate";
 import { extendPage } from "./serve/extend/page";
 import { extendTranslation } from "./serve/extend/translation";
-import { OrgTier } from "./serve/extend/org-tier";
 
 
 async function startServer() {
     await startup()
-    const server = new BXO()
-    .beforeRequest((ctx) => {
-        const time = new Date().toISOString().split("T")[1]?.split(".")[0]
-        logger.debug(`[${time}] ${ctx.url}`)
-        return ctx
+    const server = new BXO({
+        serve: {
+            port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
+        }
     })
-    .onError((error) => {
-        return new Response(JSON.stringify({
-            error: error.message
-        }), {
-            status: 500,
-            headers: {
-                "Content-Type": "application/json"
-            }
+        .beforeRequest((ctx) => {
+            const time = new Date().toISOString().split("T")[1]?.split(".")[0]
+            logger.debug(`[${time}] ${ctx.url}`)
+            return ctx
         })
-    })
-    
-    server.use(OrgTier())
+        .onError((error) => {
+            return new Response(JSON.stringify({
+                error: error.message
+            }), {
+                status: 500,
+                headers: {
+                    "Content-Type": "application/json"
+                }
+            })
+        })
+
     server.use(openapi())
 
     server.use(extendAction())

@@ -2,17 +2,15 @@ import { z } from "bxo";
 
 export default $action(async (ctx) => {
     const user = await $zodula.session.user();
-    const org = await $zodula.session.organization(true);
-    if (!org || !user) {
+    if (!user) {
         return ctx.json({ checklist: [] });
     }
 
-    const orgDoc = await $zodula.doctype("Organization").get(org).bypass(true);
+    const orgDoc = await $zodula.doctype("Organization").get("Organization").bypass(true);
     const isOwner = orgDoc?.owner === user.id;
-    const roles = await $zodula.session.roles(org);
+    const roles = await $zodula.session.roles();
     const roleIds = roles.filter(
         (r) =>
-            r !== "Organization Owner" &&
             r !== "Authenticated" &&
             r !== "Anonymous"
     );
@@ -31,7 +29,6 @@ export default $action(async (ctx) => {
     const completionsResult = await $zodula.doctype("Onboarding Step Completion")
         .select()
         .where("user", "=", user.id)
-        .where("organization", "=", org)
         .bypass(true);
     const completedStepIds = new Set(
         (completionsResult.docs || []).map((d: any) => d.onboarding_step_id)
@@ -53,10 +50,6 @@ export default $action(async (ctx) => {
     }> = [];
 
     for (const ob of onboardingsResult.docs || []) {
-        const mode = (ob as any).mode || "Organization Owner";
-        if (mode === "Organization Owner" && !isOwner) continue;
-        if (mode === "Organization User" && isOwner) continue;
-
         let steps = ((ob as any).onboarding_steps || []) as Array<{
             id: string;
             title: string;
@@ -68,21 +61,19 @@ export default $action(async (ctx) => {
             completion_value?: string | null;
             idx?: number;
         }>;
-        if (mode === "Organization User" && roleNames.length >= 0) {
-            steps = steps.filter((s) => {
-                const stepRoles = (s.roles || "").trim();
-                if (!stepRoles) return true;
-                const allowed = stepRoles.split(",").map((r) => r.trim()).filter(Boolean);
-                return allowed.some((r) => roleNames.includes(r));
-            });
-        }
+        steps = steps.filter((s) => {
+            const stepRoles = (s.roles || "").trim();
+            if (!stepRoles) return true;
+            const allowed = stepRoles.split(",").map((r) => r.trim()).filter(Boolean);
+            return allowed.some((r) => roleNames.includes(r));
+        });
         steps.sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
 
         checklist.push({
             onboarding: {
                 id: (ob as any).id,
                 name: (ob as any).name ?? "",
-                mode,
+                mode: (ob as any).mode || "all",
             },
             steps: steps.map((s) => ({
                 id: s.id,

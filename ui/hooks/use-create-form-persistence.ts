@@ -2,18 +2,18 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 interface CreateFormPersistenceState {
-  // Store form values by doctype and org: { [doctype]: { [org]: formValues } }
-  persistedForms: Record<string, Record<string, Record<string, any>>>;
-  
+  // Store form values by doctype: { [doctype]: formValues }
+  persistedForms: Record<string, Record<string, any>>;
+
   // Save form values for a doctype in create mode
-  saveFormValues: (doctype: string, org: string, values: Record<string, any>) => void;
-  
+  saveFormValues: (doctype: string, values: Record<string, any>) => void;
+
   // Get saved form values for a doctype
-  getFormValues: (doctype: string, org: string) => Record<string, any> | null;
-  
+  getFormValues: (doctype: string) => Record<string, any> | null;
+
   // Clear saved form values for a doctype
-  clearFormValues: (doctype: string, org: string) => void;
-  
+  clearFormValues: (doctype: string) => void;
+
   // Clear all persisted forms
   clearAll: () => void;
 }
@@ -23,32 +23,23 @@ export const useCreateFormPersistenceStore = create<CreateFormPersistenceState>(
     (set, get) => ({
       persistedForms: {},
 
-      saveFormValues: (doctype: string, org: string, values: Record<string, any>) => {
+      saveFormValues: (doctype: string, values: Record<string, any>) => {
         set((state) => {
           const newPersistedForms = { ...state.persistedForms };
-          if (!newPersistedForms[doctype]) {
-            newPersistedForms[doctype] = {};
-          }
-          newPersistedForms[doctype][org] = { ...values };
+          newPersistedForms[doctype] = { ...values };
           return { persistedForms: newPersistedForms };
         });
       },
 
-      getFormValues: (doctype: string, org: string) => {
+      getFormValues: (doctype: string) => {
         const state = get();
-        return state.persistedForms[doctype]?.[org] || null;
+        return state.persistedForms[doctype] || null;
       },
 
-      clearFormValues: (doctype: string, org: string) => {
+      clearFormValues: (doctype: string) => {
         set((state) => {
           const newPersistedForms = { ...state.persistedForms };
-          if (newPersistedForms[doctype]?.[org]) {
-            delete newPersistedForms[doctype][org];
-            // Clean up empty doctype entries
-            if (Object.keys(newPersistedForms[doctype]).length === 0) {
-              delete newPersistedForms[doctype];
-            }
-          }
+          delete newPersistedForms[doctype];
           return { persistedForms: newPersistedForms };
         });
       },

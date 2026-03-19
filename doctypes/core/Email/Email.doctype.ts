@@ -37,7 +37,6 @@ export default $doctype({
     },
 }, {
     label: "Email",
-    is_global: 1,
     naming_series: "{{user}}",
     search_fields: "user\nhost",
 })

@@ -23,7 +23,6 @@ export default $doctype<"Onboarding">({
 }, {
     label: "Onboarding",
     naming_series: "{{name}}",
-    is_global: 1,
     search_fields: "name",
     tabs: JSON.stringify([
         {

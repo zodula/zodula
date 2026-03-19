@@ -22,5 +22,4 @@ export default $doctype({
     }
 }, {
     label: "Session",
-    is_global: 1,
 })

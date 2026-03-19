@@ -8,7 +8,6 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
 import { useRouter } from "../router";
-import { useParams } from "react-router";
 import { popup } from "../ui/popit";
 import { ColumnSettingsDialog } from "../dialogs/column-settings-dialog";
 import { zodula } from "@/zodula/client";
@@ -75,7 +74,6 @@ export function ListView({
   setSelected,
   hideDocStatus = false,
 }: ListViewProps) {
-  const { org } = useParams();
   const { push } = useRouter();
   const { t } = useTranslation();
   // Get doctype schema to determine columns
@@ -125,7 +123,7 @@ export function ListView({
       label: t("ID"),
       sortable: true,
       render: (doc: any) => {
-        return doc.doc_organization === "System Panel" ? <span className="zd:underline">{doc.id}</span> : <span className="">{doc.id}</span>;
+        return <span className="">{doc.id}</span>;
       },
     });
 
@@ -288,7 +286,7 @@ export function ListView({
 
   const handleRowClick = (doc: any) => {
     // Navigate to the form page with the doc ID
-    push(`/desk/${org}/doctypes/${doctype}/form/${doc.id}`);
+    push(`/desk/doctypes/${doctype}/form/${doc.id}`);
   };
 
   const handleColumnSettings = async () => {

@@ -26,7 +26,6 @@ function buildPdfUrl(params: {
   printTemplate: string;
   letterHead: string;
   lang: string;
-  fromOrganization: string;
 }) {
   if (!params.doctype || params.ids.length === 0) return "";
   const q = new URLSearchParams();
@@ -35,7 +34,6 @@ function buildPdfUrl(params: {
   q.set("ids", JSON.stringify(params.ids));
   q.set("letter_head", params.letterHead);
   q.set("lang", params.lang);
-  q.set("from_organization", params.fromOrganization);
   const url = new URL("/api/action/zodula.core.pdf", window.location.origin);
   url.search = q.toString();
   return url.toString();
@@ -43,7 +41,6 @@ function buildPdfUrl(params: {
 
 export default function PrintPage() {
   const { params } = useRouter();
-  const org = (params as { org?: string }).org ?? "";
   const { doctype, ids } = usePrintParams();
 
   const [printTemplate, setPrintTemplate] = useState("");
@@ -59,7 +56,6 @@ export default function PrintPage() {
       printTemplate,
       letterHead,
       lang,
-      fromOrganization: org,
     });
   }, [defaultsLoaded, doctype, ids, printTemplate, letterHead, lang]);
 
@@ -70,24 +66,20 @@ export default function PrintPage() {
     }
     setDefaultsLoaded(false);
     const loadDefaults = async () => {
-      const [printRes, orgDoc] = await Promise.all([
-        zodula.doc.select_docs("Print Template", {
-          filters: [["is_default", "=", 1], ["doctype", "=", doctype]],
-          limit: 1,
-          sort: "name",
-          order: "asc",
-        }),
-        org ? zodula.doc.get_doc("Organization", org, { fields: ["default_lang"] }) : null,
-      ]);
+      const printRes = await zodula.doc.select_docs("Print Template", {
+        filters: [["is_default", "=", 1], ["doctype", "=", doctype]],
+        limit: 1,
+        sort: "name",
+        order: "asc",
+      });
       const defaultPrintTemplate = printRes.docs[0];
-      const defaultLang =
-        defaultPrintTemplate?.default_language ?? (orgDoc as { default_lang?: string } | null)?.default_lang ?? "";
+      const defaultLang = defaultPrintTemplate?.default_language ?? "";
       setPrintTemplate(defaultPrintTemplate?.id ?? "");
       setLang(defaultLang);
       setLetterHead(defaultPrintTemplate?.default_letter_head ?? "");
     };
     loadDefaults().finally(() => setDefaultsLoaded(true));
-  }, [doctype, ids.length, org]);
+  }, [doctype, ids.length]);
 
   const subtitle =
     doctype && ids.length > 0
@@ -102,7 +94,6 @@ export default function PrintPage() {
         field={{ type: "Reference", reference: "Print Template" }}
         value={printTemplate}
         onChange={(_k, v) => setPrintTemplate(v ?? "")}
-        org={org}
       />
       <FormControl
         label="Language"
@@ -110,7 +101,6 @@ export default function PrintPage() {
         field={{ type: "Reference", reference: "Language" }}
         value={lang}
         onChange={(_k, v) => setLang(v ?? "")}
-        org={org}
       />
       <FormControl
         label="Letter Head"
@@ -118,7 +108,6 @@ export default function PrintPage() {
         field={{ type: "Reference", reference: "Letter Head" }}
         value={letterHead}
         onChange={(_k, v) => setLetterHead(v ?? "")}
-        org={org}
       />
     </div>
   );
@@ -153,7 +142,7 @@ export default function PrintPage() {
                 ? !defaultsLoaded
                   ? "Loading default print template..."
                   : "Select Print Template and Letter Head to preview."
-                : "Add doctype and ids to the URL (e.g. ?doctype=Delivery%20Manifest&ids=[\"DOC-001\"])"}
+                : "Add doctype and ids to the URL (e.g. ?doctype=Delivery%20Trip&ids=[\"DOC-001\"])"}
             </div>
           )}
         </div>

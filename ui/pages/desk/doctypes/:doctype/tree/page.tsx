@@ -10,7 +10,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { zodula } from "@/zodula/client";
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
 import ErrorView from "@/zodula/ui/views/error-view";
-import { useParams } from "react-router";
 import { QuickEntryDialog } from "@/zodula/ui/components/dialogs/quick-entry-dialog";
 
 function buildTree<T extends Record<string, any>>(
@@ -55,7 +54,6 @@ export default function DoctypeTreePage() {
   const { params, push, location } = useRouter();
   const doctype = params.doctype as Zodula.DoctypeName;
   const { t } = useTranslation();
-  const { org } = useParams();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const { docs: allFields } = useDocListAll({ doctype: "Field" });
@@ -128,14 +126,14 @@ export default function DoctypeTreePage() {
     const isQuickEntry = doctypeDoc?.is_quick_entry === 1;
     if (isQuickEntry) {
       // QuickEntryDialog would need to be called - simplified for now
-      push(`/desk/${org}/doctypes/${doctype}/form`, { state: { resetForm: true } });
+      push(`/desk/doctypes/${doctype}/form`, { state: { resetForm: true } });
     } else {
-      push(`/desk/${org}/doctypes/${doctype}/form`, { state: { resetForm: true } });
+      push(`/desk/doctypes/${doctype}/form`, { state: { resetForm: true } });
     }
   };
 
   const handleRowClick = (doc: Record<string, any>) => {
-    push(`/desk/${org}/doctypes/${doctype}/form/${doc.id}`);
+    push(`/desk/doctypes/${doctype}/form/${doc.id}`);
   };
 
   const primaryActions: PrimaryAction[] = [
@@ -151,15 +149,6 @@ export default function DoctypeTreePage() {
 
   if (!doctypeDoc?.id) {
     return <ErrorView message="Doctype not found" status={404} />;
-  }
-
-  if (doctypeDoc.is_global === 1 && org !== "System Panel") {
-    return (
-      <ErrorView
-        message="Doctype is global and cannot be accessed from this organization"
-        status={404}
-      />
-    );
   }
 
   if (!parentField) {
@@ -183,11 +172,11 @@ export default function DoctypeTreePage() {
             value="tree"
             onChange={(value) => {
               if (value === "list") {
-                push(`/desk/${org}/doctypes/${doctype}/list${location.search}`);
+                push(`/desk/doctypes/${doctype}/list${location.search}`);
               } else if (value === "tree") {
-                push(`/desk/${org}/doctypes/${doctype}/tree${location.search}`);
+                push(`/desk/doctypes/${doctype}/tree${location.search}`);
               } else {
-                push(`/desk/${org}/doctypes/${doctype}/sheet${location.search}`);
+                push(`/desk/doctypes/${doctype}/sheet${location.search}`);
               }
             }}
           />

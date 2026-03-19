@@ -40,7 +40,6 @@ export default $action(async (ctx) => {
             is_active: 1,
             is_confirmed_email: autoConfirmEmail ? 1 : 0,
             confirmed_code: autoConfirmEmail ? "" : confirmedCode,
-            doc_organization: "System Panel",
             owner: email.trim(),
         })
         .bypass(true);

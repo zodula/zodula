@@ -17,5 +17,4 @@ export default $doctype({
 }, {
   naming_series: "{{name}}",
   label: "Role",
-  is_global: 1,
 });

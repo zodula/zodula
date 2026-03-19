@@ -104,12 +104,12 @@ export const WorkspaceSettingsDialog = ({
                                 <div className="zd:flex zd:items-center zd:gap-2">
                                     <Checkbox
                                         checked={editedWorkspace.is_system === 1}
-                                        onCheckedChange={(checked) => 
+                                        onCheckedChange={(checked) =>
                                             handleValueChange('is_system', checked ? 1 : 0)
                                         }
                                     />
                                     <span className="zd:text-sm zd:text-muted-foreground">
-                                        Show this workspace only in System Organization
+                                        System Workspace
                                     </span>
                                 </div>
                             </FormControl>

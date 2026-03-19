@@ -16,7 +16,6 @@ export default $doctype<"Organization Role">({
     },
 }, {
     label: "Organization Role",
-    is_global: 1,
     is_child_doctype: 1,
 })
 .on("before_change", async ({ doc, input }) => {

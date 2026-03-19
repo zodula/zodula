@@ -3,8 +3,9 @@ import { z } from "bxo";
 const orgInfoSchema = z.object({
   id: z.string(),
   organization_name: z.string().nullable(),
-  unique_name: z.string().nullable(),
   abbr: z.string().nullable(),
+  currency: z.string().nullable().optional(),
+  is_setup: z.number().nullable().optional(),
   logo: z.string().nullable(),
   address: z.string().nullable(),
   phone: z.string().nullable(),
@@ -19,16 +20,12 @@ const orgInfoSchema = z.object({
 });
 
 export default $action(async (ctx) => {
-  const org = (ctx.query as { org?: string }).org;
-  if (!org) {
-    return ctx.json({ org: null });
-  }
-
-  const doc = await $zodula.doctype("Organization").get(org as any).bypass(true).fields([
+  const doc = await $zodula.doctype("Organization").get("Organization").bypass(true).fields([
     "id",
     "organization_name",
-    "unique_name",
     "abbr",
+    "currency",
+    "is_setup",
     "logo",
     "address",
     "phone",
@@ -48,9 +45,6 @@ export default $action(async (ctx) => {
   return ctx.json({ org: doc });
 }, {
   method: "GET",
-  query: z.object({
-    org: z.string().min(1),
-  }),
   response: {
     200: z.object({
       org: orgInfoSchema.nullable(),

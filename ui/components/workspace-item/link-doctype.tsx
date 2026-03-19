@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router"
+import { Link } from "react-router"
 import { useState, useEffect } from "react"
 import { BaseWorkspaceItemPlugin } from "./base"
 import { BookIcon } from "lucide-react"
@@ -27,7 +27,6 @@ export const LinkDoctypePlugin = new BaseWorkspaceItemPlugin(
         const item = props.item
         const doctypeId = item?.value ?? ""
         const { t } = useTranslation()
-        const { org } = useParams()
         const { docs: doctypes } = useDocListAll({ doctype: "Doctype" })
         const [count, setCount] = useState<number | null>(null)
 
@@ -67,8 +66,8 @@ export const LinkDoctypePlugin = new BaseWorkspaceItemPlugin(
         const badgeVariant = (item?.badge_variant as "default" | "secondary" | "destructive" | "warning" | "success" | "outline" | "draft" | "submitted" | "cancelled" | "pending" | "approved" | "rejected" | "muted" | "info") ?? "secondary"
 
         const listUrl = filters && filters.length > 0
-            ? `/desk/${org}/doctypes/${doctypeId}/list?filters=${encodeURIComponent(JSON.stringify(filters))}`
-            : `/desk/${org}/doctypes/${doctypeId}`
+            ? `/desk/doctypes/${doctypeId}/list?filters=${encodeURIComponent(JSON.stringify(filters))}`
+            : `/desk/doctypes/${doctypeId}`
 
         const doctypeDoc = doctypes.find((d: any) => d.id === doctypeId) as any
 

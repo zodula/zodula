@@ -13,5 +13,4 @@ export default $doctype({
     label: "Page",
     display_field: "name",
     search_fields: "name\nhref",
-    is_global: 1,
 })

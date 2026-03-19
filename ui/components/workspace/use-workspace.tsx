@@ -1216,15 +1216,11 @@ export const useWorkspace = () => {
     doctype: "Workspace",
   });
 
-  // Filter and sort workspaces based on organization
+  // Filter and sort workspaces
   const workspaces = useMemo(() => {
-    const isSystemOrg = organization?.id === "System Panel";
-    const filtered = allWorkspaces.filter((workspace) => {
-      if (workspace.is_system === 1) return isSystemOrg;
-      return true;
-    });
+    const filtered = allWorkspaces.filter((workspace) => true);
     return filtered.sort((a, b) => (a.idx || 0) - (b.idx || 0));
-  }, [allWorkspaces, organization]);
+  }, [allWorkspaces]);
 
   // Derive workspace items from workspaces (workspace_items on each workspace)
   const workspaceItems = useMemo(() => {

@@ -345,7 +345,7 @@ export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
                 <LucideIcons.Folder className="zd:w-12 zd:h-12 zd:text-muted-foreground/50 zd:mb-4" />
                 <p className="zd:text-sm zd:text-muted-foreground zd:mb-2">No workspaces yet</p>
                 <p className="zd:text-xs zd:text-muted-foreground/70 zd:mb-4">
-                    {readonly ? "No workspaces in this organization" : "Create your first workspace to get started"}
+                    {readonly ? "No workspaces yet" : "Create your first workspace to get started"}
                 </p>
                 {!readonly && (
                     <Button

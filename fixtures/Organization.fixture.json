@@ -1,9 +1,8 @@
 [
     {
-        "id": "System Panel",
+        "id": "My Organization",
         "abbr": "SYS",
-        "unique_name": "System Panel",
         "currency": "฿",
-        "organization_name": "System Panel"
+        "organization_name": "My Organization"
     }
 ]

@@ -167,8 +167,8 @@ export const getFieldValueFromDoc = (value: string, doc: Zodula.SelectDoctype<an
     return result
 }
 
-export function getDoctypeFileUrl(doctype: Zodula.DoctypeName, docId: string, fieldName: string, fileName: string, org: string) {
-    return [BASE_URL, "files", org, doctype, docId || doctype, fieldName, fileName].join("/");
+export function getDoctypeFileUrl(doctype: Zodula.DoctypeName, docId: string, fieldName: string, fileName: string) {
+    return [BASE_URL, "files", doctype, docId || doctype, fieldName, fileName].join("/");
 }
 
 export function safeEval(code: string, context = {}) {

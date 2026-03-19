@@ -14,6 +14,5 @@ export default $doctype({
 }, {
     label: "Language",
     search_fields: "name\nabbr",
-    naming_series: "{{abbr}}",
-    is_global: 1
+    naming_series: "{{abbr}}"
 })

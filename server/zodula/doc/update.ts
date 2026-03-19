@@ -52,21 +52,15 @@ export class ZodulaDoctypeUpdate<
     const db = Database("main");
     const user = await this.session.user(true);
     const doctype = loader.from("doctype").get(this.doctypeName);
-    const isGlobal = doctype.config.is_global === 1;
 
-    const old = await zodula
+    let old = await zodula
       .doctype(this.doctypeName)
       .get(this.input.id!)
       .bypass(true)
       .unsafe();
 
-    this.input.doc_organization = old?.doc_organization;
-    const organization = await zodula.doctype("Organization").get(this.input.doc_organization || "System Panel").bypass(true).fields(["abbr", "unique_name"])
-    this.input.doc_organization_abbr = organization?.abbr || "";
-    if (old?.doc_organization !== this.input.doc_organization) {
-      throw new ErrorWithCode("Cannot change doc_organization through update api", {
-        status: 400,
-      });
+    if(!old && doctype?.config?.is_single === 1) {
+      old = await zodula.doctype("Organization").get("Organization").bypass(true).unsafe() as any
     }
 
     this.input.doc_status = this.input.doc_status
@@ -130,7 +124,7 @@ export class ZodulaDoctypeUpdate<
       );
     }
     // Execute the update process
-    return await this.executeUpdate(db, doctype, old, prepared, organization?.abbr || "", organization?.unique_name || "");
+    return await this.executeUpdate(db, doctype, old, prepared);
   }
 
   private async applyFileUpdate(
@@ -156,7 +150,6 @@ export class ZodulaDoctypeUpdate<
               process.cwd(),
               ".zodula_data",
               "files",
-              prepared.doc_organization || "System Panel",
               doctypeName,
               docId,
               fieldName
@@ -167,7 +160,6 @@ export class ZodulaDoctypeUpdate<
             process.cwd(),
             ".zodula_data",
             "files",
-            prepared.doc_organization || "System Panel",
             doctypeName,
             docId,
             fieldName,
@@ -180,7 +172,6 @@ export class ZodulaDoctypeUpdate<
               process.cwd(),
               ".zodula_data",
               "files",
-              prepared.doc_organization || "System Panel",
               doctypeName,
               docId,
               fieldName
@@ -193,7 +184,6 @@ export class ZodulaDoctypeUpdate<
                   process.cwd(),
                   ".zodula_data",
                   "files",
-                  prepared.doc_organization || "System Panel",
                   doctypeName,
                   docId,
                   fieldName,
@@ -203,7 +193,7 @@ export class ZodulaDoctypeUpdate<
             }
           }
 
-          const url = ["", "files", prepared.doc_organization || "System Panel", doctypeName, docId, fieldName, filename].join("/");
+          const url = ["", "files", doctypeName, docId, fieldName, filename].join("/");
           // set value to url
           (prepared as any)[key] = url;
         }
@@ -214,7 +204,6 @@ export class ZodulaDoctypeUpdate<
             process.cwd(),
             ".zodula_data",
             "files",
-            prepared.doc_organization || "System Panel",
             doctypeName,
             docId,
             fieldName
@@ -227,7 +216,6 @@ export class ZodulaDoctypeUpdate<
           process.cwd(),
           ".zodula_data",
           "files",
-          prepared.doc_organization || "System Panel",
           doctypeName,
           docId
         );
@@ -241,7 +229,6 @@ export class ZodulaDoctypeUpdate<
           process.cwd(),
           ".zodula_data",
           "files",
-          prepared.doc_organization || "System Panel",
           doctypeName
         );
         const doctypeFiles = await fs.readdir(doctypeDir).catch(() => []);
@@ -326,8 +313,6 @@ export class ZodulaDoctypeUpdate<
     doctype: DoctypeMetadata,
     prepared: Zodula.SelectDoctype<TN>,
     db: Bunely,
-    organizationAbbr: string,
-    organizationName: string
   ): Promise<string> {
     const namingSeries = doctype.schema.naming_series;
     if (!namingSeries) {
@@ -380,7 +365,7 @@ export class ZodulaDoctypeUpdate<
 
     // find relatives and then change id of them
     const oldId = old?.id
-    const newId = await naming(this.doctypeName, prepared as any, organizationAbbr || "", organizationName || "");
+    const newId = await naming(this.doctypeName, prepared as any);
     const children = doctype.children
     for (const child of children) {
       await db.run(`UPDATE "${child.childDoctype}" SET "parentid" = ? WHERE "parentid" = ? AND "parentype" = ? AND "parentfield" = ?`, [newId, oldId, doctype.name, child.parentFieldName]);
@@ -445,15 +430,13 @@ export class ZodulaDoctypeUpdate<
     doctype: DoctypeMetadata,
     old: Zodula.SelectDoctype<TN>,
     prepared: Zodula.SelectDoctype<TN>,
-    organizationAbbr: string,
-    organizationName: string
   ): Promise<Zodula.SelectDoctype<TN>> {
     // Execute before triggers
     await this.executeBeforeTriggers(old, prepared);
 
     // Check if id should change and perform rename if needed
     // This must be done before extracting relationship data
-    const newId = await this.getNewId(doctype, prepared, db as Bunely, organizationAbbr || "", organizationName || "");
+    const newId = await this.getNewId(doctype, prepared, db as Bunely);
     this.newId = newId;
 
     // Extract relationship data

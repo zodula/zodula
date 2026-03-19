@@ -227,12 +227,13 @@ export const extendDoctype = () => {
               .where("id", "=", docid)
               .first();
               const isSingle = doctypeMeta.config.is_single === 1;
-              const isOrganizationSingle = doctypeMeta.config.is_organization_single === 1;
 
-              if((isSingle || isOrganizationSingle) && !isExist) {
+              if(isSingle && !isExist) {
                 const result = await zodula
                   .doctype(doctypeMeta.name)
-                  .insert({})
+                  .insert({
+                    id: doctypeMeta.name,
+                  })
                   .override(true)
                   .bypass(true)
                 return ctx.json(result);
@@ -310,8 +311,7 @@ export const extendDoctype = () => {
             const docid = (ctx as any).params.id;
             const input = ctx.body;
             const isSingle = doctypeMeta.config.is_single === 1;
-            const isOrganizationSingle = doctypeMeta.config.is_organization_single === 1;
-            if(isSingle || isOrganizationSingle) {
+            if(isSingle) {
               const isExist = await trx
                 .select()
                 .from(doctypeMeta.name)

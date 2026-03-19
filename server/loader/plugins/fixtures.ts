@@ -22,7 +22,6 @@ export class FixturesLoader implements FixturesPlugin {
         this.fixtures = [];
         const fixturesGlob = new Glob("apps/*/fixtures/*.fixture.json");
         for await (const fixture of fixturesGlob.scan(".")) {
-            const fixtureJson = await import(path.resolve(fixture))
             const app = loader.from("app").getAppByPath(fixture)
             this.fixtures.push({
                 name: path.basename(fixture).replace(".fixture.json", ""),
@@ -47,7 +46,9 @@ export class FixturesLoader implements FixturesPlugin {
         
         // Load all fixture files and collect IDs
         for (const fixture of this.fixtures) {
-            const fixtureData = await import(path.resolve(fixture.file));
+            const fixtureData = await import(path.resolve(fixture.file)).catch(e => {
+                throw new Error(`Failed to import fixture ${fixture.name}: ${e.message}`);
+            });
             const fixtureArray = Array.isArray(fixtureData.default) ? fixtureData.default : fixtureData.default ? [fixtureData.default] : [];
             
             for (let i = 0; i < fixtureArray.length; i++) {

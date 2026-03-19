@@ -25,11 +25,6 @@ export default $doctype(
       type: "Check",
       label: "Is Single",
     },
-    is_organization_single: {
-      type: "Check",
-      label: "Is Organization Single",
-      description: "If enabled, this doctype behaves like a singleton per organization (one document per org).",
-    },
     naming_series: {
       type: "Text",
       label: "Naming Series",
@@ -76,11 +71,6 @@ export default $doctype(
       label: "Is Child Doctype",
     },
 
-    // Global
-    is_global: {
-      type: "Check",
-      label: "Is Global",
-    },
     is_quick_entry: {
       type: "Check",
       label: "Is Quick Entry",
@@ -91,18 +81,10 @@ export default $doctype(
       label: "Additional Connections",
       description: "The additional connections of the doctype. The connections are defined as an array of objects with the following properties: doctype, field. The doctype is the doctype of the connection and the field is the field of the connection.",
     },
-    insert_tier_required: {
-      type: "Select",
-      options: "0\n1\n2\n3\n4\n5",
-      default: "0",
-      label: "Insert Tier Required",
-      description: "The tier required to insert the doctype. The tier is defined as an object with the following properties: tier, required. The tier is the tier of the organization and the required is the required of the tier.",
-    },
   },
   {
     label: "Doctype",
     is_system_generated: 1,
     display_field: "label",
-    is_global: 1,
   }
 );

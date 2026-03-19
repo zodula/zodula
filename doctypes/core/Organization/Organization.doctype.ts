@@ -4,12 +4,6 @@ export default $doctype<"Organization">({
         label: "Organization Name",
         required: 1,
     },
-    unique_name: {
-        type: "Text",
-        label: "Unique Name",
-        required: 1,
-        only_once: 1,
-    },
     abbr: {
         type: "Text",
         label: "Abbreviation",
@@ -83,22 +77,16 @@ export default $doctype<"Organization">({
         default: "1",
         description: "When printing submittable docs, show Draft/Cancelled watermark if not submitted. Uncheck to hide.",
     },
-    organization_app_tier_items: {
-        type: "Reference Table",
-        label: "App Tier Items",
-        reference: "Organization App Tier Item",
-        perm_level: "5",
-    },
-    organization_roles: {
-        type: "Reference Table",
-        label: "Organization Roles",
-        reference: "Organization Role",
-        perm_level: "1",
+    is_setup: {
+        type: "Check",
+        label: "Is Setup",
+        default: "0",
+        hidden: 1,
+        description: "Internal flag to indicate organization setup is completed.",
     },
 }, {
-    naming_series: "{{unique_name}}",
     label: "Organization",
-    is_global: 1,
+    is_single: 1,
     tabs: JSON.stringify([
         {
             type: "Tab",
@@ -107,7 +95,6 @@ export default $doctype<"Organization">({
                 { type: "section", value: "Basic Information", align: "left" },
                 [
                     { type: "field", value: "organization_name", align: "left" },
-                    { type: "field", value: "unique_name", align: "left" },
                     { type: "field", value: "abbr", align: "left" },
                 ],
                 [{ type: "field", value: "tax_id", align: "left" }],
@@ -144,49 +131,5 @@ export default $doctype<"Organization">({
                 [{ type: "field", value: "doc_status_watermark", align: "left" }],
             ]
         },
-        {
-            type: "Tab",
-            label: "App Tier",
-            layout: [
-                { type: "section", value: "App Tier", align: "left" },
-                [{ type: "field", value: "organization_app_tier_items", align: "left" }],
-            ]
-        },
-        {
-            type: "Tab",
-            label: "Roles",
-            layout: [
-                { type: "section", value: "Organization Roles", align: "left" },
-                [{ type: "field", value: "organization_roles", align: "left" }],
-            ]
-        }
     ])
-})
-    .on("before_insert", async ({ input }) => {
-        input && (input.doc_organization = "System Panel");
-        const user = await $zodula.session.user();
-        const globalSetting = await $zodula.doctype("Global Setting").get("Global Setting").bypass(true);
-        const maxFreeOrgPerUser = globalSetting?.max_free_org_per_user || 1;
-        const userOrgs = await $zodula.doctype("Organization").select().where("owner", "=", user.id).bypass(true).fields(["id"]);
-        const userOrgIds = (userOrgs.docs || []).map((d: { id: string }) => d.id);
-        if (userOrgIds.length === 0) return;
-        const allItems = await $zodula.doctype("Organization App Tier Item").select().where("parentype", "=", "Organization").where("parentfield", "=", "organization_app_tier_items").bypass(true);
-        const now = new Date();
-        const paidOrgIds = new Set(
-            (allItems.docs || []).filter(
-                (item: any) =>
-                    userOrgIds.includes(item.parentid) &&
-                    item.tier_level !== "0" &&
-                    (!item.expires_at || ($zodula.utils.parseDate(item.expires_at) ?? now) >= now)
-            ).map((item: any) => item.parentid)
-        );
-        const freeCount = userOrgIds.length - paidOrgIds.size;
-        if (freeCount >= maxFreeOrgPerUser) {
-            throw new Error("You have reached the maximum number of free organizations");
-        }
-    })
-    .on("before_delete", async ({ doc, old, input }) => {
-        if (doc.owner !== (await $zodula.session.user()).id && !(await $zodula.session.roles()).includes("System Admin")) {
-            throw new Error("You are not allowed to delete this organization");
-        }
-    });
+});

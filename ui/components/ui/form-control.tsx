@@ -33,7 +33,6 @@ export interface FormControlProps {
   docId?: string;
   fieldPath?: string; // The nested field path for reference table fields
   showDescription?: boolean;
-  org?: string;
 
   referenceTableFields?: Record<string, any>;
   extendFields?: Record<string, any>;
@@ -66,7 +65,6 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
       docId,
       fieldPath,
       showDescription = true,
-      org,
       referenceTableFields,
       referenceTableIndexFields,
       extendFields,
@@ -120,7 +118,6 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
               formData={formData}
               fieldPath={fieldPath}
               docId={docId}
-              org={org}
               referenceTableFields={referenceTableFields}
               extendFields={extendFields}
               referenceTableIndexFields={referenceTableIndexFields}

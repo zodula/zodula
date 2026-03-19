@@ -56,25 +56,11 @@ export class ZodulaDoctypeInsert<
       const db = Database("main");
       const user = await this.session.user(true);
       const doctype = loader.from("doctype").get(this.doctypeName);
-      const organizationName = await this.session.organization(true);
-
-      if (!this.input.doc_organization) {
-        this.input.doc_organization = organizationName || "System Panel";
-      }
-      if(!organizationName && !this.options.bypass) {
-        throw new ErrorWithCode("Organization is required", { status: 400 });
-      }
-      const organization = await zodula.doctype("Organization").get(this.input.doc_organization || "System Panel").bypass(true).fields(["abbr", "unique_name"])
-      this.input.doc_organization_abbr = organization?.abbr || "";
-      if (doctype.config.is_global === 1 && organizationName !== "System Panel" && !this.options.bypass) {
-        throw new ErrorWithCode("Global doctype can only be created in System Panel organization", { status: 400 });
-      }
-
-      // Check tier requirements and max_doc limits
-      await this.validateTierRequirements(doctype, organization?.unique_name || "System Panel");
 
       // Prepare the document data
-      let prepared = await this.prepareDocumentData(user, doctype, organization?.abbr || "", organization?.unique_name || "System Panel");
+      let prepared = await this.prepareDocumentData(user, doctype);
+
+      console.log(prepared, "prepared", this.input)
 
       // Validate readonly fields
       ZodulaDoctypeHelper.validateDoc(
@@ -134,8 +120,6 @@ export class ZodulaDoctypeInsert<
   private async prepareDocumentData(
     user: any,
     doctype: DoctypeMetadata,
-    organizationAbbr: string,
-    organizationName: string
   ): Promise<Zodula.SelectDoctype<TN>> {
     let prepared = {
       ...this.input,
@@ -159,7 +143,7 @@ export class ZodulaDoctypeInsert<
     }
 
     // Generate new ID
-    let newId = await naming(this.doctypeName, prepared, organizationAbbr, organizationName || "");
+    let newId = await naming(this.doctypeName, prepared);
     prepared.id = newId;
 
     // Apply override if specified
@@ -183,218 +167,6 @@ export class ZodulaDoctypeInsert<
     return formatted;
   }
 
-  private async validateTierRequirements(doctype: any, organization: string) {
-    // Skip tier validation if bypass is enabled
-    if (this.options.bypass) {
-      return;
-    }
-    // Skip tier and limit checks for System Panel organization
-    if (organization === "System Panel") {
-      return;
-    }
-
-    let orgDoc: any;
-    try {
-      orgDoc = await zodula
-        .doctype("Organization")
-        .get(organization)
-        .bypass(true);
-    } catch {
-      orgDoc = null;
-    }
-    if (!orgDoc) {
-      throw new ErrorWithCode(
-        `Organization ${organization} not found`,
-        { status: 404 }
-      );
-    }
-
-    // Resolve doctype's app id
-    const appName = doctype.appName as string | undefined;
-    let appId: string | null = null;
-    if (appName) {
-      try {
-        const appRes = await zodula.doctype("App").select().where("name", "=", appName as any).bypass(true);
-        appId = appRes.docs?.[0]?.id ?? null;
-      } catch {
-        appId = null;
-      }
-    }
-
-    // Organization's tier for this app: from Organization App Tier Item (effective tier, considering expires_at)
-    let orgTierInt = 0;
-    if (appId && orgDoc.id) {
-      try {
-        const items = await zodula
-          .doctype("Organization App Tier Item")
-          .select()
-          .where("parentid", "=", orgDoc.id)
-          .where("parentype", "=", "Organization")
-          .where("parentfield", "=", "organization_app_tier_items")
-          .where("app", "=", appId)
-          .bypass(true);
-        const item = items.docs?.[0];
-        if (item) {
-          const expiresAt = item.expires_at ? zodula.utils.parseDate(item.expires_at) : null;
-          if (!expiresAt || expiresAt >= new Date()) {
-            orgTierInt = Number(item.tier_level || "0") || 0;
-          }
-        }
-      } catch {
-        orgTierInt = 0;
-      }
-    }
-
-    // Check if insert_tier_required is set in doctype config
-    const insertTierRequiredInt = Number(doctype.config.insert_tier_required) || 0;
-    if (insertTierRequiredInt > 0 && orgTierInt < insertTierRequiredInt) {
-      throw new ErrorWithCode(
-        `This doctype requires tier level ${insertTierRequiredInt} or higher. Your organization has tier level ${orgTierInt} for this app.`,
-        { status: 403 }
-      );
-    }
-
-    // Get limits from App Tier Config for this app (cascading from current tier down)
-    const limits = await this.getTierLimitsForDoctype(orgTierInt, this.doctypeName, appId);
-
-    const { maxDoc, maxDocPerMonth, maxDocPerDay } = limits;
-    const orgWhere = (): [any, "=", string] => ["doc_organization", "=", organization];
-
-    // -1 = unlimited; 0 = cannot insert; >0 = enforce limit
-    if (maxDoc >= 0) {
-      let existingDocs: { count: number };
-      try {
-        const [f, op, v] = orgWhere();
-        existingDocs = await zodula
-          .doctype(this.doctypeName)
-          .select()
-          .where(f, op, v)
-          .bypass(true);
-      } catch {
-        existingDocs = { count: 0 };
-      }
-      const currentCount = existingDocs.count || 0;
-      if (currentCount >= maxDoc) {
-        throw new ErrorWithCode(
-          `Maximum document limit (${maxDoc}) reached for doctype ${this.doctypeName}.`,
-          { status: 403 }
-        );
-      }
-    }
-
-    if (maxDocPerMonth >= 0) {
-      const now = new Date();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-      const monthStartStr = zodula.utils.format(monthStart, "datetime");
-      const monthEndStr = zodula.utils.format(monthEnd, "datetime");
-      let res: { count: number };
-      try {
-        const [f, op, v] = orgWhere();
-        res = await zodula
-          .doctype(this.doctypeName)
-          .select()
-          .where(f, op, v)
-          .where("created_at" as any, ">=", monthStartStr)
-          .where("created_at" as any, "<=", monthEndStr)
-          .bypass(true);
-      } catch {
-        res = { count: 0 };
-      }
-      const countThisMonth = res.count ?? 0;
-      if (countThisMonth >= maxDocPerMonth) {
-        throw new ErrorWithCode(
-          `Maximum documents per month (${maxDocPerMonth}) reached for doctype ${this.doctypeName}.`,
-          { status: 403 }
-        );
-      }
-    }
-
-    if (maxDocPerDay >= 0) {
-      const now = new Date();
-      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-      const dayStartStr = zodula.utils.format(dayStart, "datetime");
-      const dayEndStr = zodula.utils.format(dayEnd, "datetime");
-      let res: { count: number };
-      try {
-        const [f, op, v] = orgWhere();
-        res = await zodula
-          .doctype(this.doctypeName)
-          .select()
-          .where(f, op, v)
-          .where("created_at" as any, ">=", dayStartStr)
-          .where("created_at" as any, "<=", dayEndStr)
-          .bypass(true);
-      } catch {
-        res = { count: 0 };
-      }
-      const countToday = res.count ?? 0;
-      if (countToday >= maxDocPerDay) {
-        throw new ErrorWithCode(
-          `Maximum documents per day (${maxDocPerDay}) reached for doctype ${this.doctypeName}.`,
-          { status: 403 }
-        );
-      }
-    }
-  }
-
-  private async getTierLimitsForDoctype(
-    tierLevel: number,
-    doctypeName: Zodula.DoctypeName,
-    appId: string | null
-  ): Promise<{ maxDoc: number; maxDocPerMonth: number; maxDocPerDay: number }> {
-    const unlimited = { maxDoc: -1, maxDocPerMonth: -1, maxDocPerDay: -1 };
-    if (!appId) return unlimited;
-
-    const parseLimit = (raw: any): number => {
-      if (raw === null || raw === undefined || raw === "") return -1;
-      const n = Number(raw);
-      return Number.isNaN(n) ? -1 : n;
-    };
-
-    for (let tier = tierLevel; tier >= 0; tier--) {
-      let appTierConfig: { docs: any[]; count: number };
-      try {
-        appTierConfig = await zodula
-          .doctype("App Tier Config")
-          .select()
-          .where("tier_level", "=", tier.toString() as "0" | "1" | "2" | "3" | "4" | "5")
-          .where("app", "=", appId)
-          .bypass(true);
-      } catch {
-        appTierConfig = { docs: [], count: 0 };
-      }
-
-      if (appTierConfig.count > 0 && appTierConfig.docs?.[0]) {
-        const configDoc = appTierConfig.docs[0];
-        let doctypeItems: { docs: any[]; count: number };
-        try {
-          doctypeItems = await zodula
-            .doctype("App Tier Config Doctype Item")
-            .select()
-            .where("parentid", "=", configDoc.id)
-            .where("parentype", "=", "App Tier Config")
-            .where("parentfield", "=", "app_tier_config_doctype_items")
-            .where("doctype", "=", doctypeName)
-            .bypass(true);
-        } catch {
-          doctypeItems = { docs: [], count: 0 };
-        }
-
-        if (doctypeItems.count > 0 && doctypeItems.docs?.[0]) {
-          const item = doctypeItems.docs[0];
-          return {
-            maxDoc: parseLimit(item.max_doc),
-            maxDocPerMonth: parseLimit(item.max_doc_per_month),
-            maxDocPerDay: parseLimit(item.max_doc_per_day),
-          };
-        }
-      }
-    }
-
-    return unlimited;
-  }
 
   private async applyFileInsert(
     prepared: Zodula.SelectDoctype<TN>,
@@ -418,7 +190,6 @@ export class ZodulaDoctypeInsert<
             process.cwd(),
             ".zodula_data",
             "files",
-            prepared.doc_organization || "System Panel",
             "doctypes",
             doctypeName,
             docId,
@@ -430,7 +201,6 @@ export class ZodulaDoctypeInsert<
           process.cwd(),
           ".zodula_data",
           "files",
-          prepared.doc_organization || "System Panel",
           doctypeName,
           docId,
           fieldName,
@@ -444,7 +214,6 @@ export class ZodulaDoctypeInsert<
             process.cwd(),
             ".zodula_data",
             "files",
-            prepared.doc_organization || "System Panel",
             doctypeName,
             docId,
             fieldName
@@ -457,7 +226,6 @@ export class ZodulaDoctypeInsert<
                 process.cwd(),
                 ".zodula_data",
                 "files",
-                prepared.doc_organization || "System Panel",
                 doctypeName,
                 docId,
                 fieldName,
@@ -467,7 +235,7 @@ export class ZodulaDoctypeInsert<
           }
         }
 
-        const url = ["", "files", prepared.doc_organization || "System Panel", doctypeName, docId, fieldName, filename].join("/");
+        const url = ["", "files", doctypeName, docId, fieldName, filename].join("/");
         // Set value to url
         (prepared as any)[key] = url;
       }
@@ -636,8 +404,6 @@ export class ZodulaDoctypeInsert<
         updatedPayload["parentid"] = result.id;
         updatedPayload["parentype"] = this.doctypeName;
         updatedPayload["parentfield"] = key;
-        updatedPayload["doc_organization"] = result.doc_organization;
-        updatedPayload["doc_organization_abbr"] = result.doc_organization_abbr;
 
         let formattedPayload = { ...updatedPayload };
         ZodulaDoctypeHelper.formatDoc(

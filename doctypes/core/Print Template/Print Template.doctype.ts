@@ -133,7 +133,6 @@ export default $doctype<"Print Template">({
   search_fields: "name\ntitle",
   display_field: "name",
   naming_series: "{{name}} - {{doctype}}",
-  is_global: 1,
   tabs: JSON.stringify([
     {
       type: "Tab",

@@ -10,7 +10,7 @@ interface OrganizationState {
   setError: (error: string | null) => void;
 }
 
-// Zustand store for organization state (accessible without hooks)
+// Zustand store for organization state (single-tenant)
 export const useOrganizationStore = create<OrganizationState>((set) => ({
   organization: null,
   loading: false,
@@ -23,22 +23,4 @@ export const useOrganizationStore = create<OrganizationState>((set) => ({
 // Hook for React components (subscribes to store changes)
 export function useOrganization() {
   return useOrganizationStore();
-}
-
-/** Fetches organization doc by id. Use when you need the organization for a specific id (e.g. formData.doc_organization). */
-export function useOrganizationById(id: string | null | undefined) {
-  const { doc, loading, error } = useDoc(
-    {
-      doctype: 'Organization',
-      id: id ?? '',
-    },
-    [id ?? '']
-  );
-  return { organization: doc, loading, error };
-}
-
-// Get organization ID directly from store (for use outside React components)
-export function getOrganizationId(): string | null {
-  const state = useOrganizationStore.getState();
-  return state.organization?.id || null;
 }

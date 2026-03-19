@@ -38,5 +38,4 @@ export default $doctype({
     },
 }, {
     label: "Workspace Item",
-    is_global: 1,
 });

@@ -17,8 +17,7 @@ export default function Page() {
             "Global Setting",
             doc?.id || "",
             "logo",
-            (doc?.logo as string) || "",
-            "System Panel"
+            (doc?.logo as string) || ""
         ) + "?w=40&h=40"
         : "/public/zodula/zodula-logo.png";
 

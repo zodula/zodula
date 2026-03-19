@@ -26,7 +26,6 @@ interface QuickEntryDialogProps {
   initialData?: {
     doctype: Zodula.DoctypeName;
     fields: QuickEntryField[];
-    org: string;
     cbUrl?: string;
     fromField?: string;
     prefill?: Record<string, any>;
@@ -259,7 +258,7 @@ export function QuickEntryDialog({
     if (initialData.cbUrl) state.cbUrl = initialData.cbUrl;
     if (initialData.fromField) state.fromField = initialData.fromField;
     if (initialData.prefill && Object.keys(initialData.prefill).length) state.prefill = initialData.prefill;
-    router.push(`/desk/${initialData.org}/doctypes/${initialData.doctype}/form`, { state });
+    router.push(`/desk/doctypes/${initialData.doctype}/form`, { state });
     onClose();
   };
 
@@ -298,7 +297,6 @@ export function QuickEntryDialog({
               onChange={handleChange}
               error={fieldErrors[field.name || ""]}
               formData={formData}
-              org={organization?.id || ""}
               referenceTableFields={referenceTableFields}
               docId=""
             />

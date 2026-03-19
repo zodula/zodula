@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router"
+import { Link } from "react-router"
 import { useRouter } from "../router"
 import { BuildingIcon, ChevronRight, GlobeIcon, Home } from "lucide-react"
 import { cn } from "../../lib/utils"
@@ -19,7 +19,6 @@ export interface BreadcrumbProps {
 
 export const Breadcrumb = ({ className = "", items, showHome = true }: BreadcrumbProps) => {
     const router = useRouter()
-    const { org } = useParams();
     const { t } = useTranslation()
     // Auto-generate breadcrumb from current path if no items provided
     const generateBreadcrumb = (): BreadcrumbItem[] => {
@@ -28,34 +27,34 @@ export const Breadcrumb = ({ className = "", items, showHome = true }: Breadcrum
 
         if (showHome) {
             breadcrumbItems.push({
-                label: org === "System Panel" ? t("System Panel") : org || "",
-                href: `/desk/${org}`,
-                icon: org === "System Panel" ? <GlobeIcon className="zd:w-4 zd:h-4" /> : <BuildingIcon className="zd:w-4 zd:h-4" />
+                label: "Desk",
+                href: `/desk`,
+                icon: <BuildingIcon className="zd:w-4 zd:h-4" />
             })
         }
 
         // Handle different route patterns
-        if (pathSegments.length >= 3 && pathSegments[2] === "doctypes") {
-            const doctype = pathSegments[3]
+        if (pathSegments.length >= 2 && pathSegments[1] === "doctypes") {
+            const doctype = pathSegments[2]
 
             // Add doctype breadcrumb
             breadcrumbItems.push({
                 label: t(decodeURIComponent(doctype || "")),
-                href: `/desk/${org}/doctypes/${doctype}`
+                href: `/desk/doctypes/${doctype}`
             })
 
             // Handle specific doctype actions
-            if (pathSegments.length >= 5) {
-                const action = pathSegments[4]
+            if (pathSegments.length >= 4) {
+                const action = pathSegments[3]
 
                 if (action === "list") {
                     breadcrumbItems.push({
                         label: t("List"),
-                        href: `/desk/${org}/doctypes/${doctype}/list`
+                        href: `/desk/doctypes/${doctype}/list`
                     })
                 } else if (action === "form") {
-                    const id = pathSegments[5]
-                    if (pathSegments.length >= 6) {
+                    const id = pathSegments[4]
+                    if (pathSegments.length >= 5) {
                         // Edit existing document
                         breadcrumbItems.push({
                             label: t("Edit"),
@@ -63,13 +62,13 @@ export const Breadcrumb = ({ className = "", items, showHome = true }: Breadcrum
                         })
                         breadcrumbItems.push({
                             label: t(decodeURIComponent(id || "")),
-                            href: `/desk/${org}/doctypes/${doctype}/form/${id || ""}`
+                            href: `/desk/doctypes/${doctype}/form/${id || ""}`
                         })
                     } else {
                         // Create new document
                         breadcrumbItems.push({
                             label: t("New"),
-                            href: `/desk/${org}/doctypes/${doctype}/form`
+                            href: `/desk/doctypes/${doctype}/form`
                         })
                     }
                 }

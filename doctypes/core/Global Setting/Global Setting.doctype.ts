@@ -46,7 +46,6 @@ export default $doctype({
 }, {
     label: "Global Setting",
     is_single: 1,
-    is_global: 1,
     tabs: JSON.stringify([
         {
             type: "Tab",

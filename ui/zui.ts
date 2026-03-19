@@ -75,6 +75,8 @@ export interface FormScriptContext<DN extends Zodula.DoctypeName> {
   set_badge_config?: (fieldKey: string, config: ListFormatBadgeConfig) => void;
   /** Reload the current form/doc. Available when context is from form view. */
   reload?: () => Promise<void>;
+  /** Clear a reference table (remove all rows). */
+  clear_table?: (tableFieldName: string) => void;
 }
 
 export interface ListFormatBadgeConfig {
@@ -146,8 +148,6 @@ export type SecondaryButtonHandler<DN extends Zodula.DoctypeName, Kind extends "
 // ---------------------------------------------------------------------------
 
 interface ZuiState {
-  org: string | null;
-  setOrg: (org: string | null) => void;
   ui_form_scripts: RegisteredFormScript<Zodula.DoctypeName>[];
   ui_list_scripts: RegisteredListScript<Zodula.DoctypeName>[];
   ui_form_secondary_buttons: Array<{
@@ -225,7 +225,7 @@ export interface ZUI {
     ) => void;
   };
   onboarding: {
-    /** Get onboarding checklist for current org and user (owner vs user mode, steps filtered by role). */
+    /** Get onboarding checklist for current user (owner vs user mode, steps filtered by role). */
     getChecklist: () => Promise<{
       checklist: Array<{
         onboarding: { id: string; name: string; mode: string };
@@ -258,8 +258,6 @@ export interface ZUI {
 }
 
 export const useZuiStore = create<ZuiState>()((set) => ({
-  org: null,
-  setOrg: (org: string | null) => set({ org }),
   ui_form_scripts: [],
   ui_list_scripts: [],
   ui_form_secondary_buttons: [],
@@ -283,20 +281,6 @@ export function useZui(
     return Object.fromEntries(new URLSearchParams(location.search));
   }, [location]);
 
-  useEffect(() => {
-    if (organization?.id) {
-      zuiStore.setOrg(organization.id);
-      return;
-    }
-
-    if (router.pathname.startsWith("/desk/")) {
-      const org = router.pathname.split("/")[2];
-      zuiStore.setOrg(org || null);
-    } else {
-      zuiStore.setOrg(null);
-    }
-  }, [router.pathname, organization?.id]);
-
   const formOn = useCallback(<DN extends Zodula.DoctypeName>(
     doctype: DN,
     events: Partial<Record<FormScriptEvent<DN>, FormScriptHandler<DN>>>
@@ -309,7 +293,7 @@ export function useZui(
         script,
       } as RegisteredFormScript<Zodula.DoctypeName>);
     }
-  }, [zuiStore.org]);
+  }, []);
 
   const listOn = useCallback(<DN extends Zodula.DoctypeName>(
     doctype: DN,
@@ -323,7 +307,7 @@ export function useZui(
         script,
       } as RegisteredListScript<Zodula.DoctypeName>);
     }
-  }, [zuiStore.org]);
+  }, []);
 
   const executeFormScripts = useMemo(
     () =>
@@ -339,7 +323,7 @@ export function useZui(
           await s.script(context);
         }
       },
-    [zuiStore.org]
+    [zuiStore.ui_form_scripts]
   );
 
   const executeListScripts = useMemo(
@@ -428,7 +412,7 @@ export function useZui(
   );
 
   const zui = {
-    org: organization?.id ?? zuiStore.org,
+    org: organization?.id ?? null,
     router,
     params,
     search,
@@ -473,10 +457,9 @@ export function useZui(
   const isCallbackMode = typeof callback === "function" && Array.isArray(deps);
   useEffect(() => {
     if (!isCallbackMode) return;
-    if (!zui.org) return;
     void (async () => {
       await (callback as (zui: ZUI) => void | Promise<void>)(zui);
     })();
-  }, isCallbackMode ? [...deps, zui.org] : []);
+  }, isCallbackMode ? [...deps] : []);
   return isCallbackMode ? undefined : zui;
 }

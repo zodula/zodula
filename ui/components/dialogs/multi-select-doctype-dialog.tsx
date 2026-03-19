@@ -5,8 +5,6 @@ import type { IFilter, IOperator } from "@/zodula/server/zodula/type";
 import { FormControl } from "@/zodula/ui/components/ui/form-control";
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { ClientFieldHelper } from "@/zodula/client/field";
-import { useOrganization } from "@/zodula/ui/hooks/use-organization";
-import { useParams } from "react-router";
 import { FilterContent } from "@/zodula/ui/components/list/FilterContent";
 import { ListTable, type ListColumn } from "@/zodula/ui/components/list/ListTable";
 import { zodula } from "@/zodula/client";
@@ -102,9 +100,6 @@ export function MultiSelectDoctypeDialog({
   const standardFilterFieldNames = initialData?.standard_filter_fields;
   const columnsFieldNames = initialData?.columns;
   const single = initialData?.single === true;
-  const { organization } = useOrganization();
-  const params = useParams();
-  const org = organization?.id ?? params?.org ?? "";
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [standardFilterValues, setStandardFilterValues] = useState<Record<string, any>>(() =>
@@ -327,7 +322,6 @@ export function MultiSelectDoctypeDialog({
                 onChange={(fieldName, value) => setStandardFilter(fieldName, value)}
                 readonly={false}
                 formData={standardFilterValues}
-                org={org}
                 hideFormControl={false}
               />
             ))}
