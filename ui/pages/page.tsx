@@ -30,7 +30,7 @@ export default function Page() {
             <WebsiteNavbar currentPage="Home" logoUrl={logoUrl} />
             <main className="zd:flex-1 zd:flex zd:flex-col zd:gap-4 zd:items-center zd:justify-center zd:relative zd:z-10 zd:pt-20 zd:p-8 zd:text-muted-foreground">
                 <SearchIcon className="zd:w-10 zd:h-10" />
-                Please Set Homepage
+                Please Set Homepages
             </main>
         </div>
     );

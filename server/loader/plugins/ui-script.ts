@@ -20,50 +20,56 @@ const replaceSpecialCharacters = (path: string) => {
 export class UiScriptLoader implements BasePlugin<UiScriptMetadata> {
     private scripts: UiScriptMetadata[] = [];
 
-    async load(): Promise<UiScriptMetadata[]> {
+    /**
+     * Loads UI script definitions from the filesystem.
+     *
+     * @param filePath  When provided, performs a scoped HMR reload of only that
+     *                  file with cache busting.
+     *                  When omitted, clears all scripts and does a full scan.
+     */
+    async load(filePath?: string): Promise<UiScriptMetadata[]> {
+        if (filePath) {
+            await this.loadSingleScript(filePath, true);
+            return this.scripts;
+        }
+
+        // Full reload — reset first to prevent duplicates
+        this.scripts = [];
         const scriptGlob = new Glob("apps/*/ui/scripts/**/*.ui.tsx");
         const doctypeScriptGlob = new Glob("apps/*/doctypes/*/*/*.ui.tsx");
-        this.scripts = [];
-        
-        // Load scripts from ui/scripts directory
-        for await (const scriptPath of scriptGlob.scan(".")) {
-            const app = loader.from("app").getAppByPath(scriptPath);
-            const importName = replaceSpecialCharacters(scriptPath);
-            const importModule = await import(path.resolve(scriptPath));
 
-            if(!importModule.default) {
-                continue;
-            }
-            
-            this.scripts.push({
-                name: path.basename(scriptPath, ".tsx"),
-                file: scriptPath,
-                appName: app?.packageName || "",
-                importPath: path.resolve(scriptPath),
-                importName: `UI_SCRIPT_${importName}`,
-                importModule: importModule,
-                defaultExport: importModule.default
-            });
+        for await (const scriptPath of scriptGlob.scan(".")) {
+            await this.loadSingleScript(scriptPath, false);
         }
-        
-        // Load scripts from doctype folders
         for await (const scriptPath of doctypeScriptGlob.scan(".")) {
-            const app = loader.from("app").getAppByPath(scriptPath);
-            const importName = replaceSpecialCharacters(scriptPath);
-            const importModule = await import(path.resolve(scriptPath));
-            
-            this.scripts.push({
-                name: path.basename(scriptPath, ".tsx"),
-                file: scriptPath,
-                appName: app?.packageName || "",
-                importPath: path.resolve(scriptPath),
-                importName: `UI_SCRIPT_${importName}`,
-                importModule: importModule,
-                defaultExport: importModule.default
-            });
+            await this.loadSingleScript(scriptPath, false);
         }
-        
+
         return this.scripts;
+    }
+
+    /** Load (or hot-reload) a single .ui.tsx file. */
+    private async loadSingleScript(scriptPath: string, bust: boolean): Promise<void> {
+        const resolvedPath = path.resolve(scriptPath);
+        // Remove stale entry
+        this.scripts = this.scripts.filter(s => s.importPath !== resolvedPath);
+
+        const app = loader.from("app").getAppByPath(scriptPath);
+        const importName = replaceSpecialCharacters(scriptPath);
+        const specifier = bust ? `${resolvedPath}?t=${Date.now()}` : resolvedPath;
+        const importModule = await import(specifier);
+
+        if (!importModule.default) return;
+
+        this.scripts.push({
+            name: path.basename(scriptPath, ".tsx"),
+            file: scriptPath,
+            appName: app?.packageName || "",
+            importPath: resolvedPath,
+            importName: `UI_SCRIPT_${importName}`,
+            importModule,
+            defaultExport: importModule.default
+        });
     }
 
     list(): UiScriptMetadata[] {

@@ -1,8 +1,7 @@
 import { Command } from "nailgun";
 import { applyMigrations } from "@/zodula/commands/migrate/apply-migration";
-import { applyPredefine } from "@/zodula/commands/migrate/apply-predefine";
-import { applyTranslation } from "@/zodula/commands/migrate/apply-translation";
 import { startup } from "@/zodula/server/startup";
+import { loader } from "@/zodula/server/loader";
 import { SyncMigrator } from "@/zodula/server/migrator/migrator.sync";
 import {
   Database,
@@ -45,8 +44,9 @@ export const doMigrate = async (
       trx: trx,
     });
     await applyMigrations(schema);
-    await applyPredefine();
-    await applyTranslation();
+    // applyPredefined() covers both doctype metadata and translation sync
+    // via the registered loader plugins (DoctypeLoader + TranslationLoader)
+    await loader.applyPredefined();
   });
   // DatabaseHelper.delete("__temp__apply_migration")
 };

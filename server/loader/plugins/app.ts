@@ -58,4 +58,5 @@ export class AppLoader implements AppPlugin {
             throw new Error("Duplicate app names");
         }
     }
+
 }

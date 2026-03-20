@@ -421,11 +421,16 @@ export class DoctypeLoader implements DoctypePlugin {
     }
 
     /**
-     * Imports a doctype handler with proper error handling
+     * Imports a doctype handler with proper error handling.
+     *
+     * @param bust  When true, appends a unique query string so Bun skips the
+     *              module-registry cache and re-evaluates the file from disk.
+     *              Use this during HMR when the file on disk has changed.
      */
-    private async importDoctypeHandler(doctypePath: string): Promise<{ default: DoctypeHandler } | null> {
+    private async importDoctypeHandler(doctypePath: string, bust: boolean = false): Promise<{ default: DoctypeHandler } | null> {
         try {
-            return await import(doctypePath) as { default: DoctypeHandler };
+            const specifier = bust ? `${path.resolve(doctypePath)}?t=${Date.now()}` : doctypePath;
+            return await import(specifier) as { default: DoctypeHandler };
         } catch (error) {
             console.error(`[Error] Failed to import doctype from ${doctypePath}:`, error);
             return null;
@@ -458,12 +463,16 @@ export class DoctypeLoader implements DoctypePlugin {
     }
 
     /**
-     * Loads a single doctype from file path
+     * Loads a single doctype from file path.
+     *
+     * @param bust  When true the module cache is bypassed so the latest version
+     *              of the file is read from disk (used for HMR).
      */
     private async loadSingleDoctype(
         doctypePath: string,
         relatives: Map<Zodula.DoctypeName, DoctypeRelative[]>,
-        children: Map<Zodula.DoctypeName, DoctypeChild[]>
+        children: Map<Zodula.DoctypeName, DoctypeChild[]>,
+        bust: boolean = false
     ): Promise<DoctypeMetadata | null> {
         const comparePath = doctypePath.replace(".doctype.ts", "");
         const app = loader.from("app").getAppByPath(comparePath);
@@ -479,7 +488,7 @@ export class DoctypeLoader implements DoctypePlugin {
             return null;
         }
 
-        const handlerImport = await this.importDoctypeHandler(doctypePath);
+        const handlerImport = await this.importDoctypeHandler(doctypePath, bust);
         if (!handlerImport) return null;
 
         const doctypeWithConfig = handlerImport.default;
@@ -527,22 +536,32 @@ export class DoctypeLoader implements DoctypePlugin {
 
 
     /**
-     * Loads all doctype definitions from the filesystem
-     * 
-     * Scans for .doctype.ts files in apps/{app}/doctypes/{domain}/{doctype}/{doctype}.doctype.ts directories and processes them.
-     * Handles field relationships, event registration, and metadata extraction.
-     * 
+     * Loads all doctype definitions from the filesystem.
+     *
+     * Always performs a full scan so cross-doctype relationships (relatives,
+     * children) are rebuilt correctly.
+     *
+     * @param filePath  When provided, the module cache is bypassed for that
+     *                  specific file so the latest on-disk content is used.
+     *                  All other files are loaded from the module cache as
+     *                  normal.  Pass the changed file path during HMR so that
+     *                  newly added/removed fields are picked up immediately.
+     *
      * @returns Promise resolving to array of loaded doctype metadata
      */
-    async load(): Promise<DoctypeMetadata[]> {
+    async load(filePath?: string): Promise<DoctypeMetadata[]> {
         const doctypesGlob = new Glob("apps/*/doctypes/*/*/*.doctype.ts");
         events.clear()
         this.doctypes = []
         const _relatives = new Map<Zodula.DoctypeName, DoctypeRelative[]>()
         const _children = new Map<Zodula.DoctypeName, DoctypeChild[]>()
 
+        // Resolve once so we can compare cheaply inside the loop
+        const bustAbsPath = filePath ? path.resolve(filePath) : null
+
         for await (const doctypePath of doctypesGlob.scan(".")) {
-            const doctypeMetadata = await this.loadSingleDoctype(doctypePath, _relatives, _children);
+            const shouldBust = bustAbsPath !== null && path.resolve(doctypePath) === bustAbsPath
+            const doctypeMetadata = await this.loadSingleDoctype(doctypePath, _relatives, _children, shouldBust);
             if (doctypeMetadata) {
                 this.doctypes.push(doctypeMetadata);
             }
@@ -588,6 +607,27 @@ export class DoctypeLoader implements DoctypePlugin {
 
     getAllChildren(): DoctypeChild[] {
         return this.doctypes.flatMap((doctype) => doctype.children || []);
+    }
+
+    /**
+     * Apply predefined metadata to the database for loaded doctypes.
+     *
+     * @param filePath  When provided, only the doctype that maps to this file
+     *                  is synced (scoped HMR reload).  When omitted, all
+     *                  loaded doctypes are synced (full run).
+     */
+    async applyPredefined(filePath?: string): Promise<void> {
+        const { applyPredefined: _apply } = await import("@/zodula/commands/migrate/apply-predefine");
+
+        if (filePath) {
+            const resolvedPath = path.resolve(filePath);
+            const doctype = this.doctypes.find((d) => d.dir === resolvedPath);
+            if (doctype) {
+                await _apply([doctype.name]);
+            }
+        } else {
+            await _apply();
+        }
     }
 
     /**

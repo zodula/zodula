@@ -15,7 +15,7 @@ import { extendPage } from "./serve/extend/page";
 import { extendTranslation } from "./serve/extend/translation";
 
 
-async function startServer() {
+export async function startServer() {
     await startup()
     const server = new BXO({
         serve: {
@@ -24,7 +24,9 @@ async function startServer() {
     })
         .beforeRequest((ctx) => {
             const time = new Date().toISOString().split("T")[1]?.split(".")[0]
-            logger.debug(`[${time}] ${ctx.url}`)
+            const pathname = ctx.url.split("/").slice(3).join("/")
+            const pathnameWithoutQuery = pathname.split("?")[0] || ""
+            logger.debug(`[${time}] ${`[${ctx.method}]`.padEnd(8)} /${decodeURIComponent(pathnameWithoutQuery)}`)
             return ctx
         })
         .onError((error) => {
@@ -69,4 +71,7 @@ async function startServer() {
     }
 }
 
-startServer()
+// Allow this file to be executed directly (e.g. `bun run serve.tsx` for prod/start)
+if (import.meta.main) {
+    startServer()
+}

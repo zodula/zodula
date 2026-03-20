@@ -71,16 +71,27 @@ export class SyncMigrator {
   private readonly handleNotNullConstraints: boolean = false;
 
   /**
-   * Compare current database schema with doctype definitions and return the differences
+   * Compare current database schema with doctype definitions and return the differences.
+   *
+   * @param scopedDoctypeNames  Optional list of doctype names to restrict the diff to.
+   *                            When provided only those doctypes (and their tables/columns)
+   *                            are inspected — useful for fast HMR schema sync.
+   *                            When omitted the full set of doctypes is compared.
    */
   async compare(
     currentSchema: DatabaseSchemaName,
-    applyDestructive: boolean = false
+    applyDestructive: boolean = false,
+    scopedDoctypeNames?: string[]
   ): Promise<SyncSchemaDiff> {
     const currentDb = Database(currentSchema);
 
-    // Get all doctype definitions
-    const doctypes = loader.from("doctype").list();
+    // Get all (or scoped) doctype definitions
+    let doctypes = loader.from("doctype").list();
+    if (scopedDoctypeNames && scopedDoctypeNames.length > 0) {
+      doctypes = doctypes.filter((d) =>
+        scopedDoctypeNames.includes(d.name as string)
+      );
+    }
     const doctypeNames = new Set(doctypes.map((d) => d.name as string));
     // Get current database tables
     const currentTables = await this.getTables(currentDb);

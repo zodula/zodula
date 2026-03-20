@@ -484,6 +484,11 @@ async function processApps(
 }
 
 // Cleanup functions
+
+/**
+ * Full global cleanup — removes every row whose ID is not in the processed set.
+ * Used at the end of a full (all-doctype) apply-predefined run.
+ */
 async function cleanupOrphanedEntities(
   trx: Bunely,
   processedEntities: ProcessedEntities
@@ -530,6 +535,66 @@ async function cleanupOrphanedEntities(
     }
   } catch (error) {
     console.error("Failed to cleanup orphaned entities:", error);
+    throw error;
+  }
+}
+
+/**
+ * Scoped cleanup — only removes stale rows for the specific doctypes that were
+ * just reloaded.  Safe to call during HMR because it never touches rows that
+ * belong to other doctypes.
+ */
+async function cleanupScopedDoctypeEntities(
+  trx: Bunely,
+  doctypeNames: string[],
+  processedFieldIds: string[],
+  processedRelativeIds: string[],
+  processedChildIds: string[]
+): Promise<void> {
+  try {
+    for (const doctypeName of doctypeNames) {
+      // Fields: remove any field of this doctype that is no longer defined
+      if (processedFieldIds.length > 0) {
+        await trx
+          .delete("Field")
+          .where("doctype", "=", doctypeName)
+          .where("id", "NOT IN", processedFieldIds)
+          .execute();
+      } else {
+        // Doctype now has no fields — delete all its field rows
+        await trx.delete("Field").where("doctype", "=", doctypeName).execute();
+      }
+
+      // Relatives: remove stale entries where this doctype is the parent
+      if (processedRelativeIds.length > 0) {
+        await trx
+          .delete("Doctype Relative")
+          .where("parent_doctype", "=", doctypeName)
+          .where("id", "NOT IN", processedRelativeIds)
+          .execute();
+      } else {
+        await trx
+          .delete("Doctype Relative")
+          .where("parent_doctype", "=", doctypeName)
+          .execute();
+      }
+
+      // Children: remove stale entries where this doctype is the parent
+      if (processedChildIds.length > 0) {
+        await trx
+          .delete("Doctype Children")
+          .where("parent_doctype", "=", doctypeName)
+          .where("id", "NOT IN", processedChildIds)
+          .execute();
+      } else {
+        await trx
+          .delete("Doctype Children")
+          .where("parent_doctype", "=", doctypeName)
+          .execute();
+      }
+    }
+  } catch (error) {
+    console.error("Failed to cleanup scoped doctype entities:", error);
     throw error;
   }
 }
@@ -594,10 +659,26 @@ async function upsertDoctype(
   }
 }
 
-export const applyPredefine = async (): Promise<void> => {
+/**
+ * Apply predefined metadata to the database.
+ *
+ * @param doctypeNames  When provided, only the listed doctypes are processed
+ *                      and cleanup is scoped to those doctypes only (safe for
+ *                      HMR hot-reloads).  When omitted, all doctypes and apps
+ *                      are processed with a full global orphan cleanup.
+ *
+ * This function is meant to be called through `loader.applyPredefined()` —
+ * do not import and call it directly.
+ */
+export const applyPredefined = async (doctypeNames?: string[]): Promise<void> => {
+  const isScoped = doctypeNames !== undefined;
   try {
     const trx = Database("main");
-    const doctypes = loader.from("doctype").list();
+    const allDoctypes = loader.from("doctype").list();
+    const doctypes = isScoped
+      ? allDoctypes.filter((d) => doctypeNames.includes(d.name))
+      : allDoctypes;
+
     const processedEntities: ProcessedEntities = {
       doctypes: [],
       fields: [],
@@ -611,10 +692,9 @@ export const applyPredefine = async (): Promise<void> => {
     let relativeIdx = 0;
     let childIdx = 0;
 
-    // Process all doctypes
+    // Process doctypes (all or scoped subset)
     for (const doctype of doctypes) {
       try {
-        // Process doctype
         const doctypeResult = await upsertDoctype(trx, doctype, doctypeIdx);
         if (!doctypeResult.success) {
           console.error(
@@ -636,42 +716,49 @@ export const applyPredefine = async (): Promise<void> => {
         processedEntities.fields.push(...fieldResults.processedFieldIds);
         fieldIdx += fieldResults.processedFieldIds.length;
 
-        processedEntities.relatives.push(
-          ...relativeResults.processedRelativeIds
-        );
+        processedEntities.relatives.push(...relativeResults.processedRelativeIds);
         relativeIdx += relativeResults.processedRelativeIds.length;
 
         processedEntities.children.push(...childResults.processedChildIds);
         childIdx += childResults.processedChildIds.length;
       } catch (error) {
         console.error(`Error processing doctype ${doctype.name}:`, error);
-        // Continue with next doctype
       }
     }
 
-    // Process apps
-    try {
-      logger.info(`Applying apps predefined`);
-      const appResults = await processApps(trx);
-      processedEntities.apps.push(...appResults.processedAppNames);
-    } catch (error) {
-      console.error("Error processing apps:", error);
-    }
+    if (isScoped) {
+      // Scoped run: only clean up rows belonging to the changed doctypes
+      await cleanupScopedDoctypeEntities(
+        trx,
+        doctypeNames,
+        processedEntities.fields,
+        processedEntities.relatives,
+        processedEntities.children
+      );
+    } else {
+      // Full run: process apps and perform global orphan cleanup
+      try {
+        logger.info(`Applying apps predefined`);
+        const appResults = await processApps(trx);
+        processedEntities.apps.push(...appResults.processedAppNames);
+      } catch (error) {
+        console.error("Error processing apps:", error);
+      }
 
-    // Clean up orphaned entities
-    try {
-      logger.info("Cleaning up orphaned entities...");
-      await cleanupOrphanedEntities(trx, processedEntities);
-    } catch (error) {
-      logger.error("Error during cleanup:", error);
-      throw error; // Re-throw cleanup errors as they're critical
+      try {
+        logger.info("Cleaning up orphaned entities...");
+        await cleanupOrphanedEntities(trx, processedEntities);
+      } catch (error) {
+        logger.error("Error during cleanup:", error);
+        throw error;
+      }
     }
 
     logger.info(
       `Processed: ${processedEntities.doctypes.length} doctypes, ${processedEntities.fields.length} fields, ${processedEntities.relatives.length} relatives, ${processedEntities.children.length} children, ${processedEntities.apps.length} apps`
     );
   } catch (error) {
-    console.error("Critical error in applyPredefine:", error);
+    console.error("Critical error in applyPredefined:", error);
     throw error;
   }
 };

@@ -35,6 +35,12 @@ import { useColumnDnd } from "../../hooks/use-column-dnd";
 import { useColumnSettings } from "../../hooks/use-column-settings";
 import { useColumnResize } from "../../hooks/use-column-resize";
 import { useParams } from "react-router";
+import {
+  columnFilterMatchesCell,
+  defaultOperatorForSheetColumn,
+  getSupportedOperatorOptionsForSheetColumn,
+  resolveSheetColumnOperator,
+} from "./filter-operator-utils";
 
 // Table header cell component that uses the resize hook
 interface TableHeaderCellProps {
@@ -219,8 +225,7 @@ export interface SheetViewExportHandle {
   resetVisibleColumns(): void;
 }
 
-type ColumnFilterOperator = "=" | "LIKE";
-type ColumnFilterState = Record<string, { operator: ColumnFilterOperator; value: string }>;
+type ColumnFilterState = Record<string, { operator: IOperator; value: string }>;
 
 export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps>(function SheetView(
   {
@@ -540,9 +545,12 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
   // UI-only column filters applied in-memory (does not call server)
   const filteredDocs = useMemo(() => {
     const visibleFilterColumns = new Set(derivedColumns.map((col) => String(col.key)));
-    const activeFilters = Object.entries(columnFilters).filter(
-      ([key, cfg]) => visibleFilterColumns.has(key) && String(cfg?.value || "").trim().length > 0
-    );
+    const activeFilters = Object.entries(columnFilters).filter(([key, cfg]) => {
+      if (!visibleFilterColumns.has(key)) return false;
+      const op = resolveSheetColumnOperator(fields, key, cfg.operator);
+      if (op === "IS NULL" || op === "IS NOT NULL") return true;
+      return String(cfg?.value || "").trim().length > 0;
+    });
 
     if (activeFilters.length === 0) {
       return docs;
@@ -550,16 +558,11 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
 
     return docs.filter((doc) =>
       activeFilters.every(([key, cfg]) => {
-        const targetValue = String(doc?.[key] ?? "").trim().toLowerCase();
-        const inputValue = String(cfg.value ?? "").trim().toLowerCase();
-        if (!inputValue) return true;
-        if (cfg.operator === "=") {
-          return targetValue === inputValue;
-        }
-        return targetValue.includes(inputValue);
+        const op = resolveSheetColumnOperator(fields, key, cfg.operator);
+        return columnFilterMatchesCell(doc?.[key], op, cfg.value ?? "");
       })
     );
-  }, [docs, derivedColumns, columnFilters]);
+  }, [docs, derivedColumns, columnFilters, fields]);
 
   // Keep latest data for imperative exportCSV
   const exportDataRef = useRef({
@@ -1513,10 +1516,19 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
                     columnKey === "_count"
                       ? 100
                       : sheetView.getColumnWidth(columnKey);
+                  const operatorOptions =
+                    getSupportedOperatorOptionsForSheetColumn(fields, columnKey);
                   const filterConfig = columnFilters[columnKey] || {
-                    operator: "LIKE" as ColumnFilterOperator,
+                    operator: defaultOperatorForSheetColumn(fields, columnKey),
                     value: "",
                   };
+                  const resolvedOp = resolveSheetColumnOperator(
+                    fields,
+                    columnKey,
+                    filterConfig.operator
+                  );
+                  const valueHidden =
+                    resolvedOp === "IS NULL" || resolvedOp === "IS NOT NULL";
                   return (
                     <th
                       key={`${columnKey}-filter`}
@@ -1528,43 +1540,62 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
                       }}
                     >
                       <div className="zd:flex zd:items-center zd:gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="zd:h-6 zd:min-w-0 zd:px-1.5 zd:text-xs"
-                          onClick={() => {
-                            setColumnFilters((prev) => {
-                              const current = prev[columnKey] || {
-                                operator: "LIKE" as ColumnFilterOperator,
-                                value: "",
-                              };
-                              return {
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="zd:h-6 zd:w-14 zd:min-w-14 zd:shrink-0 zd:px-1 zd:text-xs"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <span className="zd:truncate">{resolvedOp}</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="start"
+                            className="zd:max-h-64 zd:overflow-y-auto"
+                          >
+                            {operatorOptions.map((opt) => (
+                              <DropdownMenuItem
+                                key={opt.value}
+                                onClick={() => {
+                                  setColumnFilters((prev) => ({
+                                    ...prev,
+                                    [columnKey]: {
+                                      operator: opt.value,
+                                      value: prev[columnKey]?.value ?? "",
+                                    },
+                                  }));
+                                }}
+                              >
+                                <span className="zd:font-mono zd:text-xs">
+                                  {opt.value}
+                                </span>
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        {!valueHidden && (
+                          <Input
+                            value={filterConfig.value}
+                            onChange={(e) => {
+                              const nextValue = e.target.value;
+                              setColumnFilters((prev) => ({
                                 ...prev,
                                 [columnKey]: {
-                                  ...current,
-                                  operator: current.operator === "=" ? "LIKE" : "=",
+                                  operator: resolveSheetColumnOperator(
+                                    fields,
+                                    columnKey,
+                                    prev[columnKey]?.operator
+                                  ),
+                                  value: nextValue,
                                 },
-                              };
-                            });
-                          }}
-                        >
-                          {filterConfig.operator}
-                        </Button>
-                        <Input
-                          value={filterConfig.value}
-                          onChange={(e) => {
-                            const nextValue = e.target.value;
-                            setColumnFilters((prev) => ({
-                              ...prev,
-                              [columnKey]: {
-                                operator: prev[columnKey]?.operator || "LIKE",
-                                value: nextValue,
-                              },
-                            }));
-                          }}
-                          className="zd:h-7"
-                        />
+                              }));
+                            }}
+                            className="zd:h-7 zd:min-w-0 zd:flex-1"
+                          />
+                        )}
                       </div>
                     </th>
                   );

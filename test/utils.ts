@@ -32,10 +32,8 @@ export async function initZodulaTest() {
     await migrator.apply("main", diff, false);
 
     // Create core metadata rows (Doctype, Field, Children, Relatives, etc.)
-    const { applyPredefine } = await import(
-      "@/zodula/commands/migrate/apply-predefine"
-    );
-    await applyPredefine();
+    const { loader } = await import("@/zodula/server/loader");
+    await loader.applyPredefined();
 
     // Seed base fixtures like Roles/Workspace so permission checks can work.
     const { applyFixtures } = await import(

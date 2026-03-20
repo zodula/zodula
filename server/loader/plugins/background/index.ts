@@ -53,29 +53,39 @@ export class BackgroundLoader implements BasePlugin<BackgroundMetadata> {
     }
 
     /**
-     * Loads all background function definitions from the filesystem
-     * 
-     * Scans for .ts files in apps background directories and processes them.
-     * Extracts background function handlers and their configurations.
-     * 
-     * @returns Promise resolving to array of loaded background function metadata
+     * Loads background function definitions from the filesystem.
+     *
+     * @param filePath  When provided, performs a scoped HMR reload of only that
+     *                  file: removes the old entry and re-imports with cache busting.
+     *                  When omitted, clears all backgrounds and does a full scan.
      */
-    async load() {
-        const backgroundGlob = new Glob("apps/*/background/**/*.ts");
-
-        for await (const backgroundPath of backgroundGlob.scan(".")) {
-            await this.loadBackgroundsFromFile(backgroundPath);
+    async load(filePath?: string) {
+        if (filePath) {
+            // Scoped HMR: drop the old entry for this file and re-import it
+            const resolvedPath = path.resolve(filePath);
+            this.backgrounds = this.backgrounds.filter(
+                b => path.resolve(b.file_path) !== resolvedPath
+            );
+            await this.loadBackgroundsFromFile(filePath, true);
+        } else {
+            // Full reload — always reset first to avoid duplicate entries
+            this.backgrounds = [];
+            const backgroundGlob = new Glob("apps/*/background/**/*.ts");
+            for await (const backgroundPath of backgroundGlob.scan(".")) {
+                await this.loadBackgroundsFromFile(backgroundPath, false);
+            }
         }
 
         return this.backgrounds;
     }
 
     /**
-     * Loads background functions from a single file
+     * Loads background functions from a single file.
+     * @param bust  When true the module cache is bypassed (used during HMR).
      */
-    private async loadBackgroundsFromFile(backgroundPath: string): Promise<void> {
+    private async loadBackgroundsFromFile(backgroundPath: string, bust: boolean): Promise<void> {
         try {
-            const backgroundImport = await this.importBackgroundFile(backgroundPath);
+            const backgroundImport = await this.importBackgroundFile(backgroundPath, bust);
             if (!backgroundImport || !backgroundImport.default) return;
 
             const app = this.getAppFromPath(backgroundPath);
@@ -98,11 +108,13 @@ export class BackgroundLoader implements BasePlugin<BackgroundMetadata> {
     }
 
     /**
-     * Imports a background function file with error handling
+     * Imports a background function file with optional cache busting for HMR.
      */
-    private async importBackgroundFile(backgroundPath: string): Promise<any | null> {
+    private async importBackgroundFile(backgroundPath: string, bust: boolean): Promise<any | null> {
         try {
-            return await import(path.resolve(backgroundPath));
+            const resolved = path.resolve(backgroundPath);
+            const specifier = bust ? `${resolved}?t=${Date.now()}` : resolved;
+            return await import(specifier);
         } catch (error) {
             logger.error(`Failed to import background function file ${backgroundPath}:`, error);
             return null;

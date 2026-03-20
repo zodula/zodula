@@ -46,7 +46,6 @@ export default new Command("start")
         
         // Watch for .zodula/.watch_trigger file (for migrate commands)
         const watchTriggerPath = path.join(process.cwd(), ".zodula", ".watch_trigger")
-        console.log(`👀 Watching ${watchTriggerPath} for migration triggers...`)
         
         // Ensure .zodula directory exists
         const zodulaDir = path.join(process.cwd(), ".zodula")

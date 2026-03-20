@@ -20,7 +20,7 @@ import { ExtendLoader } from "./plugins/extend";
 import { ActionLoader } from "./plugins/action";
 import { BackgroundLoader } from "./plugins/background";
 import { UiScriptLoader } from "./plugins/ui-script";
-// import { AppLoader, DoctypeLoader, DomainLoader, FixturesLoader, PortalLoader, PageLoader, ExtendLoader, ActionLoader } from "./plugins";
+import { TranslationLoader } from "./plugins/translation";
 
 export const loader = new Loader()
     .register("app", new AppLoader())
@@ -33,6 +33,7 @@ export const loader = new Loader()
     .register("action", new ActionLoader())
     .register("background", new BackgroundLoader())
     .register("ui-script", new UiScriptLoader())
+    .register("translation", new TranslationLoader())
 
 
 export const $doctype = loader.from("doctype").$doctype;

@@ -44,33 +44,53 @@ export class ExtendLoader implements BasePlugin<ExtendMetadata> {
         }
     }
 
-    async load() {
-        this.extends = [];
-        const extendGlob = new Glob("apps/*/scripts/**/*.extend.ts");
-        
-        for await (const extendPath of extendGlob.scan(".")) {
-            const app = loader.from("app").getAppByPath(extendPath);
-            if (!app) {
-                continue;
+    /**
+     * Loads extend handlers from the filesystem.
+     *
+     * @param filePath  When provided, performs a scoped HMR reload of only that
+     *                  file: removes the old entry and re-imports with cache busting.
+     *                  When omitted, clears all handlers and does a full scan.
+     */
+    async load(filePath?: string) {
+        if (filePath) {
+            // Scoped HMR: drop the old entry and re-import the changed file
+            this.extends = this.extends.filter(
+                e => !filePath.endsWith(`${e.appName}/scripts`)
+            );
+            await this.loadExtendFromFile(filePath, true);
+        } else {
+            this.extends = [];
+            const extendGlob = new Glob("apps/*/scripts/**/*.extend.ts");
+            for await (const extendPath of extendGlob.scan(".")) {
+                await this.loadExtendFromFile(extendPath, false);
             }
-            
-            const extendImport = await import(path.resolve(extendPath)).catch((e) => null);
-            if (!extendImport) {
-                continue;
-            }
-            
-            const extendDefault = extendImport.default;
-            if (!extendDefault || !extendDefault.handler) {
-                continue;
-            }
-            
+        }
+
+        return this.extends;
+    }
+
+    /**
+     * Loads a single extend handler file.
+     * @param bust  When true the module cache is bypassed (used during HMR).
+     */
+    private async loadExtendFromFile(extendPath: string, bust: boolean): Promise<void> {
+        const app = loader.from("app").getAppByPath(extendPath);
+        if (!app) return;
+
+        try {
+            const resolved = path.resolve(extendPath);
+            const specifier = bust ? `${resolved}?t=${Date.now()}` : resolved;
+            const extendImport = await import(specifier);
+            const extendDefault = extendImport?.default;
+            if (!extendDefault?.handler) return;
+
             this.extends.push({
                 appName: app.packageName,
                 handler: extendDefault.handler
             });
+        } catch {
+            // silently skip files that fail to import
         }
-        
-        return this.extends;
     }
     list(): any[] {
         return this.extends

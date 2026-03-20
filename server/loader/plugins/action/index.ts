@@ -38,29 +38,39 @@ export class ActionLoader implements BasePlugin<ActionMetadata> {
     $action = createRoute
 
     /**
-     * Loads all action definitions from the filesystem
-     * 
-     * Scans for .ts files in apps directories and processes them.
-     * Extracts action handlers and their configurations.
-     * 
-     * @returns Promise resolving to array of loaded action metadata
+     * Loads action definitions from the filesystem.
+     *
+     * @param filePath  When provided, performs a scoped HMR reload of only that
+     *                  file: removes the old entry and re-imports with cache busting.
+     *                  When omitted, clears all actions and does a full scan.
      */
-    async load() {
-        const actionGlob = new Glob("apps/*/actions/**/*.ts");
-
-        for await (const actionPath of actionGlob.scan(".")) {
-            await this.loadActionsFromFile(actionPath);
+    async load(filePath?: string) {
+        if (filePath) {
+            // Scoped HMR: drop the old entry for this file and re-import it
+            const resolvedPath = path.resolve(filePath);
+            this.actions = this.actions.filter(
+                a => path.resolve(a.file_path) !== resolvedPath
+            );
+            await this.loadActionsFromFile(filePath, true);
+        } else {
+            // Full reload — always reset first to avoid duplicate entries
+            this.actions = [];
+            const actionGlob = new Glob("apps/*/actions/**/*.ts");
+            for await (const actionPath of actionGlob.scan(".")) {
+                await this.loadActionsFromFile(actionPath, false);
+            }
         }
 
         return this.actions;
     }
 
     /**
-     * Loads actions from a single file
+     * Loads actions from a single file.
+     * @param bust  When true the module cache is bypassed (used during HMR).
      */
-    private async loadActionsFromFile(actionPath: string): Promise<void> {
+    private async loadActionsFromFile(actionPath: string, bust: boolean): Promise<void> {
         try {
-            const actionImport = await this.importActionFile(actionPath);
+            const actionImport = await this.importActionFile(actionPath, bust);
             if (!actionImport || !actionImport.default) return;
 
             const app = this.getAppFromPath(actionPath);
@@ -83,11 +93,15 @@ export class ActionLoader implements BasePlugin<ActionMetadata> {
     }
 
     /**
-     * Imports an action file with error handling
+     * Imports an action file with optional cache busting for HMR.
+     * Appending a unique query string forces Bun to bypass its module registry
+     * and evaluate a fresh copy of the module.
      */
-    private async importActionFile(actionPath: string): Promise<any | null> {
+    private async importActionFile(actionPath: string, bust: boolean): Promise<any | null> {
         try {
-            return await import(path.resolve(actionPath));
+            const resolved = path.resolve(actionPath);
+            const specifier = bust ? `${resolved}?t=${Date.now()}` : resolved;
+            return await import(specifier);
         } catch (error) {
             logger.error(`Failed to import action file ${actionPath}:`, error);
             return null;
