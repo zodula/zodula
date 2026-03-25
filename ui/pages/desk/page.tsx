@@ -1,86 +1,31 @@
-import { Button, Input } from "zodula-ui"
-import { SidebarLayout } from "@/zodula/ui/layout/sidebar-layout"
-import { NavbarLayout } from "@/zodula/ui/layout/navbar-layout"
-import { WorkspaceList } from "@/zodula/ui/components/workspace/workspace-list"
-import { WorkspaceView } from "@/zodula/ui/components/workspace/workspace-view"
-import { useWorkspace, useWorkspaceEdit, type WorkspaceWithChildren } from "@/zodula/ui/components/workspace/use-workspace"
-import { cn } from "@/zodula/ui/lib/utils"
-import { confirm } from "@/zodula/ui/components/ui/popit"
-import { useMemo } from "react"
+import { DeskNavbarLayout } from "@/zodula/ui/layout/desk-navbar-layout"
+import { useAuth } from "@/zodula/ui/hooks/use-auth"
 import { useTranslation } from "@/zodula/ui/hooks/use-translation"
-export default function adminPage() {
+import { useMemo } from "react"
+
+function getGreeting(hour: number): string {
+    if (hour < 12) return "Good morning"
+    if (hour < 17) return "Good afternoon"
+    return "Good evening"
+}
+
+export default function DeskPage() {
+    const { user } = useAuth()
     const { t } = useTranslation()
-    const { selectedWorkspace, reloadWorkspaces, reloadWorkspaceItems } = useWorkspace()
-    const { editedWorkspaceItems, editedWorkspaces, isEditing, setIsEditing, saveEdit, discardEdit, hasChanges } = useWorkspaceEdit()
-    // Helper function to find workspace in hierarchy
-    const findWorkspaceInHierarchy = (workspaces: WorkspaceWithChildren[], workspaceId: string): WorkspaceWithChildren | null => {
-        for (const workspace of workspaces) {
-            if (workspace.id === workspaceId) {
-                return workspace;
-            }
-            if (workspace.children.length > 0) {
-                const found = findWorkspaceInHierarchy(workspace.children, workspaceId);
-                if (found) return found;
-            }
-        }
-        return null;
-    };
 
-    // Get current workspace (edited or original)
-    const currentWorkspace = useMemo(() => {
-        if (!selectedWorkspace) return null;
-        if (isEditing) {
-            // Find the edited version of the selected workspace in hierarchy
-            return findWorkspaceInHierarchy(editedWorkspaces, selectedWorkspace.id) || selectedWorkspace;
-        }
-        return selectedWorkspace;
-    }, [isEditing, selectedWorkspace, editedWorkspaces]);
+    const greeting = useMemo(() => getGreeting(new Date().getHours()), [])
+    const displayName = user?.name || user?.email || t("there")
 
-    const handleCancelEdit = async () => {
-        if (hasChanges()) {
-            const confirmed = await confirm({
-                title: "Discard Changes",
-                message: "You have unsaved changes. Are you sure you want to discard them?",
-                confirmText: "Discard",
-                cancelText: "Keep Editing",
-                variant: "destructive"
-            })
-            if (confirmed) {
-                discardEdit()
-            }
-        } else {
-            discardEdit()
-        }
-    }
-
-    const handleToggleEdit = async () => {
-        if (isEditing) {
-            await handleCancelEdit()
-        } else {
-            setIsEditing(true)
-        }
-    }
-
-    return <NavbarLayout>
-        <SidebarLayout
-            defaultOpen={true}
-            title={t(currentWorkspace?.name || "")}
-            actionSection={
-                <div className="zd:flex zd:items-center zd:gap-2">
-                    <Button onClick={handleToggleEdit} variant="outline">
-                        {isEditing ? t("Cancel") : t("Edit")}
-                    </Button>
-                    <Button onClick={saveEdit} className={cn(isEditing ? "" : "zd:hidden")}>
-                        {t("Save")}
-                    </Button>
-                </div>
-            }
-            sidebarContent={
-                <div>
-                    <WorkspaceList readonly={false} />
-                </div>
-            }>
-            <WorkspaceView />
-        </SidebarLayout>
-    </NavbarLayout>
+    return (
+        <DeskNavbarLayout>
+            <div className="zd:flex zd:flex-col zd:items-center zd:justify-center zd:h-full zd:gap-2 zd:text-center">
+                <h1 className="zd:text-2xl zd:font-semibold zd:text-foreground">
+                    {t(greeting)}, {displayName} 👋
+                </h1>
+                <p className="zd:text-sm zd:text-muted-foreground">
+                    {t("Select a workspace from the left sidebar to get started.")}
+                </p>
+            </div>
+        </DeskNavbarLayout>
+    )
 }

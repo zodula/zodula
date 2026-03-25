@@ -26,8 +26,8 @@
       "./commands/add",
       "./commands/remove",
       "./commands/seed",
-        "./commands/pull",
-        "./commands/test"
+      "./commands/pull",
+      "./commands/test"
     ]
   },
   "dependencies": {
@@ -46,6 +46,7 @@
     "bxo": "^0.0.10-dev.9",
     "csv-writer": "^1.6.0",
     "date-fns": "^4.1.0",
+    "face-api.js": "0.22.2",
     "html2canvas": "^1.4.1",
     "inquirer": "^12.9.4",
     "ioredis": "^5.8.1",

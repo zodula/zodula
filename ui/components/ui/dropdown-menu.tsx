@@ -26,7 +26,7 @@ const DropdownMenuSubTrigger = React.forwardRef<
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      "zd:flex zd:cursor-default zd:select-none zd:items-center zd:rounded-sm zd:px-2 zd:py-1.5 zd:outline-none zd:focus:bg-accent zd:data-[state=open]:zd:bg-accent",
+      "zd:flex zd:cursor-default zd:select-none zd:items-center zd:rounded-lg zd:px-2.5 zd:py-2 zd:text-sm zd:outline-none zd:focus:bg-accent zd:data-[state=open]:bg-accent",
       inset ? "zd:pl-8" : "",
       className
     )}
@@ -46,7 +46,9 @@ const DropdownMenuSubContent = React.forwardRef<
   <DropdownMenuPrimitive.SubContent
     ref={ref}
     className={cn(
-      "zd:z-50 zd:min-w-[8rem] zd:overflow-hidden zd:rounded-md zd:border zd:bg-popover zd:text-popover-foreground zd:shadow-lg zd:data-[state=open]:animate-in zd:data-[state=closed]:animate-out zd:data-[state=closed]:fade-out-0 zd:data-[state=open]:fade-in-0 zd:data-[state=closed]:zoom-out-95 zd:data-[state=open]:zoom-in-95 zd:data-[side=bottom]:slide-in-from-top-2 zd:data-[side=left]:slide-in-from-right-2 zd:data-[side=right]:slide-in-from-left-2 zd:data-[side=top]:slide-in-from-bottom-2 zd:origin-(--radix-dropdown-menu-sub-content-transform-origin) zd:outline-hidden",
+      "zd:z-50 zd:min-w-[10rem] zd:overflow-hidden zd:rounded-xl zd:border zd:border-border zd:bg-popover zd:text-popover-foreground zd:shadow-lg zd:p-1",
+      "zd:data-[state=open]:animate-in zd:data-[state=closed]:animate-out zd:data-[state=closed]:fade-out-0 zd:data-[state=open]:fade-in-0 zd:data-[state=closed]:zoom-out-95 zd:data-[state=open]:zoom-in-95 zd:data-[side=bottom]:slide-in-from-top-2 zd:data-[side=left]:slide-in-from-right-2 zd:data-[side=right]:slide-in-from-left-2 zd:data-[side=top]:slide-in-from-bottom-2",
+      "zd:origin-(--radix-dropdown-menu-sub-content-transform-origin) zd:outline-hidden",
       className
     )}
     {...props}
@@ -69,7 +71,9 @@ const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        "zd:z-50 zd:min-w-[8rem] zd:overflow-hidden zd:rounded-md zd:border zd:bg-popover zd:text-popover-foreground zd:shadow-md zd:data-[state=open]:animate-in zd:data-[state=closed]:animate-out zd:data-[state=closed]:fade-out-0 zd:data-[state=open]:fade-in-0 zd:data-[state=closed]:zoom-out-95 zd:data-[state=open]:zoom-in-95 zd:data-[side=bottom]:slide-in-from-top-2 zd:data-[side=left]:slide-in-from-right-2 zd:data-[side=right]:slide-in-from-left-2 zd:data-[side=top]:slide-in-from-bottom-2 zd:origin-(--radix-dropdown-menu-content-transform-origin) zd:outline-hidden",
+        "zd:z-50 zd:min-w-[10rem] zd:overflow-hidden zd:rounded-xl zd:border zd:border-border zd:bg-popover zd:text-popover-foreground zd:shadow-lg zd:p-1",
+        "zd:data-[state=open]:animate-in zd:data-[state=closed]:animate-out zd:data-[state=closed]:fade-out-0 zd:data-[state=open]:fade-in-0 zd:data-[state=closed]:zoom-out-95 zd:data-[state=open]:zoom-in-95 zd:data-[side=bottom]:slide-in-from-top-2 zd:data-[side=left]:slide-in-from-right-2 zd:data-[side=right]:slide-in-from-left-2 zd:data-[side=top]:slide-in-from-bottom-2",
+        "zd:origin-(--radix-dropdown-menu-content-transform-origin) zd:outline-hidden",
         className
       )}
       onInteractOutside={(e) => {
@@ -98,9 +102,11 @@ const DropdownMenuItem = React.forwardRef<
   DropdownMenuItemProps
 >(({ className = "", inset, href, target, rel, children, ...props }, ref) => {
   const itemClasses = cn(
-    "zd:relative zd:flex zd:gap-2 zd:cursor-pointer zd:select-none zd:items-center zd:rounded-sm zd:px-2 zd:py-1.5 zd:outline-none zd:transition-colors zd:focus:bg-accent zd:focus:text-accent-foreground zd:data-[disabled]:pointer-events-none zd:data-[disabled]:opacity-50",
-    inset ? "zd:pl-8" : "",
+    "zd:relative zd:flex zd:gap-2 zd:cursor-pointer zd:select-none zd:items-center zd:rounded-lg zd:px-2.5 zd:py-2 zd:text-sm zd:outline-none zd:transition-colors",
+    "zd:focus:bg-accent zd:focus:text-accent-foreground",
     "zd:hover:bg-accent zd:hover:text-accent-foreground",
+    "zd:data-[disabled]:pointer-events-none zd:data-[disabled]:opacity-40",
+    inset ? "zd:pl-8" : "",
     className
   )
 
@@ -183,7 +189,7 @@ const DropdownMenuLabel = React.forwardRef<
   <DropdownMenuPrimitive.Label
     ref={ref}
     className={cn(
-      "zd:px-2 zd:py-1.5 zd:font-semibold",
+      "zd:px-2.5 zd:py-1.5 zd:text-xs zd:font-semibold zd:uppercase zd:tracking-wider zd:text-muted-foreground",
       inset ? "zd:pl-8" : "",
       className
     )}
@@ -198,7 +204,7 @@ const DropdownMenuSeparator = React.forwardRef<
 >(({ className = "", ...props }, ref) => (
   <DropdownMenuPrimitive.Separator
     ref={ref}
-    className={cn("zd:-mx-1 zd:my-1 zd:h-px zd:bg-muted", className)}
+    className={cn("zd:-mx-1 zd:my-1 zd:h-px zd:bg-border", className)}
     {...props}
   />
 ))

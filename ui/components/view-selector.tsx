@@ -37,17 +37,29 @@ export function hasSelfReferentialField(fields: FieldLike[], doctype: string): b
     ) != null;
 }
 
-/** Build list/tree/sheet view options; tree is disabled when doctype has no self-referential field. */
+export type DoctypeViewValue = "list" | "tree" | "sheet" | "calendar";
+
+/** Resolve current view from desk doctype pathname. */
+export function getDoctypeViewFromPath(pathname: string): DoctypeViewValue {
+    if (pathname.includes("/sheet")) return "sheet";
+    if (pathname.includes("/tree")) return "tree";
+    if (pathname.includes("/calendar")) return "calendar";
+    return "list";
+}
+
+/** Build list/tree/sheet/calendar options; tree disabled without self-ref; calendar disabled without config row. */
 export function getDoctypeViewOptions(
     t: (key: string) => string,
     fields: FieldLike[],
-    doctype: string
+    doctype: string,
+    opts?: { calendarEnabled?: boolean }
 ): ViewOption[] {
     const treeEnabled = hasSelfReferentialField(fields, doctype);
     return [
         { value: "list", label: t("List View") },
         { value: "tree", label: t("Tree View"), disabled: !treeEnabled },
         { value: "sheet", label: t("Sheet View") },
+        { value: "calendar", label: t("Calendar View"), disabled: !opts?.calendarEnabled },
     ];
 }
 

@@ -30,7 +30,11 @@ export default $action(async ctx => {
         const doctypeDoc = loader.from("doctype").get(doctype as any);
         const printTemplateDoc = print_template ? await $zodula.doctype("Print Template").get(print_template as any) : null;
         const letterHeadDoc = letter_head ? await $zodula.doctype("Letter Head").get(letter_head as any) : null;
-        const orgDoc = await $zodula.doctype("Organization").get("Organization").bypass(true).fields(["doc_status_watermark"]);
+        const globalSettingDoc = await $zodula
+            .doctype("Global Setting")
+            .get("Global Setting")
+            .bypass(true)
+            .fields(["doc_status_watermark"]);
 
         const printTemplateHeightmm = printTemplateDoc?.custom_height ?? PAGE_FORMATS[printTemplateDoc?.format ?? "A4"]?.height ?? 297;
         const printTemplateHeightpx = printTemplateHeightmm * 96 / 25.4;
@@ -89,7 +93,7 @@ export default $action(async ctx => {
 
             const isSubmittable = doctypeDoc.config.is_submittable === 1;
             const docStatus = (doc as { doc_status?: string })?.doc_status;
-            const orgWatermarkEnabled = (orgDoc as { doc_status_watermark?: number } | null)?.doc_status_watermark !== 0;
+            const orgWatermarkEnabled = (globalSettingDoc as { doc_status_watermark?: number } | null)?.doc_status_watermark !== 0;
             const showStatusWatermark = isSubmittable && docStatus && docStatus !== "Submitted" && orgWatermarkEnabled;
             const statusLabel = docStatus === "Cancelled" ? "Cancelled" : "Draft";
             const statusColor = docStatus === "Cancelled" ? "red" : "black";

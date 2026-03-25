@@ -8,7 +8,9 @@ async function resolveOrganizationTokens(template: string) {
   if (!template) return template;
   const needsOrg =
     template.includes("{organization_name}") ||
-    template.includes("{organization_abbr}");
+    template.includes("{organization_abbr}") ||
+    template.includes("{{org_name}}") ||
+    template.includes("{{org_abbr}}");
   if (!needsOrg) return template;
 
   const db = Database("main");
@@ -22,7 +24,9 @@ async function resolveOrganizationTokens(template: string) {
 
   return template
     .replaceAll("{organization_name}", orgName)
-    .replaceAll("{organization_abbr}", orgAbbr);
+    .replaceAll("{organization_abbr}", orgAbbr)
+    .replaceAll("{{org_name}}", orgName)
+    .replaceAll("{{org_abbr}}", orgAbbr);
 }
 
 export async function naming<TN extends Zodula.DoctypeName>(

@@ -9,6 +9,9 @@ interface SectionProps {
     hideLabel?: boolean;
     collapsible?: boolean;
     defaultCollapsed?: boolean;
+    /** Wrap content in a card-like container */
+    card?: boolean;
+    className?: string;
 }
 
 export const Section: React.FC<SectionProps> = ({
@@ -17,11 +20,12 @@ export const Section: React.FC<SectionProps> = ({
     children,
     hideLabel = false,
     collapsible = false,
-    defaultCollapsed = false
+    defaultCollapsed = false,
+    card = false,
+    className,
 }) => {
     const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
 
-    // More flexible grid system
     const getGridCols = (cols: number) => {
         if (cols <= 1) return "zd:grid-cols-1";
         if (cols <= 2) return "zd:grid-cols-1 zd:md:grid-cols-2";
@@ -34,48 +38,59 @@ export const Section: React.FC<SectionProps> = ({
     const gridCols = getGridCols(columns);
 
     const handleToggle = () => {
-        if (collapsible) {
-            setIsCollapsed(!isCollapsed);
-        }
+        if (collapsible) setIsCollapsed(!isCollapsed);
     };
 
     return (
-        <div className="zd:flex zd:flex-col zd:gap-4">
+        <div
+            className={cn(
+                "zd:flex zd:flex-col zd:gap-3",
+                card && "zd:rounded-xl zd:border zd:border-border zd:bg-card zd:p-4 zd:shadow-sm",
+                className
+            )}
+        >
             {title && !hideLabel && (
                 <div
                     className={cn(
-                        "zd:flex zd:items-center zd:transition-colors zd:border-b zd:border-muted zd:pb-2",
-                        collapsible && "zd:rounded zd:cursor-pointer"
+                        "zd:flex zd:items-center zd:justify-between zd:transition-colors",
+                        !card && "zd:border-b zd:border-border zd:pb-2",
+                        collapsible && "zd:cursor-pointer zd:select-none"
                     )}
-                    role={collapsible ? 'button' : undefined}
+                    role={collapsible ? "button" : undefined}
                     tabIndex={collapsible ? 0 : undefined}
-                    onKeyDown={collapsible ? (e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            handleToggle();
-                        }
-                    } : undefined}
+                    onKeyDown={
+                        collapsible
+                            ? (e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                      e.preventDefault();
+                                      handleToggle();
+                                  }
+                              }
+                            : undefined
+                    }
                     onClick={collapsible ? handleToggle : undefined}
-                    aria-label={collapsible ? (isCollapsed ? "Expand section" : "Collapse section") : undefined}
+                    aria-expanded={collapsible ? !isCollapsed : undefined}
                 >
-                    <h3 className="zd:text-lg zd:font-semibold">
+                    <h3 className="zd:text-sm zd:font-semibold zd:text-foreground zd:tracking-tight">
                         {title}
                     </h3>
                     {collapsible && (
-                        <div className="zd:ml-2">
+                        <span className="zd:text-muted-foreground zd:transition-transform zd:duration-200">
                             {isCollapsed ? (
-                                <ChevronRight className="w-8 h-8" />
+                                <ChevronRight className="zd:w-4 zd:h-4" />
                             ) : (
-                                <ChevronDown className="w-8 h-8" />
+                                <ChevronDown className="zd:w-4 zd:h-4" />
                             )}
-                        </div>
+                        </span>
                     )}
                 </div>
             )}
-            <div className={cn(
-                `zd:grid ${gridCols} zd:gap-4`,
-                !!isCollapsed ? "zd:hidden" : ""
-            )}>
+            <div
+                className={cn(
+                    `zd:grid ${gridCols} zd:gap-3`,
+                    isCollapsed ? "zd:hidden" : ""
+                )}
+            >
                 {children}
             </div>
         </div>

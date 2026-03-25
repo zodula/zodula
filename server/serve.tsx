@@ -20,7 +20,7 @@ export async function startServer() {
     const server = new BXO({
         serve: {
             port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
-        }
+        },
     })
         .beforeRequest((ctx) => {
             const time = new Date().toISOString().split("T")[1]?.split(".")[0]

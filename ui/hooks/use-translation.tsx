@@ -111,7 +111,9 @@ export const useTranslation = (lang?: string) => {
 
     // Update default language from Global Setting
     useEffect(() => {
-        const defaultLang = (websiteSetting as any)?.default_language;
+        const defaultLang =
+            (websiteSetting as any)?.default_lang ??
+            (websiteSetting as any)?.default_language;
         if (defaultLang) {
             setDefaultLanguage(defaultLang);
             // Only set language from Global Setting if no language preference is persisted

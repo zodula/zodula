@@ -126,6 +126,18 @@ export class ZodulaDoctypeGetter<
         );
       }
 
+      await loader.from("doctype").trigger(this.doctypeName, "before_get", {
+        old: old,
+        doc: result,
+        input: undefined as any,
+      });
+
+      await loader.from("doctype").trigger(this.doctypeName, "after_get", {
+        old: old,
+        doc: result,
+        input: undefined as any,
+      });
+
       return this.options.unsafe
         ? result
         : ZodulaDoctypeHelper.formatDocResult(result, doctype.schema);

@@ -1,12 +1,18 @@
 import { useRouter } from "@/zodula/ui/components/router";
-import { NavbarLayout } from "@/zodula/ui/layout/navbar-layout";
-import { SidebarLayout, type PrimaryAction } from "@/zodula/ui/layout/sidebar-layout";
+import { DeskNavbarLayout, type PrimaryAction } from "@/zodula/ui/layout/desk-navbar-layout";
 import { TreeView } from "@/zodula/ui/components/list/TreeView";
 import { useDocListAll } from "@/zodula/ui/hooks/use-doc-list-all";
 import { useDocAll } from "@/zodula/ui/hooks/use-doc-all";
 import { Plus, RefreshCw } from "lucide-react";
-import { ViewSelector, getDoctypeViewOptions, findSelfReferentialField, type FieldLike } from "@/zodula/ui/components/view-selector";
+import {
+  ViewSelector,
+  getDoctypeViewOptions,
+  getDoctypeViewFromPath,
+  findSelfReferentialField,
+  type FieldLike,
+} from "@/zodula/ui/components/view-selector";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
 import { zodula } from "@/zodula/client";
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
 import ErrorView from "@/zodula/ui/views/error-view";
@@ -62,6 +68,15 @@ export default function DoctypeTreePage() {
     doctype: "Doctype",
     id: doctype,
   });
+  const { docs: calendarRows } = useDocList(
+    {
+      doctype: "Doctype Calendar",
+      limit: 1,
+      filters: [["doctype", "=", doctype] as any],
+    },
+    [doctype]
+  );
+  const calendarEnabled = calendarRows.length > 0;
   const { docs, loading, error, reload } = useDocListAll({
     doctype,
     forceRefetch: false,
@@ -115,6 +130,10 @@ export default function DoctypeTreePage() {
     reloadDoctype();
   }, [doctype]);
 
+  useEffect(() => {
+    reload();
+  }, []);
+
   const handleRefresh = async () => {
     if (isRefreshing) return;
     setIsRefreshing(true);
@@ -162,20 +181,21 @@ export default function DoctypeTreePage() {
   }
 
   return (
-    <NavbarLayout>
-      <SidebarLayout
-        title={t(`${doctypeDoc?.label || doctype}`)}
-        defaultOpen={false}
-        primaryAction={primaryActions}
-        actionSection={
+    <DeskNavbarLayout
+      title={t(`${doctypeDoc?.label || doctype}`)}
+      defaultOpen={false}
+      primaryAction={primaryActions}
+      actionSection={
           <ViewSelector
-            views={getDoctypeViewOptions(t, fields as FieldLike[], doctype)}
-            value="tree"
+            views={getDoctypeViewOptions(t, fields as FieldLike[], doctype, { calendarEnabled })}
+            value={getDoctypeViewFromPath(location.pathname)}
             onChange={(value) => {
               if (value === "list") {
                 push(`/desk/doctypes/${doctype}/list${location.search}`);
               } else if (value === "tree") {
                 push(`/desk/doctypes/${doctype}/tree${location.search}`);
+              } else if (value === "calendar") {
+                push(`/desk/doctypes/${doctype}/calendar${location.search}`);
               } else {
                 push(`/desk/doctypes/${doctype}/sheet${location.search}`);
               }
@@ -203,7 +223,6 @@ export default function DoctypeTreePage() {
             <div className="zd:p-4 zd:text-destructive zd:text-sm">{error}</div>
           )}
         </div>
-      </SidebarLayout>
-    </NavbarLayout>
+    </DeskNavbarLayout>
   );
 }

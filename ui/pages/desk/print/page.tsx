@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavbarLayout } from "@/zodula/ui/layout/navbar-layout";
-import { SidebarLayout } from "@/zodula/ui/layout/sidebar-layout";
+import { DeskNavbarLayout } from "@/zodula/ui/layout/desk-navbar-layout";
 import { FormControl } from "@/zodula/ui/components/ui/form-control";
 import { useRouter } from "@/zodula/ui/components/router";
 import { zodula } from "@/zodula/client";
@@ -87,7 +86,7 @@ export default function PrintPage() {
       : undefined;
 
   const sidebarContent = (
-    <div className="zd:flex zd:flex-col zd:gap-4 zd:p-2">
+    <div className="zd:flex zd:flex-col zd:gap-4">
       <FormControl
         label="Print Template"
         fieldKey="print_template"
@@ -113,13 +112,12 @@ export default function PrintPage() {
   );
 
   return (
-    <NavbarLayout>
-      <SidebarLayout
-        title="Print"
-        subtitle={subtitle}
-        sidebarContent={sidebarContent}
-        defaultOpen
-        primaryAction={
+    <DeskNavbarLayout
+      title="Print"
+      subtitle={subtitle}
+      rightSidebar={sidebarContent}
+      defaultOpen
+      primaryAction={
           pdfUrl
             ? {
               label: "Open PDF",
@@ -146,7 +144,6 @@ export default function PrintPage() {
             </div>
           )}
         </div>
-      </SidebarLayout>
-    </NavbarLayout>
+    </DeskNavbarLayout>
   );
 }

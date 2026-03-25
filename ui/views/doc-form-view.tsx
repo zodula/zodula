@@ -4,8 +4,7 @@ import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
 import { useDocListAll } from "@/zodula/ui/hooks/use-doc-list-all";
 import { useDocAll } from "@/zodula/ui/hooks/use-doc-all";
 import { useForm } from "@/zodula/ui/hooks/use-form";
-import { NavbarLayout } from "@/zodula/ui/layout/navbar-layout";
-import { SidebarLayout } from "@/zodula/ui/layout/sidebar-layout";
+import { DeskNavbarLayout } from "@/zodula/ui/layout/desk-navbar-layout";
 import { Form } from "@/zodula/ui/components/form/form";
 import { Button } from "@/zodula/ui/components/ui/button";
 import {
@@ -39,6 +38,7 @@ import { DocStatusBadge } from "../components/custom/doc-status-badge";
 import { useAuth } from "../hooks/use-auth";
 import { FormActions } from "@/zodula/ui/components/form/form-actions";
 import { AuditTrail } from "@/zodula/ui/components/custom/audit-trail";
+import { Attachments } from "@/zodula/ui/components/custom/attachments";
 import { useTranslation } from "../hooks/use-translation";
 import { useZui } from "@/zodula/ui";
 import { useDocStore } from "../hooks/use-doc-store";
@@ -415,21 +415,19 @@ export function DocFormView({
         if (!tableRows[index]) tableRows[index] = {} as any;
         tableRows[index] = { ...tableRows[index], [childFieldName]: value };
         let updatedDoc = { ...data, [parentFieldName]: tableRows };
-        setFormData(prev => {
-          let newFields = { ...prev };
-          if (!newFields[fieldName]) {
-            newFields = { ...newFields, [fieldName]: [] };
+        let newFields = { ...data };
+        if (!newFields[fieldName]) {
+          newFields = { ...newFields, [fieldName]: [] };
+        }
+        if (!newFields?.[fieldName]?.[index]) {
+          if (index === newFields[fieldName].length) {
+            newFields[fieldName].push({ [childFieldName]: value, idx: index });
           }
-          if (!newFields?.[fieldName]?.[index]) {
-            if (index === newFields[fieldName].length) {
-              newFields[fieldName].push({ [childFieldName]: value, idx: index });
-            }
-          }
-          newFields[fieldName][index][childFieldName] = value;
-          newFields[fieldName] = removeAndReorderRows(newFields[fieldName], -1);
-          formDataCache[formId] = newFields;
-          return newFields;
-        });
+        }
+        newFields[fieldName][index][childFieldName] = value;
+        newFields[fieldName] = removeAndReorderRows(newFields[fieldName], -1);
+        formDataCache[formId] = newFields;
+        setFormData(newFields);
 
         if (childFieldName === "idx") {
           setReferenceTableIndexFields(prev => {
@@ -465,27 +463,24 @@ export function DocFormView({
           }) as any);
         }
       } else if (isExtend) {
-        setFormData(prev => {
-          let newFields = { ...prev };
-          newFields[parentFieldName] = { ...newFields[parentFieldName], [childFieldName]: value };
-          formDataCache[formId] = newFields;
-          return newFields;
-        });
+        const next = {
+          ...data,
+          [parentFieldName]: { ...(data[parentFieldName] || {}), [childFieldName]: value },
+        };
+        formDataCache[formId] = next;
+        setFormData(next);
       } else {
         if (typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value instanceof File) {
-          setFormData(prev => {
-            let newFields = { ...prev };
-            newFields[fieldPath] = value;
-            formDataCache[formId] = newFields;
-            return newFields;
-          });
+          const next = { ...data, [fieldPath]: value };
+          formDataCache[formId] = next;
+          setFormData(next);
           // Debounce scripts so typing stays responsive; run once after user pauses
-          const debounceMs = 200;
+          const debounceMs = 10;
           if (scriptDebounceRef.current.timer) clearTimeout(scriptDebounceRef.current.timer);
           scriptDebounceRef.current.fieldPath = fieldPath as string;
           scriptDebounceRef.current.timer = setTimeout(() => {
             scriptDebounceRef.current.timer = null;
-            const doc = formDataRef.current;
+            const doc = formDataCache[formId] ?? formDataRef.current;
             const ctx = buildFormContextRef.current({
               doc,
               get_value: (field: string) => getNestedFormValue(doc, field),
@@ -521,14 +516,18 @@ export function DocFormView({
           })
 
           const indexToRemove = changeIdx.filter((change) => change.to === -1).map((change) => change.from);
-          setFormData(prev => {
-            const newFields = { ...prev };
-            const newTableRows = newFields[fieldPath]?.filter((record: { idx: number }) => !indexToRemove.includes(record.idx));
-            newFields[fieldPath] = newTableRows;
-            formDataCache[formId] = newFields;
-            return newFields;
-
-          });
+          let newFields = { ...data };
+          let newTableRows = newFields[fieldPath]?.filter((record: { idx: number }) => !indexToRemove.includes(record.idx)) || [];
+          for (let i = 0; i < newTableRows.length; i++) {
+            const oldIdx = newTableRows[i].idx;
+            const newIdx = changeIdx.find((change) => change.from === oldIdx)?.to;
+            if (newIdx !== newTableRows[i].idx) {
+              newTableRows[i].idx = newIdx;
+            }
+          }
+          newFields[fieldPath] = newTableRows;
+          formDataCache[formId] = newFields;
+          setFormData(newFields);
         }
       }
 
@@ -800,6 +799,7 @@ export function DocFormView({
     formDataForScripts: Record<string, any>,
     formFieldsForScripts: Record<string, any>
   ) {
+    formDataRef.current = formDataForScripts;
     badgeConfigs.current = {};
     const ctx = {
       ...buildFormContext(),
@@ -945,13 +945,14 @@ export function DocFormView({
         keys.sort(byDots);
 
         for (const key of keys) {
-          await handleFieldChange(key as any, prefillObj[key], { noScripts: true, noFetchFrom: true });
+          await handleFieldChange(key as any, prefillObj[key], { noScripts: false, noFetchFrom: false });
         }
       }
 
       const snapshot = afterInitializeRef.current;
       if (!snapshot) return;
-      await runAfterInitializeForm(snapshot.formDataResult, snapshot.fields);
+      const docForScripts = formDataCache[formId] ?? snapshot.formDataResult;
+      await runAfterInitializeForm(docForScripts, snapshot.fields);
       afterInitializeRanRef.current = true;
     })();
   }, [formFields, prefill, handleFieldChange, runAfterInitializeForm]);
@@ -1125,6 +1126,7 @@ export function DocFormView({
 
   const handleUpdate = useCallback(async () => {
     const payload = getUpdatePayload();
+
     const result = validateRequiredFields(payload, formFields, referenceTableFields, extendFields);
     if (!result.valid) {
       alert({
@@ -1214,11 +1216,18 @@ export function DocFormView({
         {
           ...normalizedFormData,
         }
-      );
+      ).catch((error: any) => {
+        alert({
+          variant: "destructive",
+          message: error?.message,
+        });
+        return null;
+      });
       if (createdDoc) {
         handleReload();
         // Clear saved form values after successful creation
         clearFormValues(doctype);
+        formDataCache[formId] = undefined;
 
         if (cbUrl) {
           const state = {
@@ -1284,7 +1293,7 @@ export function DocFormView({
   const hasContextState = Object.keys(contextState).length > 0;
 
   const sidebarContent = (
-    <div className="zd:p-4 zd:space-y-5">
+    <div className="zd:space-y-5">
       {mode === "create" ? (
         <>
           <div className="zd:rounded-lg zd:border zd:border-border zd:bg-muted/40 zd:p-4">
@@ -1313,8 +1322,8 @@ export function DocFormView({
                     <span className="zd:font-medium zd:text-foreground">{key}</span>
                     <span className="zd:text-right zd:break-all">
                       {typeof value === "string" ||
-                      typeof value === "number" ||
-                      typeof value === "boolean"
+                        typeof value === "number" ||
+                        typeof value === "boolean"
                         ? String(value)
                         : JSON.stringify(value)}
                     </span>
@@ -1326,6 +1335,11 @@ export function DocFormView({
         </>
       ) : (
         <>
+          {/* Attachments — shown in edit mode whenever a doc is saved */}
+          {doc?.id && (
+            <Attachments doctype={doctype} docId={doc.id} />
+          )}
+
           {connections.length > 0 && (
             <section className="zd:space-y-2">
               <h3 className="zd:flex zd:items-center zd:gap-2 zd:text-xs zd:font-semibold zd:uppercase zd:tracking-wider zd:text-muted-foreground">
@@ -1401,10 +1415,12 @@ export function DocFormView({
     </div>
   );
 
+  const [isUserHasType, setIsUserHasType] = useState(false);
   // ===== FORM STATE =====
   // Optimized isDirty check with early bailouts to prevent jiggling
   const isDirty = useMemo(() => {
     if (!formData) return false;
+    if (isUserHasType) return true;
     if (mode === "create") {
       return Object.values(formData).some(
         (value) => value !== undefined && value !== null && value !== ""
@@ -1431,7 +1447,7 @@ export function DocFormView({
     if (mode === "create") {
       return (
         <Button
-          data-onboarding-id="form-primary-action"
+
           onClick={handleCreate}
           disabled={isLoading || !isDirty}
           variant="solid"
@@ -1445,7 +1461,7 @@ export function DocFormView({
     if (isSingle) {
       return (
         <Button
-          data-onboarding-id="form-primary-action"
+
           onClick={handleSave}
           className="zd:h-8"
           disabled={!isDirty}
@@ -1459,7 +1475,7 @@ export function DocFormView({
     if (doctypeDoc?.is_submittable === 1 && doc?.doc_status === "Draft" && !isDirty) {
       return (
         <Button
-          data-onboarding-id="form-primary-action"
+
           onClick={handleSubmit}
           className="zd:h-8"
           disabled={isDirty}
@@ -1471,7 +1487,7 @@ export function DocFormView({
     } else if (doctypeDoc?.is_submittable === 1 && doc?.doc_status === "Submitted") {
       return (
         <Button
-          data-onboarding-id="form-primary-action"
+
           onClick={handleUpdate}
           className="zd:h-8"
           disabled={!isDirty}
@@ -1483,7 +1499,7 @@ export function DocFormView({
     } else if (doc?.doc_status == "Draft") {
       return (
         <Button
-          data-onboarding-id="form-primary-action"
+
           onClick={handleSave}
           className="zd:h-8"
           disabled={!isDirty}
@@ -1500,209 +1516,273 @@ export function DocFormView({
   // ===== LOADING & ERROR STATES =====
   if (mode === "edit" && loading) {
     return (
-      <NavbarLayout>
+      <DeskNavbarLayout>
         <div className="zd:flex zd:items-center zd:justify-center zd:h-64">
         </div>
-      </NavbarLayout>
+      </DeskNavbarLayout>
     );
   }
 
   if (mode === "edit" && error && !isSingle) {
     return (
-      <NavbarLayout>
+      <DeskNavbarLayout>
         <ErrorView message={error} status={500} />
-      </NavbarLayout>
+      </DeskNavbarLayout>
     );
   }
 
   if (mode === "edit" && !doc && !isSingle && !loading) {
     return (
-      <NavbarLayout>
+      <DeskNavbarLayout>
         <ErrorView message="Doc not found" status={404} />
-      </NavbarLayout>
+      </DeskNavbarLayout>
     );
   }
 
   // ===== MAIN RENDER =====
   return (
-    <NavbarLayout>
-      <SidebarLayout
-        title={
-          <div className="zd:flex zd:gap-2 zd:items-center">
-            {mode === "create"
-              ? `${t("New")} ${t(doctypeLabel)}`
-              : isSingle
-                ? doctypeLabel
-                : doc?.id || "New Doc"}
-            <span className="zd:flex zd:gap-2 zd:items-center no-print">
-              {doctypeDoc?.is_submittable === 1 && mode === "edit" && (() => {
-                const badgeConfig = badgeConfigs.current["doc_status"];
-                if (badgeConfig && doc) {
-                  const valueOrObj = badgeConfig.getValue ? badgeConfig.getValue(doc, t) : doc.doc_status;
+    <DeskNavbarLayout
+      title={
+        <div className="zd:flex zd:gap-2 zd:items-center">
+          {mode === "create"
+            ? `${t("New")} ${t(doctypeLabel)}`
+            : isSingle
+              ? doctypeLabel
+              : doc?.id || "New Doc"}
+          <span className="zd:flex zd:gap-2 zd:items-center no-print">
+            {doctypeDoc?.is_submittable === 1 && mode === "edit" && (() => {
+              const badgeConfig = badgeConfigs.current["doc_status"];
+              if (badgeConfig && doc) {
+                const valueOrObj = badgeConfig.getValue ? badgeConfig.getValue(doc, t) : doc.doc_status;
 
-                  // If getValue returns null, fall back to default DocStatusBadge
-                  if (valueOrObj === null) {
-                    return <DocStatusBadge status={doc?.doc_status || "Draft"} />;
-                  }
-
-                  // Handle both string values and objects with status/variant
-                  const Badge = require("../components/ui/badge").Badge;
-                  const displayValue = typeof valueOrObj === 'object' && valueOrObj !== null ? valueOrObj.status : valueOrObj;
-                  const variant = typeof valueOrObj === 'object' && valueOrObj !== null ? valueOrObj.variant : badgeConfig.variant;
-                  return (
-                    <Badge variant={variant as any} size={badgeConfig.size as any}>
-                      {displayValue || ""}
-                    </Badge>
-                  );
+                // If getValue returns null, fall back to default DocStatusBadge
+                if (valueOrObj === null) {
+                  return <DocStatusBadge status={doc?.doc_status || "Draft"} />;
                 }
-                // Default: show doc_status badge
-                return <DocStatusBadge status={doc?.doc_status || "Draft"} />;
-              })()}
+
+                // Handle both string values and objects with status/variant
+                const Badge = require("../components/ui/badge").Badge;
+                const displayValue = typeof valueOrObj === 'object' && valueOrObj !== null ? valueOrObj.status : valueOrObj;
+                const variant = typeof valueOrObj === 'object' && valueOrObj !== null ? valueOrObj.variant : badgeConfig.variant;
+                return (
+                  <Badge variant={variant as any} size={badgeConfig.size as any}>
+                    {displayValue || ""}
+                  </Badge>
+                );
+              }
+              // Default: show doc_status badge
+              return <DocStatusBadge status={doc?.doc_status || "Draft"} />;
+            })()}
+          </span>
+        </div>
+      }
+      rightSidebar={sidebarContent}
+      actionSection={
+        doctypeDoc?.is_system_generated === 1 ? (
+          <div>
+            <span className="zd:text-sm zd:text-muted-foreground">
+              This is a system generated doctype. You cannot{" "}
+              {mode === "create" ? "create" : "edit"} this doctype.
             </span>
           </div>
-        }
-        sidebarContent={sidebarContent}
-        actionSection={
-          doctypeDoc?.is_system_generated === 1 ? (
-            <div>
-              <span className="zd:text-sm zd:text-muted-foreground">
-                This is a system generated doctype. You cannot{" "}
-                {mode === "create" ? "create" : "edit"} this doctype.
-              </span>
-            </div>
-          ) : (
-            <div className="zd:flex zd:items-center zd:gap-2">
-              {mode === "edit" && (
-                <Button variant="outline" href={`/desk/print?doctype=${doctype}&ids=["${id}"]`}>
-                  <Printer className="zd:w-4 zd:h-4" />
-                </Button>
-              )}
-              {(mode === "edit" || secondaryButtons.length > 0) && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline">
-                      <MoreHorizontal className="zd:w-4 zd:h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {/* Secondary menu: UI script actions */}
-                    {secondaryButtons.map((button, index) => (
-                      <DropdownMenuItem key={index} onClick={async () => await button.onClick(buildFormContext() as any)}>
-                        <DynamicIcon iconName={button.options?.icon || "MoreHorizontal"} className="zd:w-4 zd:h-4 zd:mr-1" />
-                        {button.label}
-                      </DropdownMenuItem>
-                    ))}
-                    {mode === "edit" && secondaryButtons.length > 0 && <DropdownMenuSeparator />}
-                    {/* Doctype menu: Duplicate, Reload, Cancel, Delete */}
-                    {mode === "edit" && (
-                      <>
-                        {!isSingle && (
-                          <DropdownMenuItem onClick={handleDuplicate}>
-                            <Copy className="zd:w-4 zd:h-4 zd:mr-1" />
-                            <span className="zd:flex-1">{t("Duplicate")}</span>
-                            <kbd className="zd:ml-2 zd:px-1 zd:py-0.5 zd:text-xs zd:bg-muted zd:rounded">
-                              Ctrl + D
-                            </kbd>
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onClick={handleReload}>
-                          <RotateCcw className="zd:w-4 zd:h-4 zd:mr-1" />
-                          <span className="zd:flex-1">{t("Reload")}</span>
-                          <kbd className="zd:ml-2 zd:px-1 zd:py-0.5 zd:text-xs zd:bg-muted zd:rounded">
-                            Ctrl + R
-                          </kbd>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={handleCancel}
-                          className={cn(
-                            "zd:text-red-600 zd:focus:text-red-600",
-                            doc?.doc_status === "Submitted" ? "" : "zd:hidden"
-                          )}
-                        >
+        ) : (
+          <div className="zd:flex zd:items-center zd:gap-1">
+            {mode === "edit" && (
+              <Button
+                variant="ghost"
+                href={`/desk/print?doctype=${encodeURIComponent(
+                  doctype
+                )}&ids=${encodeURIComponent(JSON.stringify([doc?.id ?? id ?? ""]))}`}
+              >
+                <Printer className="zd:w-4 zd:h-4" />
+              </Button>
+            )}
+            {(mode === "edit" || secondaryButtons.length > 0) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost">
+                    <MoreHorizontal className="zd:w-4 zd:h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {/* Secondary menu: UI script actions */}
+                  {secondaryButtons.map((button, index) => (
+                    <DropdownMenuItem key={index} onClick={async () => await button.onClick(buildFormContext() as any)}>
+                      <DynamicIcon iconName={button.options?.icon || "MoreHorizontal"} className="zd:w-4 zd:h-4 zd:mr-1" />
+                      {button.label}
+                    </DropdownMenuItem>
+                  ))}
+                  {mode === "edit" && secondaryButtons.length > 0 && <DropdownMenuSeparator />}
+                  {/* Doctype menu: Duplicate, Reload, Cancel, Delete */}
+                  {mode === "edit" && (
+                    <>
+                      {!isSingle && (
+                        <DropdownMenuItem onClick={handleDuplicate}>
                           <Copy className="zd:w-4 zd:h-4 zd:mr-1" />
-                          <span className="zd:flex-1">{t("Cancel")}</span>
-                          <kbd className="zd:ml-2 zd:px-1 zd:py-0.5 zd:text-xs zd:bg-muted zd:rounded">
-                            Ctrl + Shift + C
-                          </kbd>
+                          <span className="zd:flex-1">{t("Duplicate")}</span>
                         </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={handleDelete}
-                          className={cn(
-                            "zd:text-red-600 zd:focus:text-red-600",
-                            doc?.doc_status !== "Submitted" ? "" : "zd:hidden"
-                          )}
-                        >
-                          <Trash2 className="zd:w-4 zd:h-4 zd:mr-1" />
-                          <span className="zd:flex-1">{t("Delete")}</span>
-                          <kbd className="zd:ml-2 zd:px-1 zd:py-0.5 zd:text-xs zd:bg-muted zd:rounded">
-                            Ctrl + Delete
-                          </kbd>
-                        </DropdownMenuItem>
-                      </>
+                      )}
+                      <DropdownMenuItem onClick={handleReload}>
+                        <RotateCcw className="zd:w-4 zd:h-4 zd:mr-1" />
+                        <span className="zd:flex-1">{t("Reload")}</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={handleCancel}
+                        className={cn(
+                          "zd:text-red-600 zd:focus:text-red-600",
+                          doc?.doc_status === "Submitted" ? "" : "zd:hidden"
+                        )}
+                      >
+                        <Copy className="zd:w-4 zd:h-4 zd:mr-1" />
+                        <span className="zd:flex-1">{t("Cancel")}</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={handleDelete}
+                        className={cn(
+                          "zd:text-red-600 zd:focus:text-red-600",
+                          doc?.doc_status !== "Submitted" ? "" : "zd:hidden"
+                        )}
+                      >
+                        <Trash2 className="zd:w-4 zd:h-4 zd:mr-1" />
+                        <span className="zd:flex-1">{t("Delete")}</span>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {/* Custom form actions from useEnhanceDoctype */}
+            <FormActions doctype={doctype} doc={doc} />
+            <PrimaryButtonRender />
+          </div>
+        )
+      }
+    >
+      <div data-form-doctype={doctype} data-form-is-dirty={isDirty ? "true" : "false"} className="zd:pb-16">
+        {/* Form Content */}
+        <div className="zd:flex zd:flex-col zd:gap-8">
+          <Form
+            isCreate={mode === "create"}
+            translate
+            debug={roles?.includes("System Admin") || false}
+            docId={id || ""}
+            readonly={doctypeDoc?.is_system_generated === 1}
+            fields={formFields}
+            values={formData}
+            onChange={async (fieldName, data) => {
+              await handleFieldChange(fieldName, data);
+              setIsUserHasType(true);
+            }}
+            doctype={doctypeDoc as unknown as Zodula.DoctypeConfig}
+            tabs={doctypeDoc?.tabs ? JSON.parse(doctypeDoc.tabs) : []}
+            referenceTableFields={referenceTableFields}
+            referenceTableIndexFields={referenceTableIndexFields}
+            extendFields={extendFields}
+            fieldButtons={fieldButtonsByField}
+          />
+          <div className="">
+            {!!doc?.id && <AuditTrail doctype={doctype} docId={id!} />}
+            {/* Created at / Updated at */}
+            {doc?.id && (
+              <div className="zd:mt-6 zd:pt-4 zd:border-t zd:border-border  zd:flex zd:items-center zd:gap-2 zd:justify-between">
+                {/* Created row */}
+                <div className="zd:flex zd:items-center zd:gap-2 zd:text-xs zd:text-muted-foreground">
+                  {/* avatar */}
+                  <div
+                    className="zd:w-5 zd:h-5 zd:rounded-full zd:flex zd:items-center zd:justify-center zd:flex-shrink-0 zd:bg-primary/10 zd:ring-1 zd:ring-primary/20 zd:text-primary"
+                    style={{ fontSize: "9px", fontWeight: 600 }}
+                    title={doc.created_by ?? ""}
+                  >
+                    {(doc.created_by ?? "?")
+                      .split(/[\s._@-]+/)
+                      .slice(0, 2)
+                      .map((p: string) => p[0]?.toUpperCase() ?? "")
+                      .join("")}
+                  </div>
+                  <span>
+                    {doc.created_by ? (
+                      <UserLink
+                        userId={doc.created_by}
+                        name={getUserName(doc.created_by) || doc.created_by}
+                      />
+                    ) : (
+                      <span>{t("Unknown")}</span>
                     )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-              {/* Custom form actions from useEnhanceDoctype */}
-              <FormActions doctype={doctype} doc={doc} />
-              <PrimaryButtonRender />
-            </div>
-          )
-        }
-      >
-        <div data-form-doctype={doctype} data-form-is-dirty={isDirty ? "true" : "false"}>
-          {/* Form Content */}
-          <div className="zd:flex zd:flex-col zd:gap-8 zd:rounded-lg zd:px-4 zd:md:px-8 zd:py-4 zd:shadow-lg zd:border-t zd:border-dashed">
-            <Form
-              isCreate={mode === "create"}
-              translate
-              debug={roles?.includes("System Admin") || false}
-              docId={id || ""}
-              readonly={doctypeDoc?.is_system_generated === 1}
-              fields={formFields}
-              values={formData}
-              onChange={handleFieldChange}
-              doctype={doctypeDoc as unknown as Zodula.DoctypeConfig}
-              tabs={doctypeDoc?.tabs ? JSON.parse(doctypeDoc.tabs) : []}
-              referenceTableFields={referenceTableFields}
-              referenceTableIndexFields={referenceTableIndexFields}
-              extendFields={extendFields}
-              fieldButtons={fieldButtonsByField}
-            />
-            <div className="">
-              {!!doc?.id && <AuditTrail doctype={doctype} docId={id!} />}
-              {/* Create at and Updated at */}
-              <div className="zd:flex zd:gap-2 zd:items-center zd:mt-2">
-                <span className="zd:text-sm zd:text-muted-foreground">
-                  {doc?.created_by ? (
-                    <UserLink
-                      userId={doc.created_by}
-                      name={getUserName(doc.created_by) || doc.created_by}
-                    />
-                  ) : (
-                    "Unknown"
-                  )}{" "}
-                  {t("Created At")}{" "}
-                  {zodula.utils.formatTimeAgo(doc?.created_at || "")}
-                </span>
-                {/* center dot */}
-                <span className="zd:text-sm zd:text-muted-foreground">•</span>
-                <span className="zd:text-sm zd:text-muted-foreground">
-                  {doc?.updated_by ? (
-                    <span className="zd:text-sm zd:text-muted-foreground">
-                      {getUserName(doc.updated_by) || doc.updated_by}
-                    </span>
-                  ) : (
-                    "Unknown"
-                  )}{" "}
-                  {t("Updated At")}{" "}
-                  {zodula.utils.formatTimeAgo(doc?.updated_at || "")}
-                </span>
+                  </span>
+                  <span className="zd:text-muted-foreground/60">{t("Created At")}</span>
+                  <span
+                    className="zd:cursor-default"
+                    title={
+                      doc.created_at
+                        ? new Date(doc.created_at).toLocaleString(undefined, {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                        : ""
+                    }
+                  >
+                    {zodula.utils.formatTimeAgo(doc.created_at || "")}
+                  </span>
+                </div>
+
+                {/* Updated row — only shown when updated_at differs meaningfully from created_at */}
+                {doc.updated_at &&
+                  new Date(doc.updated_at).getTime() - new Date(doc.created_at || "").getTime() > 60_000 && (
+                    <div className="zd:flex zd:items-center zd:gap-2 zd:text-xs zd:text-muted-foreground">
+                      {/* avatar */}
+                      <div
+                        className="zd:w-5 zd:h-5 zd:rounded-full zd:flex zd:items-center zd:justify-center zd:flex-shrink-0 zd:bg-muted zd:ring-1 zd:ring-border"
+                        style={{ fontSize: "9px", fontWeight: 600 }}
+                        title={doc.updated_by ?? ""}
+                      >
+                        {(doc.updated_by ?? doc.created_by ?? "?")
+                          .split(/[\s._@-]+/)
+                          .slice(0, 2)
+                          .map((p: string) => p[0]?.toUpperCase() ?? "")
+                          .join("")}
+                      </div>
+                      <span>
+                        {doc.updated_by ? (
+                          <UserLink
+                            userId={doc.updated_by}
+                            name={getUserName(doc.updated_by) || doc.updated_by}
+                          />
+                        ) : doc.created_by ? (
+                          <UserLink
+                            userId={doc.created_by}
+                            name={getUserName(doc.created_by) || doc.created_by}
+                          />
+                        ) : (
+                          <span>{t("Unknown")}</span>
+                        )}
+                      </span>
+                      <span className="zd:text-muted-foreground/60">{t("Updated At")}</span>
+                      <span
+                        className="zd:cursor-default"
+                        title={
+                          doc.updated_at
+                            ? new Date(doc.updated_at).toLocaleString(undefined, {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                            : ""
+                        }
+                      >
+                        {zodula.utils.formatTimeAgo(doc.updated_at || "")}
+                      </span>
+                    </div>
+                  )}
               </div>
-            </div>
+            )}
           </div>
         </div>
-      </SidebarLayout>
-    </NavbarLayout>
+      </div>
+    </DeskNavbarLayout>
   );
 }

@@ -2,8 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { Plus, Printer, Download, X, Trash2, RefreshCw, ChevronDown } from "lucide-react";
 import { useRouter } from "@/zodula/ui/components/router";
-import { NavbarLayout } from "@/zodula/ui/layout/navbar-layout";
-import { SidebarLayout, type ActionItem, type PrimaryAction, type SecondaryAction } from "@/zodula/ui/layout/sidebar-layout";
+import { DeskNavbarLayout, type ActionItem, type PrimaryAction, type SecondaryAction } from "@/zodula/ui/layout/desk-navbar-layout";
 import { ListView } from "@/zodula/ui/components/list/ListView";
 import { useListParams } from "@/zodula/ui/hooks/use-list-params";
 import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
@@ -13,7 +12,12 @@ import { useAuth } from "@/zodula/ui/hooks/use-auth";
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
 import { confirm, popup } from "@/zodula/ui/components/ui/popit";
 import { toast } from "@/zodula/ui/components/ui/toast";
-import { ViewSelector, getDoctypeViewOptions, type FieldLike } from "@/zodula/ui/components/view-selector";
+import {
+    ViewSelector,
+    getDoctypeViewOptions,
+    getDoctypeViewFromPath,
+    type FieldLike,
+} from "@/zodula/ui/components/view-selector";
 import { DynamicIcon } from "@/zodula/ui/components/ui/dynamic-icon";
 import { FixtureDialog } from "@/zodula/ui/components/dialogs/fixture-dialog";
 import { CSVDialog } from "@/zodula/ui/components/dialogs/csv-dialog";
@@ -55,6 +59,16 @@ export default function DoctypeListPage() {
         q,
         filters,
     });
+
+    const { docs: calendarRows } = useDocList(
+        {
+            doctype: "Doctype Calendar",
+            limit: 1,
+            filters: [["doctype", "=", doctype] as any],
+        },
+        [doctype]
+    );
+    const calendarEnabled = calendarRows.length > 0;
 
     const docsRef = useRef(docs);
     const selectedRef = useRef(selected);
@@ -357,28 +371,23 @@ export default function DoctypeListPage() {
         return <ErrorView message="Doctype not found" status={404} />
     }
 
-    return <NavbarLayout>
-        <SidebarLayout
-            title={t(`${doctypeDoc?.label || doctype}`)}
-            defaultOpen={false}
-            primaryAction={primaryActions}
-            secondaryActions={secondaryActions}
-            actions={selected.size > 0 ? actions : []}
-            actionSection={
+    return <DeskNavbarLayout
+        title={t(`${doctypeDoc?.label || doctype}`)}
+        defaultOpen={false}
+        primaryAction={primaryActions}
+        secondaryActions={secondaryActions}
+        actions={selected.size > 0 ? actions : []}
+        actionSection={
                 <ViewSelector
-                    views={getDoctypeViewOptions(t, fields as FieldLike[], doctype)}
-                    value={
-                        location.pathname.includes("/sheet")
-                            ? "sheet"
-                            : location.pathname.includes("/tree")
-                                ? "tree"
-                                : "list"
-                    }
+                    views={getDoctypeViewOptions(t, fields as FieldLike[], doctype, { calendarEnabled })}
+                    value={getDoctypeViewFromPath(location.pathname)}
                     onChange={(value) => {
                         if (value === "list") {
                             push(`/desk/doctypes/${doctype}/list${location.search}`);
                         } else if (value === "tree") {
                             push(`/desk/doctypes/${doctype}/tree${location.search}`);
+                        } else if (value === "calendar") {
+                            push(`/desk/doctypes/${doctype}/calendar${location.search}`);
                         } else {
                             push(`/desk/doctypes/${doctype}/sheet${location.search}`);
                         }
@@ -410,6 +419,5 @@ export default function DoctypeListPage() {
                 selected={selected}
                 setSelected={setSelected}
             />
-        </SidebarLayout>
-    </NavbarLayout>
+    </DeskNavbarLayout>
 }

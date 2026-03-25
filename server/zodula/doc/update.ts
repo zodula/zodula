@@ -401,6 +401,12 @@ export class ZodulaDoctypeUpdate<
       }
     }
 
+    // update attachment references (Attachment.virtual docId -> parent doc id)
+    await db.run(
+      `UPDATE "Attachment" SET "docId" = ? WHERE "doctype" = ? AND "docId" = ?`,
+      [newId, this.doctypeName, oldId]
+    );
+
     // update audit trail
     await db.run(`UPDATE 'Audit Trail' SET doctype_id = ? WHERE doctype_id = ? AND doctype = ?`, [newId, oldId, this.doctypeName]);
 

@@ -27,6 +27,8 @@ export const SUFFIX_EXTEND = "_extend"
  * Available doctype events that can be hooked into
  */
 export type DoctypeEvent =
+    | "before_get"
+    | "after_get"
     | "before_insert"
     | "after_insert"
     | "before_save"
@@ -404,7 +406,7 @@ export class DoctypeLoader implements DoctypePlugin {
         const doctypeEvents = doctypeWithConfig?.doctypeEvents || [];
 
         for (const [eventName, callback] of doctypeEvents) {
-            this.registerDoctypeEvent(doctypeName, eventName, callback);
+            this.registerDoctypeEvent(doctypeName, eventName, callback as any);
         }
     }
 

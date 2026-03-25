@@ -1,6 +1,5 @@
 import { useRouter } from "@/zodula/ui/components/router";
-import { NavbarLayout } from "@/zodula/ui/layout/navbar-layout";
-import { SidebarLayout, type ActionItem, type PrimaryAction } from "@/zodula/ui/layout/sidebar-layout";
+import { DeskNavbarLayout, type ActionItem, type PrimaryAction } from "@/zodula/ui/layout/desk-navbar-layout";
 import { SheetView } from "@/zodula/ui/components/list/SheetView";
 import { useListParams } from "@/zodula/ui/hooks/use-list-params";
 import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
@@ -23,7 +22,12 @@ import type { SheetViewExportHandle } from "@/zodula/ui/components/list/SheetVie
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
 import ErrorView from "@/zodula/ui/views/error-view";
 import { Button } from "@/zodula/ui/components/ui/button";
-import { ViewSelector, getDoctypeViewOptions, type FieldLike } from "@/zodula/ui/components/view-selector";
+import {
+    ViewSelector,
+    getDoctypeViewOptions,
+    getDoctypeViewFromPath,
+    type FieldLike,
+} from "@/zodula/ui/components/view-selector";
 import { Select } from "@/zodula/ui/components/ui/select";
 
 export default function DoctypeSheetPage() {
@@ -68,6 +72,16 @@ export default function DoctypeSheetPage() {
         order: "desc",
         filters: [["doctype", "=", doctype] as any],
     });
+
+    const { docs: calendarRows } = useDocList(
+        {
+            doctype: "Doctype Calendar",
+            limit: 1,
+            filters: [["doctype", "=", doctype] as any],
+        },
+        [doctype]
+    );
+    const calendarEnabled = calendarRows.length > 0;
 
     const selectedReport = useMemo(() => {
         return reportOptions.find((report) => report.id === selectedReportId) || null;
@@ -364,13 +378,12 @@ export default function DoctypeSheetPage() {
         setSelected(new Set());
     };
 
-    return <NavbarLayout>
-        <SidebarLayout
-            title={t(`${doctypeDoc?.label || doctype}`)}
-            defaultOpen={false}
-            primaryAction={primaryActions}
-            actions={selected.size > 0 && !isReadonlySheet ? actions : []}
-            sidebarContent={
+    return <DeskNavbarLayout
+        title={t(`${doctypeDoc?.label || doctype}`)}
+        defaultOpen={false}
+        primaryAction={primaryActions}
+        actions={selected.size > 0 && !isReadonlySheet ? actions : []}
+        rightSidebar={
                 <div className="zd:flex zd:flex-col zd:gap-3">
                     <div>
                         <div className="zd:text-sm zd:font-medium zd:mb-1">{t("Report")}</div>
@@ -511,19 +524,15 @@ export default function DoctypeSheetPage() {
             }
             actionSection={
                 <ViewSelector
-                    views={getDoctypeViewOptions(t, fields as FieldLike[], doctype)}
-                    value={
-                        location.pathname.includes("/sheet")
-                            ? "sheet"
-                            : location.pathname.includes("/tree")
-                              ? "tree"
-                              : "list"
-                    }
+                    views={getDoctypeViewOptions(t, fields as FieldLike[], doctype, { calendarEnabled })}
+                    value={getDoctypeViewFromPath(location.pathname)}
                     onChange={(value) => {
                         if (value === "list") {
                             push(`/desk/doctypes/${doctype}/list${location.search}`);
                         } else if (value === "tree") {
                             push(`/desk/doctypes/${doctype}/tree${location.search}`);
+                        } else if (value === "calendar") {
+                            push(`/desk/doctypes/${doctype}/calendar${location.search}`);
                         } else {
                             push(`/desk/doctypes/${doctype}/sheet${location.search}`);
                         }
@@ -561,7 +570,6 @@ export default function DoctypeSheetPage() {
                 stateKey={selectedReportId ? `${doctype}::${selectedReportId}` : doctype}
                 onVisibleColumnsChange={setSheetVisibleColumns}
             />
-        </SidebarLayout>
-    </NavbarLayout>
+    </DeskNavbarLayout>
 }
 

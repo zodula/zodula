@@ -14,6 +14,10 @@ import { ZodulaDoctypeHelper } from "./helper";
 import type { DoctypeChild, DoctypeMetadata } from "../../loader/plugins/doctype";
 import { zodula } from "../..";
 
+function sqlStringLiteral(value: unknown): string {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
 export class ZodulaDoctypeSelector<
   TN extends Zodula.DoctypeName = Zodula.DoctypeName,
 > {
@@ -254,10 +258,22 @@ export class ZodulaDoctypeSelector<
           case ">=":
           case "<":
           case "<=":
-          case "LIKE":
-          case "NOT LIKE":
-            condition = `${fieldReference} ${operator} '${value}'`;
+            condition = `${fieldReference} ${operator} ${sqlStringLiteral(value)}`;
             break;
+          case "LIKE": {
+            const likePat = String(value).includes("%")
+              ? String(value)
+              : `%${value}%`;
+            condition = `${fieldReference} LIKE ${sqlStringLiteral(likePat)}`;
+            break;
+          }
+          case "NOT LIKE": {
+            const notLikePat = String(value).includes("%")
+              ? String(value)
+              : `%${value}%`;
+            condition = `${fieldReference} NOT LIKE ${sqlStringLiteral(notLikePat)}`;
+            break;
+          }
           case "IN":
             const arrValue1 = ("(" +
               (value as string[])?.map((v) => `'${v}'`).join(",") +

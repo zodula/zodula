@@ -176,18 +176,13 @@ const Select = ({
   let filteredOptions =
     searchable && searchValue
       ? options.filter((option) => {
-        if (multiple && searchValue.includes(",")) {
-          // In multiple mode, search based on the last value after comma
-          const lastValue = searchValue.split(",").pop()?.trim() || "";
-          return (
-            option.label.toLowerCase().includes(lastValue.toLowerCase())
-          );
-        } else {
-          // Single mode or no comma - search the entire value
-          return (
-            option.label.toLowerCase().includes(searchValue.toLowerCase())
-          );
-        }
+        const searchTerm =
+          multiple && searchValue.includes(",")
+            ? searchValue.split(",").pop()?.trim() || ""
+            : searchValue.trim();
+        if (!searchTerm) return true;
+        // Match by label, value, or subtitle (same criteria as relevance sorting)
+        return calculateRelevance(option, searchTerm) > 0;
       })
       : options;
 
@@ -598,10 +593,9 @@ const Select = ({
     <div
       ref={containerRef}
       className={cn(
-        "zd:relative zd:bg-muted zd:rounded",
+        "zd:relative zd:rounded-lg",
         cursorClass,
         className ?? "",
-        readOnly ? "zd:bg-muted/50" : "",
       )}
       onClick={handleContainerClick}
     >
@@ -617,14 +611,12 @@ const Select = ({
         placeholder={placeholder}
         disabled={disabled}
         readOnly={isInputReadOnly}
+        suppressReadOnlyStyle={!readOnly && isInputReadOnly}
         autoComplete={autocomplete}
         className={cn(
           !allowFreeText && !searchable && !clearable ? "zd:select-none" : "",
           inputClassName ?? "",
-          disabled
-            ? "zd:text-muted-foreground"
-            : cursorClass,
-          !readOnly ? "zd:text-primary" : "",
+          disabled ? "zd:text-muted-foreground" : cursorClass,
         )}
         wrapperStyle={wrapperStyle}
         prefix={prefix}
@@ -656,12 +648,13 @@ const Select = ({
         createPortal(
           <div
             ref={dropdownRef}
+            data-zd-select-dropdown="true"
             data-side={dropdownSide}
             className={cn(
-              "zd:fixed zd:z-50",
-              "zd:bg-background zd:border zd:border-border zd:rounded zd:shadow-lg",
+              "zd:fixed zd:z-50 zd:p-1",
+              "zd:bg-popover zd:border zd:border-border zd:rounded-xl zd:shadow-xl",
               "zd:overflow-y-auto",
-              "zd:no-scrollbar", // Hide scrollbar but keep scroll functionality
+              "zd:no-scrollbar",
               "zd:animate-in zd:fade-in-0 zd:zoom-in-95",
               "zd:data-[side=bottom]:slide-in-from-top-2 zd:data-[side=top]:slide-in-from-bottom-2",
               dropdownClassName ?? ""
@@ -689,12 +682,12 @@ const Select = ({
                     <div
                       key={option.value}
                       className={cn(
-                        "zd:min-h-10 zd:px-3 zd:py-2 zd:text-sm zd:cursor-pointer zd:transition-colors",
-                        "zd:hover:bg-muted zd:focus:bg-muted zd:focus:outline-none",
+                        "zd:min-h-9 zd:px-2.5 zd:py-2 zd:text-sm zd:cursor-pointer zd:transition-colors zd:rounded-lg",
+                        "zd:hover:bg-accent zd:focus:bg-accent zd:focus:outline-none",
                         option.disabled
-                          ? "zd:opacity-50 zd:cursor-not-allowed zd:hover:bg-transparent"
+                          ? "zd:opacity-40 zd:cursor-not-allowed zd:hover:bg-transparent"
                           : "",
-                        focusedIndex === index ? "zd:bg-muted" : "",
+                        focusedIndex === index ? "zd:bg-accent" : "",
                         optionClassName ?? ""
                       )}
                       onMouseDown={(e) => {
@@ -750,13 +743,13 @@ const Select = ({
                   <div
                     key={`action-${index}`}
                     className={cn(
-                      "zd:px-3 zd:py-2 zd:text-sm zd:cursor-pointer zd:transition-colors",
-                      "zd:hover:bg-muted zd:focus:bg-muted zd:focus:outline-none",
+                      "zd:px-2.5 zd:py-2 zd:text-sm zd:cursor-pointer zd:transition-colors zd:rounded-lg",
+                      "zd:hover:bg-accent zd:focus:bg-accent zd:focus:outline-none",
                       action.disabled
-                        ? "zd:opacity-50 zd:cursor-not-allowed zd:hover:bg-transparent"
+                        ? "zd:opacity-40 zd:cursor-not-allowed zd:hover:bg-transparent"
                         : "",
                       focusedIndex === filteredOptions.length + index
-                        ? "zd:bg-muted"
+                        ? "zd:bg-accent"
                         : "",
                       "zd:flex zd:items-center zd:gap-2"
                     )}

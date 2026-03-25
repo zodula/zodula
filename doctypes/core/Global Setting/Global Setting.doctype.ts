@@ -37,12 +37,49 @@ export default $doctype({
         type: "Text",
         label: "Description"
     },
-    max_free_org_per_user: {
-        type: "Integer",
-        label: "Max Free Organization Per User",
+    currency: {
+        type: "Text",
+        label: "Currency",
+        default: "฿",
+    },
+    default_lang: {
+        type: "Reference",
+        label: "Default Language",
+        reference: "Language",
+    },
+    doc_status_watermark: {
+        type: "Check",
+        label: "Doc Status Watermark",
         default: "1",
-        description: "Maximum number of free organizations a user can create."
-    }
+        description: "When printing submittable docs, show Draft/Cancelled watermark if not submitted. Uncheck to hide.",
+    },
+    is_setup: {
+        type: "Check",
+        label: "Is Setup",
+        default: "0",
+        hidden: 1,
+        description: "Internal flag to indicate organization setup is completed.",
+    },
+    facebook_url: {
+        type: "Text",
+        label: "Facebook URL",
+    },
+    twitter_url: {
+        type: "Text",
+        label: "Twitter / X URL",
+    },
+    linkedin_url: {
+        type: "Text",
+        label: "LinkedIn URL",
+    },
+    instagram_url: {
+        type: "Text",
+        label: "Instagram URL",
+    },
+    youtube_url: {
+        type: "Text",
+        label: "YouTube URL",
+    },
 }, {
     label: "Global Setting",
     is_single: 1,
@@ -61,7 +98,21 @@ export default $doctype({
                 [
                     { type: "field", value: "logo", align: "left" },
                     { type: "field", value: "favicon", align: "left" },
-                    { type: "field", value: "currency_symbol", align: "left" },
+                    { type: "field", value: "currency", align: "left" },
+                    { type: "field", value: "default_lang", align: "left" },
+                ],
+                { type: "section", value: "Social Media", align: "left" },
+                [
+                    { type: "field", value: "facebook_url", align: "left" },
+                    { type: "field", value: "twitter_url", align: "left" },
+                    { type: "field", value: "linkedin_url", align: "left" },
+                    { type: "field", value: "instagram_url", align: "left" },
+                    { type: "field", value: "youtube_url", align: "left" },
+                ],
+                { type: "section", value: "Print", align: "left" },
+                [
+                    { type: "field", value: "doc_status_watermark", align: "left" },
+                    { type: "field", value: "is_setup", align: "left" },
                 ],
             ],
         },

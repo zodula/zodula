@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FormPlugin } from "../plugin";
 import { Select, type SelectAction } from "../../ui/select";
 import { ArrowRight, FilterIcon, PlusIcon, ArrowUpDown, XIcon } from "lucide-react";
@@ -33,6 +33,7 @@ const ReferenceInput = (props: {
     useState<Zodula.SelectDoctype<"Doctype"> | null>(null);
   /** Temp string shown in input while user is searching; only committed via onChange when they select an option. */
   const [searchText, setSearchText] = useState<string | undefined>(undefined);
+  const latestSearchRequestRef = useRef(0);
   const isVirtual = props.fieldOptions.type === "Virtual Reference";
 
   const referenceDoctype = useMemo(() => {
@@ -127,9 +128,11 @@ const ReferenceInput = (props: {
       }
     }
 
+    rawFilters = rawFilters.filter(f => !f?.[2]?.includes?.("{{"))
+
     const formData = props.formData;
     if (!formData || !Array.isArray(rawFilters)) return rawFilters;
-    return rawFilters.map((filter: any) => {
+    const cleanedFilters = rawFilters.map((filter: any) => {
       if (!Array.isArray(filter) || filter.length < 3) return filter;
       const [fieldPath, operator, filterValue] = filter;
       if (
@@ -144,6 +147,7 @@ const ReferenceInput = (props: {
       );
       return [fieldPath, operator, resolved];
     });
+    return cleanedFilters;
   }, [
     props.fieldOptions.filters,
     props.formData,
@@ -151,6 +155,8 @@ const ReferenceInput = (props: {
     (props as any).childTableFieldPropertyOverrides,
     props.fieldPath,
   ]);
+
+  console.log("filters", filters);
 
   useEffect(() => {
     if (!referenceDoctype) return;
@@ -277,6 +283,7 @@ const ReferenceInput = (props: {
   const search = useCallback(
     async (query: string) => {
       if (!doctype || !referenceDoctype) return;
+      const requestId = ++latestSearchRequestRef.current;
       const q = getSearchQuery(query);
       const sortField = props.fieldOptions.sort || "updated_at";
       const orderDirection = props.fieldOptions.order || "asc";
@@ -287,6 +294,7 @@ const ReferenceInput = (props: {
         order: orderDirection,
         filters: filters,
       });
+      if (requestId !== latestSearchRequestRef.current) return;
       setOptions(
         res.docs.map((r) => ({
           id: r.id,
@@ -513,6 +521,8 @@ const ReferenceInput = (props: {
           });
           const doc = docs.docs[0];
           if (doc?.id) {
+            // if tempValue is not the same as currentValue, then change the value
+            if ((currentValue || "") == (searchText || "")) return
             props.onChange?.(fieldPath, doc.id);
             props.onBlur?.(fieldPath, doc.id);
           } else {
@@ -538,7 +548,7 @@ const ReferenceInput = (props: {
   const className = useMemo(
     () =>
       cn(
-        "zd:rounded zd:border-l-3 zd:font-bold",
+        "zd:rounded zd:font-bold",
         !isVirtual ? "zd:hover:ring-primary zd:hover:ring-1" : ""
       ),
     [isVirtual]
@@ -549,7 +559,7 @@ const ReferenceInput = (props: {
       <span className="zd:text-muted-foreground zd:h-8 zd:flex zd:items-center zd:gap-1 zd:bg-muted/50 zd:rounded-md zd:p-2">
         <Link
           to={`/desk/doctypes/${referenceDoctype || ""}/form/${props.value || ""}`}
-          className="zd:text-primary zd:hover:underline  zd:whitespace-nowrap zd:truncate"
+          className="zd:text-primary zd:hover:underline zd:whitespace-nowrap zd:truncate zd:text-sm"
         >
           {props.value}
         </Link>

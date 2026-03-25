@@ -19,16 +19,14 @@ export default $doctype<"Workspace">({
         reference: "App",
         required: 1
     },
+    url: {
+        type: "Text",
+        label: "URL"
+    },
     is_system: {
         type: "Check",
         label: "Is System",
         default: "0"
-    },
-    workspace_items: {
-        type: "Reference Table",
-        label: "Workspace Items",
-        reference: "Workspace Item",
-        required: 0
     }
 }, {
     label: "Workspace",

@@ -3,7 +3,7 @@ import { useDocListAll } from "@/zodula/ui/hooks/use-doc-list-all";
 import { useDnd } from "@/zodula/ui/hooks/use-dnd";
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
 import { ClientFieldHelper } from "@/zodula/client/field";
-import { SidebarLayout, type PrimaryAction } from "@/zodula/ui/layout/sidebar-layout";
+import { useIsTabletOrUp } from "@/zodula/ui/hooks/use-media-query";
 import { Button } from "@/zodula/ui/components/ui/button";
 import { Input } from "@/zodula/ui/components/ui/input";
 import { FormControl } from "@/zodula/ui/components/ui/form-control";
@@ -389,11 +389,6 @@ export type PrintTemplateBuilderProps = {
   /** Exclude Custom HTML from palette (for is_html: 0) */
   excludeCustomHtml?: boolean;
   className?: string;
-  /** Action section (e.g. Save button) rendered in the layout header */
-  primaryAction?: PrimaryAction | PrimaryAction[];
-  actionSection?: React.ReactNode;
-  /** Sidebar title (e.g. Print Template id). When not set, uses default "Print Template Builder". */
-  sidebarTitle?: string;
 };
 
 /** Group items by row (group id); returns ordered rows with their items */
@@ -425,9 +420,6 @@ export function PrintTemplateBuilder({
   onDocNameExpressionChange,
   excludeCustomHtml = true,
   className,
-  primaryAction,
-  actionSection,
-  sidebarTitle,
 }: PrintTemplateBuilderProps) {
   const { t } = useTranslation();
   const [filter, setFilter] = useState("");
@@ -436,6 +428,7 @@ export function PrintTemplateBuilder({
   const [dragOverRowPosition, setDragOverRowPosition] = useState<"before" | "after" | null>(null);
   const [isDraggingRow, setIsDraggingRow] = useState(false);
   const [isDraggingElement, setIsDraggingElement] = useState(false);
+  const isTabletOrUp = useIsTabletOrUp();
 
   const { docs: allFields } = useDocListAll({ doctype: "Field" as Zodula.DoctypeName });
   const fieldsForDoctype = useMemo(() => {
@@ -907,15 +900,9 @@ export function PrintTemplateBuilder({
   };
 
   return (
-    <div className={cn("zd:h-full zd:min-h-[520px]", className)}>
-      <SidebarLayout
-        title={sidebarTitle ?? t("Print Template Builder")}
-        sidebarContent={sidebarContent}
-        defaultOpen={true}
-        primaryAction={primaryAction}
-        actionSection={actionSection}
-      >
-        <div className="zd:flex zd:flex-col zd:gap-4 zd:overflow-auto">
+    <div className={cn("zd:flex zd:h-full zd:min-h-[520px] zd:min-h-0 zd:gap-4", className)}>
+      {/* Main content */}
+      <div className="zd:flex zd:flex-col zd:flex-1 zd:min-w-0 zd:overflow-y-auto zd:gap-4">
         <p className="zd:text-muted-foreground zd:text-sm">
           {t("Drag elements from the sidebar to add. Drag to reorder. Max 6 fields per row.")}
         </p>
@@ -1102,8 +1089,14 @@ export function PrintTemplateBuilder({
         <Button type="button" variant="outline" onClick={addRow} className="zd:w-fit zd:gap-2">
           <Plus className="zd:w-4 zd:h-4" /> {t("Add row")}
         </Button>
+      </div>
+
+      {/* Palette sidebar */}
+      {isTabletOrUp && (
+        <div className="zd:w-72 zd:shrink-0 zd:border zd:border-border zd:rounded-xl zd:bg-card zd:overflow-y-auto zd:shadow-sm zd:p-3">
+          {sidebarContent}
         </div>
-      </SidebarLayout>
+      )}
     </div>
   );
 }

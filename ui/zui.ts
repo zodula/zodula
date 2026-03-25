@@ -6,6 +6,7 @@ import { toast, type ToastAPI } from "./components/ui/toast";
 import { popup, alert, confirm } from "./components/ui/popit";
 import { MultiSelectDoctypeDialog } from "./components/dialogs/multi-select-doctype-dialog";
 import type { MultiSelectDoctypeDialogInitialData } from "./components/dialogs/multi-select-doctype-dialog";
+import type { MultiSelectDoctypeDialogResult } from "./components/dialogs/multi-select-doctype-dialog";
 import { useTranslation } from "./hooks/use-translation";
 import { useOrganization } from "./hooks/use-organization";
 import type { IconName } from "./components/ui/dynamic-icon";
@@ -186,11 +187,11 @@ export interface ZUI {
   open_multiselect_dialog: (
     initialData: MultiSelectDoctypeDialogInitialData,
     options?: { title?: string; description?: string; showCloseButton?: boolean; width?: number | string; maxWidth?: number | string }
-  ) => Promise<string[] | null>;
+  ) => Promise<string[] | MultiSelectDoctypeDialogResult | null>;
   open_singleselect_dialog: (
     initialData: MultiSelectDoctypeDialogInitialData,
     options?: { title?: string; description?: string; showCloseButton?: boolean; width?: number | string; maxWidth?: number | string }
-  ) => Promise<string | null>;
+  ) => Promise<string | { id: string | null; extend_values: Record<string, any> } | null>;
   confirm: typeof confirm;
   alert: typeof alert;
   form: {
@@ -223,24 +224,6 @@ export interface ZUI {
       onClick: (context: ListScriptContext<DN>) => void | Promise<void>,
       options?: SecondaryButtonOptions<DN, "list">
     ) => void;
-  };
-  onboarding: {
-    /** Get onboarding checklist for current user (owner vs user mode, steps filtered by role). */
-    getChecklist: () => Promise<{
-      checklist: Array<{
-        onboarding: { id: string; name: string; mode: string };
-        steps: Array<{
-          id: string;
-          title: string;
-          description: string | null;
-          route: string | null;
-          done: boolean;
-          idx: number;
-        }>;
-      }>;
-    }>;
-    /** Mark an onboarding step as done for the current user and org. */
-    markStepDone: (onboardingStepId: string) => Promise<void>;
   };
   _: {
     state: ZuiState;
@@ -422,31 +405,15 @@ export function useZui(
     open_multiselect_dialog: (
       initialData: MultiSelectDoctypeDialogInitialData,
       options?: { title?: string; description?: string; showCloseButton?: boolean; width?: number | string; maxWidth?: number | string }
-    ) => popup(MultiSelectDoctypeDialog, options, initialData) as Promise<string[] | null>,
+    ) => popup(MultiSelectDoctypeDialog, options, initialData) as Promise<string[] | MultiSelectDoctypeDialogResult | null>,
     open_singleselect_dialog: (
       initialData: MultiSelectDoctypeDialogInitialData,
       options?: { title?: string; description?: string; showCloseButton?: boolean; width?: number | string; maxWidth?: number | string }
-    ) => popup(MultiSelectDoctypeDialog, options, { ...initialData, single: true }) as Promise<string | null>,
+    ) => popup(MultiSelectDoctypeDialog, options, { ...initialData, single: true }) as Promise<string | { id: string | null; extend_values: Record<string, any> } | null>,
     confirm,
     alert,
     form: ui.form,
     list: ui.list,
-    onboarding: {
-      getChecklist: async () => {
-        const res = await zodula.action("zodula.onboarding.checklist" as Zodula.ActionPath);
-        return res as {
-          checklist: Array<{
-            onboarding: { id: string; name: string; mode: string };
-            steps: Array<{ id: string; title: string; description: string | null; route: string | null; done: boolean; idx: number }>;
-          }>
-        };
-      },
-      markStepDone: async (onboardingStepId: string) => {
-        await zodula.action("zodula.onboarding.markStepDone" as Zodula.ActionPath, {
-          data: { onboarding_step_id: onboardingStepId },
-        });
-      },
-    },
     _: {
       state: zuiStore,
       executeFormScripts,

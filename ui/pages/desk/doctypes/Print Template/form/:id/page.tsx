@@ -5,8 +5,7 @@ import { zodula } from "@/zodula/client";
 import { ZodulaHtmlBuilder } from "@/zodula/ui/components/custom/zodula-html-builder";
 import { PrintTemplateBuilder } from "@/zodula/ui/components/custom/print-template-builder";
 import type { PrintTemplateBuilderItem } from "@/zodula/ui/components/custom/print-template-builder/types";
-import { NavbarLayout } from "@/zodula/ui/layout/navbar-layout";
-import { SidebarLayout } from "@/zodula/ui/layout/sidebar-layout";
+import { DeskNavbarLayout } from "@/zodula/ui/layout/desk-navbar-layout";
 import { Button } from "@/zodula/ui/components/ui/button";
 import { Input } from "@/zodula/ui/components/ui/input";
 import { FormControl } from "@/zodula/ui/components/ui/form-control";
@@ -472,7 +471,6 @@ export default function PrintTemplateFormPage() {
           setDefaultLetterHead(v.defaultLetterHead);
           setDefaultLanguage(v.defaultLanguage);
           setShowIdQrCodeState(v.showIdQrCode);
-          setShowIdQrCode(v.showIdQrCode);
         },
       }
     );
@@ -497,11 +495,11 @@ export default function PrintTemplateFormPage() {
   // mounted so the HTML builder preview is not lost.
   if (!doc) {
     return (
-      <NavbarLayout>
+      <DeskNavbarLayout>
         <div className="zd:flex zd:items-center zd:justify-center zd:min-h-[400px]">
           <span className="zd:text-muted-foreground">{loading ? "Loading..." : "Print Template not found."}</span>
         </div>
-      </NavbarLayout>
+      </DeskNavbarLayout>
     );
   }
 
@@ -512,61 +510,52 @@ export default function PrintTemplateFormPage() {
   };
 
   return (
-    <NavbarLayout>
-      <div className="zd:flex zd:flex-col zd:h-full zd:min-h-0">
-        {isHtml ? (
-          <SidebarLayout
-            title={id ?? ""}
-            primaryAction={saveAction}
-            actionSection={actionSection}
-            defaultOpen={false}
-          >
-            <ZodulaHtmlBuilder
-              html={html}
-              css={css}
-              js={js}
-              onChange={(ctx) => {
-                setHtml(ctx.html);
-                setCss(ctx.css);
-                setJs(ctx.js);
-              }}
-              previewContext={{ zodula }}
-              enabledPanels={{ html: true, css: true, js: false }}
-              allowCustomSize
-              defaultZoom={0.75}
-              margins={{
-                top: marginTop === "" ? undefined : Number(marginTop),
-                right: marginRight === "" ? undefined : Number(marginRight),
-                bottom: marginBottom === "" ? undefined : Number(marginBottom),
-                left: marginLeft === "" ? undefined : Number(marginLeft),
-              }}
-              className="zd:max-h-[calc(100vh-140px)]"
-            />
-          </SidebarLayout>
-        ) : itemsLoaded ? (
-          <PrintTemplateBuilder
-            doctype={doctypeForPalette}
-            items={items}
-            // @ts-ignore - PrintTemplateBuilder uses PrintTemplateBuilderItem; generated types may reference PrintTemplateElement
-            onChange={setItems}
-            heading={heading}
-            onHeadingChange={setHeading}
-            docNameExpression={docNameExpr}
-            onDocNameExpressionChange={setDocNameExpr}
-            excludeCustomHtml={false}
-            className="zd:h-full"
-            primaryAction={saveAction}
-            actionSection={actionSection}
-            sidebarTitle={id ?? ""}
-          />
-        ) : (
-          <SidebarLayout title={id ?? ""} primaryAction={saveAction} actionSection={actionSection}>
-            <div className="zd:flex zd:items-center zd:justify-center zd:min-h-[320px]">
-              <span className="zd:text-muted-foreground">Loading template items...</span>
-            </div>
-          </SidebarLayout>
-        )}
-      </div>
-    </NavbarLayout>
+    <DeskNavbarLayout
+      title={id ?? ""}
+      primaryAction={saveAction}
+      actionSection={actionSection}
+      defaultOpen={false}
+    >
+      {isHtml ? (
+        <ZodulaHtmlBuilder
+          html={html}
+          css={css}
+          js={js}
+          onChange={(ctx) => {
+            setHtml(ctx.html);
+            setCss(ctx.css);
+            setJs(ctx.js);
+          }}
+          previewContext={{ zodula }}
+          enabledPanels={{ html: true, css: true, js: false }}
+          allowCustomSize
+          defaultZoom={0.75}
+          margins={{
+            top: marginTop === "" ? undefined : Number(marginTop),
+            right: marginRight === "" ? undefined : Number(marginRight),
+            bottom: marginBottom === "" ? undefined : Number(marginBottom),
+            left: marginLeft === "" ? undefined : Number(marginLeft),
+          }}
+          className="zd:max-h-[calc(100vh-140px)]"
+        />
+      ) : itemsLoaded ? (
+        <PrintTemplateBuilder
+          doctype={doctypeForPalette}
+          items={items}
+          // @ts-ignore - PrintTemplateBuilder uses PrintTemplateBuilderItem; generated types may reference PrintTemplateElement
+          onChange={setItems}
+          heading={heading}
+          onHeadingChange={setHeading}
+          docNameExpression={docNameExpr}
+          onDocNameExpressionChange={setDocNameExpr}
+          excludeCustomHtml={false}
+          className="zd:h-full"
+        />
+      ) : (
+        <div className="zd:flex zd:items-center zd:justify-center zd:min-h-[320px]">
+          <span className="zd:text-muted-foreground">Loading template items...</span>
+        </div>
+      )}
+    </DeskNavbarLayout>
   );
 }

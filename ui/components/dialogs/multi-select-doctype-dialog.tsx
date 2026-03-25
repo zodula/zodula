@@ -24,11 +24,28 @@ export interface MultiSelectDoctypeDialogInitialData {
   single?: boolean;
   /** When true (default), the filters section starts collapsed; pass false to open it by default */
   defaultFiltersCollapsed?: boolean;
+  /** Optional extra fields rendered in dialog (e.g. start_date/end_date) */
+  extend_fields?: Array<{
+    name: string;
+    label: string;
+    type: "Text" | "Date" | "Select" | "Check";
+    required?: boolean;
+    default?: any;
+    options?: string;
+  }>;
+  extend_values?: Record<string, any>;
+  /** Optional async submit hook. Return false to keep dialog open. */
+  on_submit?: (payload: MultiSelectDoctypeDialogResult | { id: string | null; extend_values: Record<string, any> }) => Promise<boolean> | boolean;
+}
+
+export interface MultiSelectDoctypeDialogResult {
+  ids: string[];
+  extend_values: Record<string, any>;
 }
 
 interface MultiSelectDoctypeDialogProps {
   isOpen: boolean;
-  onClose: (result?: string[] | string | null) => void;
+  onClose: (result?: string[] | string | MultiSelectDoctypeDialogResult | { id: string | null; extend_values: Record<string, any> } | null) => void;
   initialData?: MultiSelectDoctypeDialogInitialData;
 }
 
@@ -100,6 +117,7 @@ export function MultiSelectDoctypeDialog({
   const standardFilterFieldNames = initialData?.standard_filter_fields;
   const columnsFieldNames = initialData?.columns;
   const single = initialData?.single === true;
+  const extendFields = initialData?.extend_fields ?? [];
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [standardFilterValues, setStandardFilterValues] = useState<Record<string, any>>(() =>
@@ -122,6 +140,13 @@ export function MultiSelectDoctypeDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filtersExpanded, setFiltersExpanded] = useState(() => !(initialData?.defaultFiltersCollapsed ?? true));
+  const [extendValues, setExtendValues] = useState<Record<string, any>>(() => {
+    const out: Record<string, any> = { ...(initialData?.extend_values ?? {}) };
+    for (const field of extendFields) {
+      if (out[field.name] === undefined && field.default !== undefined) out[field.name] = field.default;
+    }
+    return out;
+  });
 
   const { docs: fieldDocs } = useDocList(
     {
@@ -200,6 +225,11 @@ export function MultiSelectDoctypeDialog({
       setDocs([]);
       setStandardFilterValues(defaultFiltersToStandardValues(defaultFilters));
       setCurrentAdvancedFilters(initialAdvancedFilters);
+      const nextExtend: Record<string, any> = { ...(initialData?.extend_values ?? {}) };
+      for (const field of extendFields) {
+        if (nextExtend[field.name] === undefined && field.default !== undefined) nextExtend[field.name] = field.default;
+      }
+      setExtendValues(nextExtend);
       const fromStandard = standardValuesToFilters(defaultFiltersToStandardValues(defaultFilters));
       const next = dedupeFilters([...fromStandard, ...initialAdvancedFilters]);
       appliedFiltersJsonRef.current = JSON.stringify(next);
@@ -207,7 +237,16 @@ export function MultiSelectDoctypeDialog({
     } else {
       setFiltersExpanded(!(initialData?.defaultFiltersCollapsed ?? true));
     }
-  }, [isOpen, defaultFilters, initialAdvancedFilters, initialData?.defaultFiltersCollapsed]);
+  }, [isOpen, defaultFilters, initialAdvancedFilters, initialData?.defaultFiltersCollapsed, initialData?.extend_values, extendFields]);
+
+  const getMissingExtendRequired = () => {
+    return extendFields.filter((field) => {
+      if (!field.required) return false;
+      const value = extendValues[field.name];
+      return value === undefined || value === null || value === "";
+    });
+  };
+  const hasMissingExtendRequired = getMissingExtendRequired().length > 0;
 
   /** Debounce 500ms: apply filters after user stops typing in standard filters or FilterContent */
   const applyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -349,6 +388,29 @@ export function MultiSelectDoctypeDialog({
 
       {/* Results */}
       <div className="zd:flex zd:flex-1 zd:flex-col zd:min-h-0 zd:w-full zd:min-w-0">
+        {extendFields.length > 0 && (
+          <div className="zd:mb-4 zd:rounded-lg zd:border zd:border-border zd:bg-muted/20 zd:p-3">
+            <p className="zd:mb-3 zd:text-xs zd:font-medium zd:uppercase zd:tracking-wider zd:text-muted-foreground">
+              {t("Additional inputs")}
+            </p>
+            <div className="zd:grid zd:grid-cols-1 zd:gap-3 lg:zd:grid-cols-2">
+              {extendFields.map((field) => (
+                <FormControl
+                  key={field.name}
+                  fieldKey={field.name}
+                  fieldPath={field.name}
+                  field={field as any}
+                  label={t(field.label || field.name)}
+                  value={extendValues[field.name]}
+                  onChange={(fieldName, value) => setExtendValues((prev) => ({ ...prev, [fieldName]: value }))}
+                  readonly={false}
+                  formData={extendValues}
+                  hideFormControl={false}
+                />
+              ))}
+            </div>
+          </div>
+        )}
         <p className="zd:mb-2 zd:text-xs zd:font-medium zd:uppercase zd:tracking-wider zd:text-muted-foreground">
           {t("Results")}
           {!loading && !error && docs.length > 0 && (
@@ -386,11 +448,28 @@ export function MultiSelectDoctypeDialog({
             <div className="zd:flex zd:justify-end zd:gap-2 zd:pt-3 zd:border-t zd:border-border zd:mt-4">
               <Button variant="outline" onClick={() => onClose()}>{t("Cancel")}</Button>
               <Button
-                onClick={() => {
-                  if (single) onClose(selected.size ? Array.from(selected)[0] ?? null : null);
-                  else onClose(Array.from(selected));
+                onClick={async () => {
+                  const missing = getMissingExtendRequired();
+                  if (missing.length > 0) return;
+                  if (single) {
+                    const id = selected.size ? Array.from(selected)[0] ?? null : null;
+                    const payload = extendFields.length > 0 ? { id, extend_values: extendValues } : id;
+                    if (typeof payload === "object" && payload !== null && initialData?.on_submit) {
+                      const shouldClose = await initialData.on_submit(payload as { id: string | null; extend_values: Record<string, any> });
+                      if (!shouldClose) return;
+                    }
+                    onClose(payload as any);
+                  } else {
+                    const ids = Array.from(selected);
+                    const payload = extendFields.length > 0 ? { ids, extend_values: extendValues } : ids;
+                    if (!Array.isArray(payload) && initialData?.on_submit) {
+                      const shouldClose = await initialData.on_submit(payload);
+                      if (!shouldClose) return;
+                    }
+                    onClose(payload as any);
+                  }
                 }}
-                disabled={selected.size === 0}
+                disabled={selected.size === 0 || hasMissingExtendRequired}
               >
                 {t("Get")} {selected.size > 0 && (single ? "" : `(${selected.size})`)}
               </Button>

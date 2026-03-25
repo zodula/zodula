@@ -13,17 +13,15 @@ export default function FormPage() {
     const formId = `create|${doctype}`;
 
     return (
-        <div className="zd:pb-16">
-            <DocFormView
-                id={tempId}
-                prefill={prefill}
-                doctype={doctype}
-                cbUrl={cbUrl}
-                fromField={fromField}
-                resetForm={resetForm}
-                mode="create"
-                formId={formId}
-            />
-        </div>
+        <DocFormView
+            id={tempId}
+            prefill={prefill}
+            doctype={doctype}
+            cbUrl={cbUrl}
+            fromField={fromField}
+            resetForm={resetForm}
+            mode="create"
+            formId={formId}
+        />
     );
 }

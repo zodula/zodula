@@ -131,14 +131,11 @@ export class ZodulaDoctypeInsert<
     } as Zodula.SelectDoctype<TN>;
 
     // Run before_change so field-based naming_series (e.g. field:naming_series) can be set from other doc fields
-    const namingSeriesConfig = doctype.schema.naming_series;
-    if (typeof namingSeriesConfig === "string" && namingSeriesConfig.startsWith("field:")) {
-      await loader.from("doctype").trigger(this.doctypeName, "before_change", {
-        old: undefined as any,
-        doc: prepared,
-        input: this.input,
-      });
-    }
+    await loader.from("doctype").trigger(this.doctypeName, "before_change", {
+      old: undefined as any,
+      doc: prepared,
+      input: this.input,
+    });
 
     // Generate new ID
     let newId = await naming(this.doctypeName, prepared);
@@ -182,19 +179,6 @@ export class ZodulaDoctypeInsert<
         const fieldName = key;
         const filename = value.name;
 
-        // Create directory structure for the file
-        await fs.mkdir(
-          path.join(
-            process.cwd(),
-            ".zodula_data",
-            "files",
-            "doctypes",
-            doctypeName,
-            docId,
-            fieldName
-          ),
-          { recursive: true }
-        );
         const fileDir = path.join(
           process.cwd(),
           ".zodula_data",

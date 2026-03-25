@@ -27,7 +27,7 @@
     --chart-3: oklch(0.398 0.07 227.392);
     --chart-4: oklch(0.828 0.189 84.429);
     --chart-5: oklch(0.769 0.188 70.08);
-    --radius: 0.5rem;
+    --radius: 0.625rem;
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.145 0 0);
     --sidebar-primary: oklch(0.205 0 0);
@@ -135,6 +135,18 @@
     body {
         @apply zd:bg-background zd:text-foreground;
         @apply zd:font-normal;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Brandux-style card containers */
+    .zd-card {
+        @apply zd:rounded-xl zd:border zd:border-border zd:bg-card zd:shadow-sm;
+    }
+
+    /* Sidebar section label style */
+    .zd-sidebar-section-label {
+        @apply zd:text-xs zd:font-semibold zd:uppercase zd:tracking-wider zd:text-muted-foreground zd:px-3 zd:py-1;
     }
 }
 
@@ -147,7 +159,7 @@
 }
 
 html {
-    font-size: 92.5%;
+    /* font-size: 92.5%; */
 }
 
 svg {

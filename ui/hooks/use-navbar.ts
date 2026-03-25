@@ -5,6 +5,9 @@ export interface NavbarStore {
     fullWidth: boolean;
     setFullWidth: (fullWidth: boolean) => void;
     toggleFullWidth: () => void;
+    leftSidebarOpen: boolean;
+    setLeftSidebarOpen: (open: boolean) => void;
+    toggleLeftSidebar: () => void;
 }
 
 export const useNavbar = create<NavbarStore>()(
@@ -13,9 +16,12 @@ export const useNavbar = create<NavbarStore>()(
             fullWidth: false,
             setFullWidth: (fullWidth: boolean) => set({ fullWidth }),
             toggleFullWidth: () => set((state) => ({ fullWidth: !state.fullWidth })),
+            leftSidebarOpen: true,
+            setLeftSidebarOpen: (open: boolean) => set({ leftSidebarOpen: open }),
+            toggleLeftSidebar: () => set((state) => ({ leftSidebarOpen: !state.leftSidebarOpen })),
         }),
         {
-            name: "zodula-navbar-storage", // unique name for localStorage key
+            name: "zodula-navbar-storage",
         }
     )
 )

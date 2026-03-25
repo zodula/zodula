@@ -96,7 +96,7 @@ export const TextInputPlugin = new FormPlugin({
         ref={inputRef}
         name={props.fieldPath || ""}
         id={props.fieldPath || ""}
-        placeholder={""}
+        placeholder={props.placeholder || ""}
         type={type}
         value={internalValue}
         readOnly={props.readonly}
@@ -134,7 +134,7 @@ export const TextInputPlugin = new FormPlugin({
 
     return (
       <Input
-        placeholder={getPlaceholder(props.operator)}
+        placeholder={props.placeholder || props.fieldOptions.label || ""}
         type={type}
         value={props.value || ""}
         onChange={(e) => props.onChange?.(props.fieldPath || "", e.target.value)}
@@ -142,13 +142,3 @@ export const TextInputPlugin = new FormPlugin({
     );
   }
 });
-
-function getPlaceholder(operator?: string): string {
-  if (["IN", "NOT IN"].includes(operator || "")) {
-    return "comma-separated values";
-  }
-  if (["LIKE", "NOT LIKE"].includes(operator || "")) {
-    return "use % as wildcard";
-  }
-  return "value";
-}

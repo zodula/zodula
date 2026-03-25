@@ -227,13 +227,13 @@ export const ReferenceTablePlugin = new FormPlugin({
                     <table className="zd:w-full zd:text-sm">
                         <thead className="zd:bg-muted/50 zd:whitespace-nowrap">
                             <tr>
-                                <th className="zd:px-2 zd:py-2 zd:font-medium zd:text-left zd:w-8 no-print"></th>
-                                <th className="zd:px-2 zd:py-2 zd:font-medium zd:text-left zd:w-8">#</th>
+                                <th className="zd:px-2 zd:py-2 zd:font-medium zd:text-muted-foreground zd:text-xs zd:text-left zd:w-8 no-print"></th>
+                                <th className="zd:px-2 zd:py-2 zd:font-medium zd:text-muted-foreground zd:text-xs zd:text-left zd:w-8">#</th>
                                 {/* <th className="zd:px-2 zd:py-2 zd:font-medium zd:text-left no-print">
                                 {idField.label}
                             </th> */}
                                 {displayFields.map((field) => (
-                                    <th key={field.name} className="zd:px-2 zd:py-2 zd:font-medium zd:text-left">
+                                    <th key={field.name} className="zd:px-2 zd:py-2 zd:font-medium zd:text-muted-foreground zd:text-xs zd:text-left">
                                         <span className="zd:flex zd:items-center zd:gap-1">
                                             {t(field.label || field.name as string)}
                                             {field.required === 1 && <span className="zd:text-red-500 zd:ml-0.5 no-print">*</span>}
@@ -302,7 +302,7 @@ export const ReferenceTablePlugin = new FormPlugin({
                                             />
                                         </td> */}
                                             {displayFields.map((field) => {
-                                                const setPropertyFields = props.referenceTableIndexFields?.[props?.fieldKey || ""]?.find((record: any) => record.idx === index && record.fields.find((f: any) => f.name === field.name) !== undefined);
+                                                const setPropertyFields = props.referenceTableIndexFields?.[props?.fieldKey || ""]?.find((record: any) => record?.idx === index && record?.fields?.find((f: any) => f.name === field.name) !== undefined);
                                                 const setPropertyField = setPropertyFields?.fields[0];
                                                 const mergeField = { ...field, ...setPropertyField };
                                                 return (

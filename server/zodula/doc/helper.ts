@@ -73,6 +73,11 @@ export class ZodulaDoctypeHelper {
             if (!config) continue
             let value = doc[fieldName as keyof typeof doc] as any
 
+            if(config.type === "File") {
+                value = value
+                continue
+            }
+
             if (config.default !== undefined && (value === undefined || value === null) && !config.plain) {
                 value = ZodulaDoctypeHelper.formatValue(config.default as string)
             }

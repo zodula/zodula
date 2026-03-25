@@ -201,12 +201,13 @@ export const LanguageSelection = (props: { filterLanguages?: string[] }) => {
 
   return (
     <Button
-      variant="outline"
-      className="zd:flex zd:items-center zd:gap-2"
+      variant="ghost"
+      className="zd:h-8 zd:w-8 zd:p-0! zd:shrink-0"
       onClick={handleOpenDialog}
       hideLoading
+      title="Select language"
     >
-      <GlobeIcon />
+      <GlobeIcon className="zd:w-4 zd:h-4 zd:text-muted-foreground" />
     </Button>
   );
 };

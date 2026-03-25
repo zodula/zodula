@@ -6,6 +6,57 @@
     "workspace_parent": null,
     "icon": "Settings",
     "app": "zodula",
-    "is_system": 1
+    "is_system": 1,
+    "url": null
+  },
+  {
+    "id": "ws-accounting-root",
+    "name": "Accounting",
+    "idx": 0,
+    "workspace_parent": null,
+    "icon": "Calculator",
+    "app": "zodula",
+    "is_system": 0,
+    "url": null
+  },
+  {
+    "id": "ws-accounting-sales",
+    "name": "Sales",
+    "idx": 0,
+    "workspace_parent": "ws-accounting-root",
+    "icon": "TrendingUp",
+    "app": "zodula",
+    "is_system": 0,
+    "url": null
+  },
+  {
+    "id": "ws-accounting-sale-invoice",
+    "name": "Sale Invoice",
+    "idx": 0,
+    "workspace_parent": "ws-accounting-sales",
+    "icon": "FileText",
+    "app": "zodula",
+    "is_system": 0,
+    "url": "/desk/doctypes/Sales Invoice/list"
+  },
+  {
+    "id": "ws-accounting-purchases",
+    "name": "Purchases",
+    "idx": 10,
+    "workspace_parent": "ws-accounting-root",
+    "icon": "ShoppingCart",
+    "app": "zodula",
+    "is_system": 0,
+    "url": null
+  },
+  {
+    "id": "ws-accounting-purchase-invoice",
+    "name": "Purchase Invoice",
+    "idx": 0,
+    "workspace_parent": "ws-accounting-purchases",
+    "icon": "FileText",
+    "app": "zodula",
+    "is_system": 0,
+    "url": "/desk/doctypes/Purchase Invoice/list"
   }
 ]

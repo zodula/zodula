@@ -42,7 +42,7 @@ export function QuickFilterBar({
     for (const field of quickFilterFields) {
       const name = field.name as string;
       const existing = filters?.find(
-        (f) => (f[0] as string) === name && (f[1] as IOperator) === "="
+        (f) => (f[0] as string) === name && (f[1] as IOperator) === "LIKE"
       );
       map[name] = existing ? getQuickFilterValue(existing[2]) : "";
     }
@@ -57,7 +57,7 @@ export function QuickFilterBar({
       for (const field of quickFilterFields) {
         const name = field.name as string;
         const existing = filters?.find(
-          (f) => (f[0] as string) === name && (f[1] as IOperator) === "="
+          (f) => (f[0] as string) === name && (f[1] as IOperator) === "LIKE"
         );
         const nextVal = existing ? getQuickFilterValue(existing[2]) : "";
         if (next[name] !== nextVal) next[name] = nextVal;
@@ -83,10 +83,18 @@ export function QuickFilterBar({
           return v !== undefined && v !== null && v !== "";
         })
         .map((f) => {
-          const v = newValues[f.name as string];
-          const num = v ? parseFloat(v) : undefined;
-          const value = num !== undefined && !Number.isNaN(num) && v?.trim() !== "" ? num : v;
-          return [f.name, "=" as IOperator, value] as IFilter<any, any, IOperator>;
+          const v = newValues[f.name as string] ?? "";
+          // parseFloat("2026-03-23") === 2026 — dashes truncate ISO dates; keep date-like fields as strings
+          const dateLike =
+            f.type === "Date" || f.type === "DateTime" || f.type === "Time";
+          let value: string | number = v;
+          if (!dateLike) {
+            const num = v ? parseFloat(v) : undefined;
+            if (num !== undefined && !Number.isNaN(num) && v.trim() !== "") {
+              value = num;
+            }
+          }
+          return [f.name, "LIKE" as IOperator, value] as IFilter<any, any, IOperator>;
         });
       onApplyFilters([...otherFilters, ...quickFilters]);
     },
@@ -122,7 +130,7 @@ export function QuickFilterBar({
                 fieldPath={fieldName}
                 value={value}
                 onChange={(_fieldPath, value) => handleChange(fieldName, value)}
-                operator="="
+                operator="LIKE"
                 placeholder={t(field.label || field.name || "")}
               />
             ) : (

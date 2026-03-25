@@ -1,492 +1,379 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import ReactDOM from "react-dom/client";
 import { cn } from "../../lib/utils";
-import { Button } from "../ui/button";
-import {
-    X,
-    Download,
-    ZoomIn,
-    ZoomOut,
-    RotateCw,
-    ChevronLeft,
-    ChevronRight,
-    FileText,
-    Image,
-    FileSpreadsheet,
-    FileCode,
-    FileIcon
-} from "lucide-react";
-import { popup } from "../ui/popit";
 import { BASE_URL } from "@/zodula/client/utils";
+import {
+  Download,
+  ExternalLink,
+  FileCode,
+  FileIcon,
+  FileSpreadsheet,
+  FileText,
+  Image as ImageIcon,
+  RotateCw,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 
-export interface FilePreviewProps {
-    file?: File | string;
-    isOpen: boolean;
-    onClose: () => void;
-    className?: string;
+// ── File type detection ────────────────────────────────────────────────────
+
+type FileType = "image" | "pdf" | "csv" | "xlsx" | "text" | "other";
+
+function detectFileType(name: string, mime?: string): FileType {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  if (["jpg", "jpeg", "png", "gif", "bmp", "webp", "svg", "ico"].includes(ext) || mime?.startsWith("image/")) return "image";
+  if (ext === "pdf" || mime === "application/pdf") return "pdf";
+  if (ext === "csv" || mime === "text/csv") return "csv";
+  if (["xlsx", "xls"].includes(ext) || mime?.includes("spreadsheet") || mime?.includes("excel")) return "xlsx";
+  if (["txt", "md", "json", "xml", "html", "css", "js", "ts", "jsx", "tsx", "py", "java", "cpp", "c", "php", "rb", "go", "rs"].includes(ext) || mime?.startsWith("text/")) return "text";
+  return "other";
 }
 
-// File type detection
-const getFileType = (fileName: string, mimeType?: string): 'image' | 'pdf' | 'csv' | 'xlsx' | 'text' | 'other' => {
-    const extension = fileName.split('.').pop()?.toLowerCase();
+function TypeIcon({ type, className }: { type: FileType; className?: string }) {
+  const cls = cn("zd:flex-shrink-0", className);
+  if (type === "image") return <ImageIcon className={cls} />;
+  if (type === "pdf") return <FileText className={cls} />;
+  if (type === "csv" || type === "xlsx") return <FileSpreadsheet className={cls} />;
+  if (type === "text") return <FileCode className={cls} />;
+  return <FileIcon className={cls} />;
+}
 
-    // Images
-    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'].includes(extension || '') ||
-        mimeType?.startsWith('image/')) {
-        return 'image';
-    }
+// ── CSV table renderer ─────────────────────────────────────────────────────
 
-    // PDF
-    if (extension === 'pdf' || mimeType === 'application/pdf') {
-        return 'pdf';
-    }
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let cur = "";
+  let inQ = false;
+  for (const ch of line) {
+    if (ch === '"') { inQ = !inQ; continue; }
+    if (ch === "," && !inQ) { result.push(cur.trim()); cur = ""; continue; }
+    cur += ch;
+  }
+  result.push(cur.trim());
+  return result;
+}
 
-    // CSV
-    if (extension === 'csv' || mimeType === 'text/csv') {
-        return 'csv';
-    }
+function CsvTable({ text }: { text: string }) {
+  const lines = text.split("\n").filter((l) => l.trim());
+  if (!lines.length) return <p className="zd:text-muted-foreground">Empty CSV</p>;
+  const headers = parseCsvLine(lines[0]!);
+  const rows = lines.slice(1).map(parseCsvLine);
+  return (
+    <div className="zd:overflow-auto zd:rounded-lg zd:bg-white zd:shadow-lg">
+      <table className="zd:min-w-full zd:border-collapse zd:text-sm">
+        <thead>
+          <tr>
+            {headers.map((h, i) => (
+              <th key={i} className="zd:border zd:border-border zd:px-4 zd:py-2 zd:bg-muted zd:font-semibold zd:text-left zd:whitespace-nowrap">
+                {h || `Column ${i + 1}`}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, ri) => (
+            <tr key={ri} className="zd:even:bg-muted/20">
+              {headers.map((_, ci) => (
+                <td key={ci} className="zd:border zd:border-border zd:px-4 zd:py-2 zd:whitespace-nowrap">
+                  {row[ci] ?? ""}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
-    // Excel files
-    if (['xlsx', 'xls'].includes(extension || '') ||
-        mimeType?.includes('spreadsheet') ||
-        mimeType?.includes('excel')) {
-        return 'xlsx';
-    }
+// ── Floating toolbar ───────────────────────────────────────────────────────
 
-    // Text files
-    if (['txt', 'md', 'json', 'xml', 'html', 'css', 'js', 'ts', 'jsx', 'tsx', 'py', 'java', 'cpp', 'c', 'php', 'rb', 'go', 'rs', 'swift', 'kt'].includes(extension || '') ||
-        mimeType?.startsWith('text/')) {
-        return 'text';
-    }
+interface ToolbarProps {
+  name: string;
+  type: FileType;
+  fileUrl: string;
+  zoom: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onRotate: () => void;
+  onClose: () => void;
+}
 
-    return 'other';
-};
+function FloatingToolbar({ name, type, fileUrl, zoom, onZoomIn, onZoomOut, onRotate, onClose }: ToolbarProps) {
+  const isImg = type === "image";
 
-const getFileIcon = (type: 'image' | 'pdf' | 'csv' | 'xlsx' | 'text' | 'other') => {
-    switch (type) {
-        case 'image':
-            return <Image className="zd:h-16 zd:w-16 zd:text-blue-500" />;
-        case 'pdf':
-            return <FileText className="zd:h-16 zd:w-16 zd:text-red-500" />;
-        case 'csv':
-        case 'xlsx':
-            return <FileSpreadsheet className="zd:h-16 zd:w-16 zd:text-green-500" />;
-        case 'text':
-            return <FileCode className="zd:h-16 zd:w-16 zd:text-yellow-500" />;
-        default:
-            return <FileIcon className="zd:h-16 zd:w-16 zd:text-gray-500" />;
-    }
-};
+  return (
+    <div
+      className={cn(
+        "zd:fixed zd:bottom-8 zd:left-1/2 zd:-translate-x-1/2 zd:z-50",
+        "zd:flex zd:items-center zd:gap-1 zd:px-3 zd:py-2",
+        "zd:rounded-full zd:shadow-2xl",
+        "zd:bg-neutral-900/85 zd:backdrop-blur-md zd:border zd:border-white/10",
+        "zd:text-white"
+      )}
+      // Prevent backdrop click from firing when user clicks toolbar
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* File name */}
+      <div className="zd:flex zd:items-center zd:gap-1.5 zd:max-w-[180px] zd:min-w-0">
+        <TypeIcon type={type} className="zd:w-3.5 zd:h-3.5 zd:text-white/60 zd:flex-shrink-0" />
+        <span className="zd:text-xs zd:text-white/80 zd:truncate" title={name}>
+          {name}
+        </span>
+      </div>
 
-// CSV to HTML table converter
-const csvToTable = (csvText: string): string => {
-    try {
-        const lines = csvText.split('\n').filter(line => line.trim());
-        if (lines.length === 0) {
-            return '<p class="zd:text-gray-500">Empty CSV file</p>';
-        }
+      <Divider />
 
-        // Simple CSV parser that handles quoted fields
-        const parseCSVLine = (line: string): string[] => {
-            const result: string[] = [];
-            let current = '';
-            let inQuotes = false;
+      {/* Image controls */}
+      {isImg && (
+        <>
+          <ToolbarBtn onClick={onZoomOut} title="Zoom out" disabled={zoom <= 0.25}>
+            <ZoomOut className="zd:w-3.5 zd:h-3.5" />
+          </ToolbarBtn>
+          <span className="zd:text-[11px] zd:text-white/60 zd:min-w-[36px] zd:text-center zd:tabular-nums">
+            {Math.round(zoom * 100)}%
+          </span>
+          <ToolbarBtn onClick={onZoomIn} title="Zoom in" disabled={zoom >= 3}>
+            <ZoomIn className="zd:w-3.5 zd:h-3.5" />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={onRotate} title="Rotate">
+            <RotateCw className="zd:w-3.5 zd:h-3.5" />
+          </ToolbarBtn>
+          <Divider />
+        </>
+      )}
 
-            for (let i = 0; i < line.length; i++) {
-                const char = line[i];
+      {/* Download */}
+      <a
+        href={fileUrl}
+        download={name}
+        className={toolbarBtnCls}
+        title="Download"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Download className="zd:w-3.5 zd:h-3.5" />
+      </a>
 
-                if (char === '"') {
-                    inQuotes = !inQuotes;
-                } else if (char === ',' && !inQuotes) {
-                    result.push(current.trim());
-                    current = '';
-                } else {
-                    current += char;
-                }
-            }
+      {/* Open in new tab */}
+      <a
+        href={fileUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={toolbarBtnCls}
+        title="Open in new tab"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <ExternalLink className="zd:w-3.5 zd:h-3.5" />
+      </a>
 
-            result.push(current.trim());
-            return result;
-        };
+      <Divider />
 
-        const headers = parseCSVLine(lines[0] || '');
-        const rows = lines.slice(1).map(line => parseCSVLine(line));
+      {/* Close */}
+      <ToolbarBtn onClick={onClose} title="Close (Esc)">
+        <X className="zd:w-3.5 zd:h-3.5" />
+      </ToolbarBtn>
+    </div>
+  );
+}
 
-        let tableHtml = '<table class="min-w-full border-collapse border border-gray-300">';
+const toolbarBtnCls = cn(
+  "zd:flex zd:items-center zd:justify-center zd:w-7 zd:h-7 zd:rounded-full",
+  "zd:text-white/70 zd:hover:text-white zd:hover:bg-white/15 zd:transition-colors"
+);
 
-        // Headers
-        tableHtml += '<thead><tr>';
-        headers.forEach(header => {
-            tableHtml += `<th class="zd:border zd:border-gray-300 zd:px-4 zd:py-2 zd:bg-gray-100 zd:font-semibold">${header || 'Column'}</th>`;
-        });
-        tableHtml += '</tr></thead>';
+function ToolbarBtn({ onClick, title, disabled, children }: {
+  onClick: () => void;
+  title?: string;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      disabled={disabled}
+      className={cn(toolbarBtnCls, disabled && "zd:opacity-30 zd:cursor-not-allowed")}
+    >
+      {children}
+    </button>
+  );
+}
 
-        // Rows
-        tableHtml += '<tbody>';
-        rows.forEach(row => {
-            tableHtml += '<tr>';
-            headers.forEach((_, index) => {
-                const cell = row[index] || '';
-                tableHtml += `<td class="zd:border zd:border-gray-300 zd:px-4 zd:py-2">${cell}</td>`;
-            });
-            tableHtml += '</tr>';
-        });
-        tableHtml += '</tbody></table>';
+function Divider() {
+  return <div className="zd:w-px zd:h-4 zd:bg-white/15 zd:mx-0.5 zd:flex-shrink-0" />;
+}
 
-        return tableHtml;
-    } catch (error) {
-        console.error('Error parsing CSV:', error);
-        return '<p class="zd:text-red-500">Error parsing CSV file</p>';
-    }
-};
+// ── Main overlay ───────────────────────────────────────────────────────────
 
-// Internal component for the file preview content
-const FilePreviewContent: React.FC<{
-    file?: File | string;
-    onClose: () => void;
-    className?: string;
-}> = ({ file, onClose, className }) => {
-    const [zoom, setZoom] = useState(1);
-    const [rotation, setRotation] = useState(0);
-    const [textContent, setTextContent] = useState<string>('');
-    const [isLoading, setIsLoading] = useState(false);
+interface OverlayProps {
+  file: File | string;
+  onClose: () => void;
+  /** Display name shown in the floating toolbar (overrides the filename). */
+  title?: string;
+}
 
-    // Determine if file is a File object or string path
-    const isFile = file && typeof file === 'object' && 'name' in file && 'size' in file && 'type' in file;
-    const isStringPath = typeof file === 'string' && file.length > 0;
+function FilePreviewOverlay({ file, onClose, title }: OverlayProps) {
+  const isFileObj = file instanceof File;
+  const rawName = isFileObj ? file.name : (file.split("/").pop() ?? file);
+  const derivedName = decodeURIComponent(rawName);
+  const name = title ?? derivedName;
+  const mime = isFileObj ? file.type : undefined;
+  const type = detectFileType(name, mime);
 
-    const fileName = useMemo(() => {
-        if (isFile) {
-            return file.name;
-        }
-        if (isStringPath) {
-            // For data URLs, keep the whole string as a pseudo name
-            if (file.startsWith('data:')) {
-                return file;
-            }
-            return file.split('/').pop() || file;
-        }
-        return '';
-    }, [file, isFile, isStringPath]);
+  const fileUrl = isFileObj
+    ? URL.createObjectURL(file)
+    : file.startsWith("http") || file.startsWith("data:")
+    ? file
+    : `${BASE_URL}${file}`;
 
-    const fileType = useMemo(() => {
-        if (isStringPath && typeof file === 'string' && file.startsWith('data:image/')) {
-            return 'image';
-        }
-        if (fileName) {
-            return getFileType(fileName, isFile ? file.type : undefined);
-        }
-        return 'other' as const;
-    }, [fileName, file, isFile, isStringPath]);
+  // Revoke object URL on unmount
+  useEffect(() => {
+    return () => {
+      if (isFileObj) URL.revokeObjectURL(fileUrl);
+    };
+  }, [fileUrl, isFileObj]);
 
-    const fileUrl = useMemo(() => {
-        if (isFile) {
-            return URL.createObjectURL(file);
-        }
-        if (isStringPath) {
-            if (file.startsWith('http') || file.startsWith('data:')) {
-                return file;
-            }
-            return `${BASE_URL}${file}`;
-        }
-        return null;
-    }, [file, isFile, isStringPath]);
+  // Escape key
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
 
-    // Load text content for text files and CSV files
-    const loadTextContent = useCallback(async () => {
-        if (!fileUrl || (fileType !== 'text' && fileType !== 'csv')) return;
+  // Image state
+  const [zoom, setZoom] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const handleZoomIn = useCallback(() => setZoom((z) => Math.min(z + 0.25, 3)), []);
+  const handleZoomOut = useCallback(() => setZoom((z) => Math.max(z - 0.25, 0.25)), []);
+  const handleRotate = useCallback(() => setRotation((r) => (r + 90) % 360), []);
 
-        setIsLoading(true);
-        try {
-            const response = await fetch(fileUrl);
-            const text = await response.text();
-            setTextContent(text);
-        } catch (error) {
-            console.error('Error loading text content:', error);
-            setTextContent('Error loading file content');
-        } finally {
-            setIsLoading(false);
-        }
-    }, [fileUrl, fileType]);
+  // Text/CSV state
+  const [textContent, setTextContent] = useState<string | null>(null);
+  const [textLoading, setTextLoading] = useState(false);
+  useEffect(() => {
+    if (type !== "text" && type !== "csv") return;
+    setTextLoading(true);
+    fetch(fileUrl)
+      .then((r) => r.text())
+      .then(setTextContent)
+      .catch(() => setTextContent("Error loading file content"))
+      .finally(() => setTextLoading(false));
+  }, [fileUrl, type]);
 
-    // Load text content when file changes
-    React.useEffect(() => {
-        if ((fileType === 'text' || fileType === 'csv') && fileUrl) {
-            loadTextContent();
-        } else {
-            setTextContent('');
-        }
-    }, [fileType, fileUrl, loadTextContent]);
+  const handleBackdrop = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) onClose();
+  };
 
-    // Reset zoom and rotation when file changes
-    React.useEffect(() => {
-        setZoom(1);
-        setRotation(0);
-    }, [file]);
+  return (
+    <div
+      className="zd:fixed zd:inset-0 zd:z-50 zd:bg-black/85 zd:backdrop-blur-sm zd:flex zd:items-center zd:justify-center"
+      onClick={handleBackdrop}
+    >
+      {/* Content */}
+      <div
+        className="zd:w-full zd:h-full zd:flex zd:items-center zd:justify-center zd:p-8 zd:pb-24 zd:overflow-auto"
+        onClick={handleBackdrop}
+      >
+        {type === "image" ? (
+          <img
+            src={fileUrl}
+            alt={name}
+            draggable={false}
+            style={{ transform: `scale(${zoom}) rotate(${rotation}deg)`, transition: "transform 0.2s ease" }}
+            className="zd:max-w-full zd:max-h-full zd:object-contain zd:rounded-lg zd:shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : type === "pdf" ? (
+          <iframe
+            src={`${fileUrl}#toolbar=1&navpanes=1`}
+            title={name}
+            className="zd:w-full zd:rounded-lg zd:shadow-2xl zd:bg-white"
+            style={{ height: "80vh" }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : type === "csv" ? (
+          <div className="zd:max-w-full zd:overflow-auto" onClick={(e) => e.stopPropagation()}>
+            {textLoading ? (
+              <Spinner />
+            ) : textContent != null ? (
+              <CsvTable text={textContent} />
+            ) : null}
+          </div>
+        ) : type === "text" ? (
+          <pre
+            className="zd:max-w-4xl zd:w-full zd:max-h-[80vh] zd:overflow-auto zd:p-6 zd:rounded-xl zd:shadow-2xl zd:bg-neutral-900 zd:text-green-400 zd:text-sm zd:font-mono zd:leading-relaxed"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {textLoading ? "Loading…" : (textContent ?? "")}
+          </pre>
+        ) : (
+          /* Unsupported file type */
+          <div
+            className="zd:flex zd:flex-col zd:items-center zd:gap-4 zd:p-10 zd:rounded-2xl zd:bg-white/5 zd:border zd:border-white/10 zd:text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <TypeIcon type={type} className="zd:w-16 zd:h-16 zd:text-white/40" />
+            <p className="zd:text-sm zd:text-white/60">Preview not available</p>
+            <a
+              href={fileUrl}
+              download={name}
+              className="zd:flex zd:items-center zd:gap-2 zd:px-4 zd:py-2 zd:rounded-lg zd:bg-white/10 zd:hover:bg-white/20 zd:text-sm zd:transition-colors"
+            >
+              <Download className="zd:w-4 zd:h-4" /> Download
+            </a>
+          </div>
+        )}
+      </div>
 
-    // Clean up object URL on unmount
-    React.useEffect(() => {
-        return () => {
-            if (fileUrl && isFile) {
-                URL.revokeObjectURL(fileUrl);
-            }
-        };
-    }, [fileUrl, isFile]);
+      {/* Floating toolbar */}
+      <FloatingToolbar
+        name={name}
+        type={type}
+        fileUrl={fileUrl}
+        zoom={zoom}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onRotate={handleRotate}
+        onClose={onClose}
+      />
+    </div>
+  );
+}
 
-    const handleDownload = useCallback(() => {
-        if (!fileUrl) return;
+function Spinner() {
+  return (
+    <div className="zd:flex zd:items-center zd:gap-2 zd:text-white/60">
+      <div className="zd:w-5 zd:h-5 zd:border-2 zd:border-white/20 zd:border-t-white/70 zd:rounded-full zd:animate-spin" />
+      Loading…
+    </div>
+  );
+}
 
-        const link = document.createElement('a');
-        link.target = '_blank';
-        link.href = fileUrl;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }, [fileUrl, fileName]);
+// ── Public API ─────────────────────────────────────────────────────────────
 
-    const handleZoomIn = useCallback(() => {
-        setZoom(prev => Math.min(prev + 0.25, 3));
-    }, []);
+export interface PreviewFileOptions {
+  /** Override the filename shown in the floating toolbar. */
+  title?: string;
+}
 
-    const handleZoomOut = useCallback(() => {
-        setZoom(prev => Math.max(prev - 0.25, 0.25));
-    }, []);
+/** Open a fullscreen file preview with a floating toolbar. */
+export function previewFile(file: File | string, options?: PreviewFileOptions): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
 
-    const handleRotate = useCallback(() => {
-        setRotation(prev => (prev + 90) % 360);
-    }, []);
+    const root = ReactDOM.createRoot(container);
 
-    const handleReset = useCallback(() => {
-        setZoom(1);
-        setRotation(0);
-    }, []);
-
-    const renderPreview = () => {
-        if (!fileUrl) {
-            return (
-                <div className="zd:flex zd:flex-col zd:items-center zd:justify-start zd:h-64 zd:text-muted-foreground zd:pt-8">
-                    {getFileIcon(fileType)}
-                    <p className="mt-4 text-lg">No file selected</p>
-                </div>
-            );
-        }
-
-        switch (fileType) {
-            case 'image':
-                return (
-                    <div className="zd:flex zd:items-center zd:justify-center zd:w-full zd:h-full">
-                        <img
-                            src={fileUrl}
-                            alt={fileName}
-                            className="zd:max-w-[90vw] zd:max-h-[80vh] zd:object-contain"
-                            style={{
-                                transform: `scale(${zoom}) rotate(${rotation}deg)`,
-                                transition: 'transform 0.2s ease-in-out'
-                            }}
-                        />
-                    </div>
-                );
-
-            case 'pdf':
-                return (
-                    <div className="zd:w-full zd:h-[600px]">
-                        <iframe
-                            src={`${fileUrl}#toolbar=1&navpanes=1&scrollbar=1`}
-                            className="zd:w-full zd:h-full zd:border-0"
-                            title={fileName}
-                        />
-                    </div>
-                );
-
-            case 'csv':
-                return (
-                    <div className="zd:w-full zd:overflow-auto">
-                        {isLoading ? (
-                            <div className="zd:flex zd:items-center zd:justify-start zd:h-64 zd:pt-8">
-                                <div className="zd:animate-spin zd:rounded-full zd:h-8 zd:w-8 zd:border-b-2 zd:border-primary"></div>
-                                <span className="zd:ml-2">Loading CSV...</span>
-                            </div>
-                        ) : textContent ? (
-                            <div
-                                className="zd:p-4"
-                                dangerouslySetInnerHTML={{
-                                    __html: csvToTable(textContent)
-                                }}
-                            />
-                        ) : (
-                            <div className="zd:flex zd:flex-col zd:items-center zd:justify-start zd:h-64 zd:text-muted-foreground zd:pt-8">
-                                <FileSpreadsheet className="zd:h-16 zd:w-16 zd:text-green-500" />
-                                <p className="zd:mt-4 zd:text-lg">No CSV content available</p>
-                                <Button onClick={handleDownload} className="mt-4">
-                                    <Download className="zd:h-4 zd:w-4 zd:mr-2" />
-                                    Download File
-                                </Button>
-                            </div>
-                        )}
-                    </div>
-                );
-
-            case 'xlsx':
-                return (
-                    <div className="zd:flex zd:flex-col zd:items-center zd:justify-start zd:h-64 zd:text-muted-foreground zd:pt-8">
-                        <FileSpreadsheet className="zd:h-16 zd:w-16 zd:text-green-500" />
-                        <p className="zd:mt-4 zd:text-lg">Excel files cannot be previewed directly</p>
-                        <Button onClick={handleDownload} className="mt-4">
-                            <Download className="zd:h-4 zd:w-4 zd:mr-2" />
-                            Download File
-                        </Button>
-                    </div>
-                );
-
-            case 'text':
-                return (
-                    <div className="zd:w-full zd:h-[600px] zd:overflow-auto">
-                        {isLoading ? (
-                            <div className="zd:flex zd:items-center zd:justify-start zd:h-full zd:pt-8">
-                                <div className="zd:animate-spin zd:rounded-full zd:h-8 zd:w-8 zd:border-b-2 zd:border-primary"></div>
-                            </div>
-                        ) : (
-                            <pre className="zd:p-4 zd:text-sm zd:font-mono zd:bg-gray-50 zd:rounded zd:h-full zd:overflow-auto">
-                                {textContent}
-                            </pre>
-                        )}
-                    </div>
-                );
-
-            default:
-                return (
-                    <div className="zd:flex zd:flex-col zd:items-center zd:justify-start zd:h-64 zd:text-muted-foreground zd:pt-8">
-                        {getFileIcon(fileType)}
-                        <p className="zd:mt-4 zd:text-lg">Preview not available for this file type</p>
-                        <Button onClick={handleDownload} className="zd:mt-4">
-                            <Download className="zd:h-4 zd:w-4 zd:mr-2" />
-                            Download File
-                        </Button>
-                    </div>
-                );
-        }
+    const cleanup = () => {
+      root.unmount();
+      document.body.removeChild(container);
+      resolve();
     };
 
-    return (
-        <div className={cn("zd:flex zd:flex-col", className || '')}>
-            {/* Header (fixed at top of dialog) */}
-                <div className={cn(
-                    "zd:flex zd:items-center zd:space-x-3 zd:flex-1",
-                    fileName?.startsWith('data:') ? "zd:hidden" : ""
-                )}>
-                    <h2 className="zd:text-lg zd:font-semibold zd:truncate">{fileName}</h2>
-                    <span className="zd:text-sm zd:text-muted-foreground zd:capitalize">
-                        {fileType} file
-                    </span>
-                </div>
-
-            {/* Content (scrollable image area under fixed header) */}
-            <div className="zd:flex-1 zd:overflow-auto zd:relative zd:flex zd:items-start zd:justify-center">
-                {renderPreview()}
-
-                {/* Floating Toolbar */}
-                <div className="zd:fixed zd:bottom-12 zd:left-1/2 zd:transform zd:-translate-x-1/2 zd:bg-white/90 zd:backdrop-blur-sm zd:border zd:rounded zd:shadow-lg zd:p-2 zd:flex zd:items-center zd:space-x-2">
-                    {/* Image controls */}
-                    {fileType === 'image' && (
-                        <>
-                            <Button
-                                variant="outline"
-                                onClick={handleZoomOut}
-                                disabled={zoom <= 0.25}
-                            >
-                                <ZoomOut className="zd:h-4 zd:w-4" />
-                            </Button>
-                            <Button
-                                variant="outline"
-                                onClick={handleZoomIn}
-                                disabled={zoom >= 3}
-                            >
-                                <ZoomIn className="zd:h-4 zd:w-4" />
-                            </Button>
-                            <Button
-                                variant="outline"
-                                onClick={handleRotate}
-                            >
-                                <RotateCw className="zd:h-4 zd:w-4" />
-                            </Button>
-                            <Button
-                                variant="outline"
-                                onClick={handleReset}
-                            >
-                                Reset
-                            </Button>
-                        </>
-                    )}
-
-                    <Button
-                        variant="outline"
-                        onClick={handleDownload}
-                    >
-                        <Download className="zd:h-4 zd:w-4 zd:mr-2" />
-                        Download
-                    </Button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// Main component that uses popup
-export const FilePreview: React.FC<FilePreviewProps> = ({
-    file,
-    isOpen,
-    onClose,
-    className
-}) => {
-    // This component is now just a wrapper that uses popup
-    // The actual preview logic is in FilePreviewContent
-    React.useEffect(() => {
-        if (isOpen) {
-            popup(
-                ({ onClose: dialogClose }) => (
-                    <FilePreviewContent
-                        file={file}
-                        onClose={dialogClose}
-                        className={className}
-                    />
-                ),
-                {
-                    width: "100vw",
-                    maxWidth: "100vw",
-                    showCloseButton: true,
-                }
-            ).then(() => {
-                onClose();
-            });
-        }
-    }, [isOpen, file, onClose, className]);
-
-    return null;
-};
-
-// Function-based API for easier usage
-export function previewFile(
-    file: File | string,
-    options?: {
-        title?: string;
-        className?: string;
-    }
-): Promise<void> {
-    return popup(
-        ({ onClose }) => (
-            <FilePreviewContent
-                file={file}
-                onClose={onClose}
-                className={options?.className}
-            />
-        ),
-        {
-            title: options?.title,
-            width: "100vw",
-            maxWidth: "100vw",
-            showCloseButton: true,
-        }
-    ).then(() => {
-        // Convert Promise<void | null> to Promise<void>
-    });
+    root.render(<FilePreviewOverlay file={file} onClose={cleanup} title={options?.title} />);
+  });
 }
+
+// Keep the component export for cases where it's rendered inside an existing tree
+export { FilePreviewOverlay };

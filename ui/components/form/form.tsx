@@ -98,7 +98,7 @@ export const Form = <T extends Record<string, Zodula.Field>>(
           defaultCollapsed: 0,
         });
 
-        layout.forEach((item) => {
+        layout?.forEach((item) => {
           if (typeof item === "object" && item !== null) {
             const layoutItem = item as LayoutItem;
 

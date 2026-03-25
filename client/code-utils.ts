@@ -130,7 +130,7 @@ export function tabsToTemplateItem(
       type: "field",
       field_name: value,
       label: label ?? value,
-      hide_no_value: isSignature ? 0 : 1,
+      hide_no_value: 0,
       align: "left",
       group,
       ...refTableExtras,
@@ -297,7 +297,7 @@ async function renderFieldCellValue(
   language: string,
   fetchRefDoc?: (doctype: string, id: string) => Promise<Record<string, unknown> | null>
 ): Promise<string | null> {
-  const raw = item.field_name ? doc[item.field_name as keyof typeof doc] : null;
+  const raw = item.field_name ? doc?.[item.field_name as keyof typeof doc] : null;
   if (isEmptyPrintValue(raw) && item.hide_no_value) return null;
   const textAlign = item.align === "center" || item.align === "right" ? item.align : "left";
   let escapedValue = raw != null ? String(raw) : "";

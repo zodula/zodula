@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Calendar, ChevronLeft, Clock } from 'lucide-react';
 import { Button } from '@/zodula/ui/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/zodula/ui/components/ui/popover';
 import { Input } from '@/zodula/ui/components/ui/input';
 import { Select, type SelectOption } from '@/zodula/ui/components/ui/select';
 import { cn } from '@/zodula/ui/lib/utils';
@@ -20,6 +20,68 @@ export interface DatePickerProps {
     range?: boolean;
     type?: 'Date' | 'Time' | 'DateTime';
 }
+
+interface DatePickerPopoverProps {
+    open: boolean;
+    className?: string;
+    children: React.ReactNode;
+    usePortal?: boolean;
+    style?: React.CSSProperties;
+    popoverRef?: React.RefObject<HTMLDivElement | null>;
+}
+
+const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
+    open,
+    className,
+    children,
+    usePortal = false,
+    style,
+    popoverRef
+}) => {
+    const [shouldRender, setShouldRender] = useState(open);
+
+    useEffect(() => {
+        if (open) {
+            setShouldRender(true);
+            return;
+        }
+
+        const timeoutId = window.setTimeout(() => {
+            setShouldRender(false);
+        }, 140);
+
+        return () => {
+            window.clearTimeout(timeoutId);
+        };
+    }, [open]);
+
+    if (!shouldRender) {
+        return null;
+    }
+
+    const content = (
+        <div
+            ref={popoverRef}
+            style={style}
+            className={cn(
+                usePortal
+                    ? 'zd:fixed zd:z-[1000] zd:origin-top-left zd:rounded-md zd:border zd:bg-popover zd:text-popover-foreground zd:shadow-md'
+                    : 'zd:absolute zd:left-0 zd:top-full zd:z-50 zd:mt-1 zd:origin-top-left zd:rounded-md zd:border zd:bg-popover zd:text-popover-foreground zd:shadow-md',
+                'zd:transition-all zd:duration-150 zd:ease-out',
+                open ? 'zd:translate-y-0 zd:scale-100 zd:opacity-100' : 'zd:-translate-y-1 zd:scale-95 zd:opacity-0',
+                className
+            )}
+        >
+            {children}
+        </div>
+    );
+
+    if (usePortal && typeof document !== 'undefined') {
+        return createPortal(content, document.body);
+    }
+
+    return content;
+};
 
 const DatePicker: React.FC<DatePickerProps> = ({
     value = '',
@@ -45,7 +107,34 @@ const DatePicker: React.FC<DatePickerProps> = ({
     const [showMonthPicker, setShowMonthPicker] = useState(false);
     const [showYearPicker, setShowYearPicker] = useState(false);
     const [hasUserInteracted, setHasUserInteracted] = useState(false);
+    const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
     const inputRef = useRef<HTMLInputElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const popoverRef = useRef<HTMLDivElement>(null);
+    const pointerDownInsideRef = useRef(false);
+
+    const updatePopoverPosition = useCallback(() => {
+        const container = containerRef.current;
+        if (!container) {
+            return;
+        }
+
+        const rect = container.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const margin = 8;
+        const estimatedWidth = Math.max(rect.width, 280);
+        let left = rect.left;
+        if (left + estimatedWidth > viewportWidth - margin) {
+            left = Math.max(margin, viewportWidth - estimatedWidth - margin);
+        }
+
+        setPopoverStyle({
+            top: rect.bottom + 4,
+            left,
+            minWidth: Math.max(rect.width, 280),
+            maxWidth: 300,
+        });
+    }, []);
 
     // Initialize default time for DateTime type on mount
     useEffect(() => {
@@ -58,6 +147,62 @@ const DatePicker: React.FC<DatePickerProps> = ({
             });
         }
     }, [type, value]);
+
+    useEffect(() => {
+        const handleDocumentPointerDown = (event: MouseEvent | TouchEvent) => {
+            const target = event.target as Node | null;
+            if (!target) {
+                return;
+            }
+
+            const targetElement = target instanceof Element ? target : null;
+            if (targetElement?.closest('[data-zd-select-dropdown="true"]')) {
+                return;
+            }
+
+            if (containerRef.current?.contains(target)) {
+                return;
+            }
+            if (popoverRef.current?.contains(target)) {
+                return;
+            }
+
+            // Delay closing so external click handlers (Save/Submit buttons) can run first.
+            window.setTimeout(() => {
+                setIsOpen(false);
+                setShowMonthPicker(false);
+                setShowYearPicker(false);
+            }, 0);
+        };
+
+        document.addEventListener('mousedown', handleDocumentPointerDown);
+        document.addEventListener('touchstart', handleDocumentPointerDown);
+
+        return () => {
+            document.removeEventListener('mousedown', handleDocumentPointerDown);
+            document.removeEventListener('touchstart', handleDocumentPointerDown);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!isOpen || readOnly) {
+            return;
+        }
+
+        updatePopoverPosition();
+
+        const handleReposition = () => {
+            updatePopoverPosition();
+        };
+
+        window.addEventListener('resize', handleReposition);
+        window.addEventListener('scroll', handleReposition, true);
+
+        return () => {
+            window.removeEventListener('resize', handleReposition);
+            window.removeEventListener('scroll', handleReposition, true);
+        };
+    }, [isOpen, readOnly, updatePopoverPosition]);
 
     // Parse the current value
     useEffect(() => {
@@ -320,7 +465,9 @@ const DatePicker: React.FC<DatePickerProps> = ({
                 setInputValue(rangeValue);
                 setHasUserInteracted(true);
                 onChange?.(rangeValue);
-                setIsOpen(false);
+                if (type === 'Date') {
+                    setIsOpen(false);
+                }
             }
         } else {
             // Single date mode
@@ -340,7 +487,9 @@ const DatePicker: React.FC<DatePickerProps> = ({
             setInputValue(formattedDate);
             setHasUserInteracted(true);
             onChange?.(formattedDate);
-            setIsOpen(false);
+            if (type === 'Date') {
+                setIsOpen(false);
+            }
         }
     };
 
@@ -422,7 +571,9 @@ const DatePicker: React.FC<DatePickerProps> = ({
             setHasUserInteracted(true);
             onChange?.(formattedDateTime);
         }
-        setIsOpen(false);
+        if (type === 'Date') {
+            setIsOpen(false);
+        }
     };
 
     // Clear selection
@@ -594,52 +745,100 @@ const DatePicker: React.FC<DatePickerProps> = ({
     const minutesOptions = generateTimeOptions(60);
     const secondsOptions = generateTimeOptions(60);
 
+    const openCalendar = () => {
+        if (disabled || readOnly) {
+            return;
+        }
+
+        setIsOpen(true);
+
+        // Initialize default time when calendar opens and no date is selected yet.
+        if ((type === 'Time' || type === 'DateTime') && !selectedDate) {
+            const now = new Date();
+            setSelectedTime({
+                hours: now.getHours(),
+                minutes: now.getMinutes(),
+                seconds: now.getSeconds()
+            });
+        }
+    };
+
+    const handleContainerBlurCapture = (event: React.FocusEvent<HTMLDivElement>) => {
+        if (pointerDownInsideRef.current) {
+            return;
+        }
+
+        const nextFocusedElement = event.relatedTarget as Node | null;
+        if (
+            nextFocusedElement
+            && (containerRef.current?.contains(nextFocusedElement) || popoverRef.current?.contains(nextFocusedElement))
+        ) {
+            return;
+        }
+
+        // Delay closing to allow focus to move to popover controls first.
+        window.setTimeout(() => {
+            const activeElement = document.activeElement;
+            if (activeElement && (containerRef.current?.contains(activeElement) || popoverRef.current?.contains(activeElement))) {
+                return;
+            }
+
+            handleInputBlur();
+            setIsOpen(false);
+            setShowMonthPicker(false);
+            setShowYearPicker(false);
+        }, 0);
+    };
+
     return (
-        <div className={cn("zd:relative", className ?? "")}>
-            <div onBlur={handleInputBlur}>
+        <div
+            ref={containerRef}
+            className={cn("zd:relative", className ?? "")}
+            onPointerDownCapture={() => {
+                pointerDownInsideRef.current = true;
+                window.setTimeout(() => {
+                    pointerDownInsideRef.current = false;
+                }, 0);
+            }}
+            onBlurCapture={handleContainerBlurCapture}
+        >
+            <div>
                 <Input
                     ref={inputRef}
                     value={inputValue}
                     onChange={handleInputChange}
+                    onFocus={openCalendar}
                     placeholder={placeholder}
                     readOnly={readOnly}
                     disabled={disabled}
                     suffix={
-                        <Popover open={isOpen && !readOnly} onOpenChange={(open) => {
-                            if (!readOnly) {
-                                setIsOpen(open);
-                                // Initialize time picker with current time when opening for Time or DateTime type
-                                // But don't trigger onChange - only set the internal state
-                                if (open && (type === 'Time' || type === 'DateTime') && !selectedDate) {
-                                    const now = new Date();
-                                    setSelectedTime({
-                                        hours: now.getHours(),
-                                        minutes: now.getMinutes(),
-                                        seconds: now.getSeconds()
-                                    });
-                                }
-                            }
-                        }}>
-                            <PopoverTrigger asChild>
-                                <div className="zd:flex-1 zd:w-full">
-                                    {!readOnly && (
-                                        <Button
-                                            variant="ghost"
-                                            className="zd:h-full zd:px-0 zd:p-1"
-                                            onClick={() => !disabled && setIsOpen(true)}
-                                            disabled={disabled}
-                                        >
-                                            {type === 'Time' ? (
-                                                <Clock className="zd:h-4 zd:w-4" />
-                                            ) : (
-                                                <Calendar className="zd:h-4 zd:w-4" />
-                                            )}
-                                        </Button>
+                        <div className="zd:flex-1 zd:w-full">
+                            {!readOnly && (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="zd:h-full zd:px-0 zd:p-1"
+                                    onClick={openCalendar}
+                                    disabled={disabled}
+                                >
+                                    {type === 'Time' ? (
+                                        <Clock className="zd:h-4 zd:w-4" />
+                                    ) : (
+                                        <Calendar className="zd:h-4 zd:w-4" />
                                     )}
-                                </div>
-                            </PopoverTrigger>
-                            <PopoverContent className="zd:p-0" align="start">
-                                <div className="zd:p-3">
+                                </Button>
+                            )}
+                        </div>
+                    }
+                />
+                <DatePickerPopover
+                    open={isOpen && !readOnly}
+                    className="zd:min-w-[280px] zd:p-0"
+                    usePortal
+                    style={popoverStyle}
+                    popoverRef={popoverRef}
+                >
+                    <div className="zd:p-3">
                                     {type !== "Time" && (
                                         <>
                                             {/* Header */}
@@ -653,19 +852,23 @@ const DatePicker: React.FC<DatePickerProps> = ({
 
                                                 <div className="zd:flex zd:items-center zd:space-x-1">
                                                     {/* Month Picker */}
-                                                    <Popover open={showMonthPicker} onOpenChange={setShowMonthPicker}>
-                                                        <PopoverTrigger asChild>
-                                                            <Button
-                                                                variant="ghost"
-                                                                className="zd:px-2 zd:py-1 zd:text-sm zd:font-medium zd:hover:bg-accent"
-                                                            >
-                                                                {currentDate.toLocaleDateString('en-US', { month: 'long' })}
-                                                            </Button>
-                                                        </PopoverTrigger>
-                                                        <PopoverContent className="zd:w-48 zd:p-2" align="center">
+                                                    <div className="zd:relative">
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            className="zd:px-2 zd:py-1 zd:text-sm zd:font-medium zd:hover:bg-accent"
+                                                            onClick={() => {
+                                                                setShowMonthPicker((prev) => !prev);
+                                                                setShowYearPicker(false);
+                                                            }}
+                                                        >
+                                                            {currentDate.toLocaleDateString('en-US', { month: 'long' })}
+                                                        </Button>
+                                                        <DatePickerPopover open={showMonthPicker} className="zd:left-1/2 zd:w-48 zd:-translate-x-1/2 zd:p-2">
                                                             <div className="zd:grid zd:grid-cols-3 zd:gap-0.5">
                                                                 {monthNames.map((month, index) => (
                                                                     <Button
+                                                                        type="button"
                                                                         key={month}
                                                                         variant="ghost"
                                                                         className={cn(
@@ -678,23 +881,27 @@ const DatePicker: React.FC<DatePickerProps> = ({
                                                                     </Button>
                                                                 ))}
                                                             </div>
-                                                        </PopoverContent>
-                                                    </Popover>
+                                                        </DatePickerPopover>
+                                                    </div>
 
                                                     {/* Year Picker */}
-                                                    <Popover open={showYearPicker} onOpenChange={setShowYearPicker}>
-                                                        <PopoverTrigger asChild>
-                                                            <Button
-                                                                variant="ghost"
-                                                                className="zd:px-2 zd:py-1 zd:text-sm zd:font-medium zd:hover:bg-accent"
-                                                            >
-                                                                {currentDate.getFullYear()}
-                                                            </Button>
-                                                        </PopoverTrigger>
-                                                        <PopoverContent className="zd:w-48 zd:p-2 zd:overflow-y-auto" align="center">
+                                                    <div className="zd:relative">
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            className="zd:px-2 zd:py-1 zd:text-sm zd:font-medium zd:hover:bg-accent"
+                                                            onClick={() => {
+                                                                setShowYearPicker((prev) => !prev);
+                                                                setShowMonthPicker(false);
+                                                            }}
+                                                        >
+                                                            {currentDate.getFullYear()}
+                                                        </Button>
+                                                        <DatePickerPopover open={showYearPicker} className="zd:left-1/2 zd:w-48 zd:-translate-x-1/2 zd:max-h-52 zd:overflow-y-auto zd:p-2">
                                                             <div className="zd:grid zd:grid-cols-3 zd:gap-1 zd:max-h-48">
                                                                 {generateYears().map((year) => (
                                                                     <Button
+                                                                        type="button"
                                                                         key={year}
                                                                         variant="ghost"
                                                                         className={cn(
@@ -707,8 +914,8 @@ const DatePicker: React.FC<DatePickerProps> = ({
                                                                     </Button>
                                                                 ))}
                                                             </div>
-                                                        </PopoverContent>
-                                                    </Popover>
+                                                        </DatePickerPopover>
+                                                    </div>
                                                 </div>
 
                                                 <Button
@@ -752,7 +959,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
                                                             onMouseLeave={() => setHoveredDate(null)}
                                                             disabled={isDisabled}
                                                             className={cn(
-                                                                "zd:font-medium zd:flex zd:!h-8 zd:!w-full zd:justify-center zd:items-center zd:transition-colors zd:relative",
+                                                                "zd:font-medium zd:flex zd:!h-7 zd:!w-full zd:justify-center zd:items-center zd:transition-colors zd:relative",
                                                                 "zd:hover:text-accent-foreground",
                                                                 isStartDate ? "zd:bg-primary zd:text-primary-foreground zd:font-bold" : "",
                                                                 isEndDate ? "zd:bg-primary zd:text-primary-foreground zd:font-bold" : "",
@@ -760,7 +967,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
                                                                 !isCurrentMonth(date) ? "zd:text-muted-foreground/50" : "",
                                                                 isSelected ? "zd:bg-primary zd:text-primary-foreground" : "",
                                                                 isInRange ? "zd:bg-primary/20 zd:text-primary" : "",
-                                                                isToday(date) ? "zd:font-bold" : "",
+                                                                isToday(date) ? "zd:underline" : "",
                                                                 isDisabled ? "zd:text-muted-foreground/30 zd:cursor-not-allowed" : "",
                                                                 !isDisabled ? "zd:hover:bg-accent" : "",
                                                             )}
@@ -836,11 +1043,8 @@ const DatePicker: React.FC<DatePickerProps> = ({
                                             )}
                                         </div>
                                     )}
-                                </div>
-                            </PopoverContent>
-                        </Popover>
-                    }
-                />
+                    </div>
+                </DatePickerPopover>
             </div>
         </div>
     );

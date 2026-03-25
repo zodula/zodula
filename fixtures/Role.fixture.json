@@ -68,19 +68,5 @@
     "doc_status": "Draft",
     "idx": null,
     "vector": null
-  },
-  {
-    "id": "Organization Owner",
-    "name": "Organization Owner",
-    "description": null,
-    "is_system": 0,
-    "owner": "jarupak.sri@gmail.com",
-    "created_at": "2026-02-07 14:18:34",
-    "updated_at": "2026-02-07 14:18:34",
-    "created_by": "jarupak.sri@gmail.com",
-    "updated_by": "jarupak.sri@gmail.com",
-    "doc_status": "Draft",
-    "idx": 0,
-    "vector": "[]"
   }
 ]

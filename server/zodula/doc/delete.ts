@@ -33,37 +33,19 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
 
     private async deleteFiles(doctype: any) {
         try {
-            const filesDir = path.join(process.cwd(), ".zodula_data", "files", this.doctypeName, this.id)
 
-            // Check if the directory exists
+            const dir = path.join(process.cwd(), ".zodula_data", "files", this.doctypeName, this.id)
             try {
-                await fs.access(filesDir)
+                await fs.access(dir)
             } catch {
-                // Directory doesn't exist, no files to delete
                 return
             }
-
-            // Get all field directories
-            const fieldDirs = await fs.readdir(filesDir)
-
-            for (const fieldDir of fieldDirs) {
-                const fieldPath = path.join(filesDir, fieldDir)
-                const stat = await fs.stat(fieldPath)
-
-                if (stat.isDirectory()) {
-                    // Delete all files in this field directory
-                    const files = await fs.readdir(fieldPath)
-                    for (const file of files) {
-                        await fs.unlink(path.join(fieldPath, file))
-                    }
-
-                    // Remove the field directory
-                    await fs.rmdir(fieldPath)
-                }
+            const files = await fs.readdir(dir)
+            for (const file of files) {
+                await fs.unlink(path.join(dir, file))
             }
+            await fs.rmdir(dir, { recursive: true })
 
-            // Remove the document directory
-            await fs.rmdir(filesDir).catch(() => { })
         } catch (error) {
             // Log error but don't throw - file deletion shouldn't prevent document deletion
             console.warn(`Failed to delete files for ${this.doctypeName}/${this.id}:`, error)
@@ -73,9 +55,8 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
     private async _delete() {
         const db = Database("main")
         const doctype = loader.from("doctype").get(this.doctypeName)
-    // Use bypass=true so internal deletes (e.g. from doctype hooks) don't
-    // require a real cookie-based session.
-    const user = await zodula.session.user(true)
+        // Use bypass=true so internal deletes (e.g. from doctype hooks) don't
+        // require a real cookie-based session.
         let old = await zodula.doctype(this.doctypeName).get(this.id).bypass(true).unsafe()
         // Validate document exists
         if (!old) {
@@ -109,6 +90,16 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
 
         // Execute before delete trigger
         await loader.from("doctype").trigger(this.doctypeName, "before_delete", { old: old, doc: prepared, input: undefined })
+
+        // When deleting any doctype other than Attachment, cascade delete all related
+        // Attachment docs (and their files). This keeps orphan attachments/files from
+        // accumulating after a parent doc id change/delete.
+        if (this.doctypeName !== "Attachment") {
+            const attachments = await zodula.doctype("Attachment").select().where("docId", "=", this.id).where("doctype", "=", this.doctypeName).bypass(true)
+            for (const attachment of attachments.docs) {
+                await zodula.doctype("Attachment").delete(attachment.id).bypass(true)
+            }
+        }
 
         // Handle reference fields based on their on_delete behavior
         await this.updateReferenceFields(doctype, this.id)

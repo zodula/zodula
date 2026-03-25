@@ -14,7 +14,7 @@ export const TextareaPlugin = new FormPlugin({
                     // Don't allow changes if readonly
                     if (!props.readonly) {
                         const value = e.target.value
-                        props.onChange?.(value);
+                        props.onChange?.(props.fieldPath || "", value);
                     }
                 }}
             />

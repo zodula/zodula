@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosRequestHeaders, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import * as zodulaUtils from './utils';
+import * as zodulaFace from './zodula_face';
 import { ZodulaDoc } from './doc';
 import { ZodulaClientRealtime } from './realtime';
 import { toast } from '../ui';
@@ -56,9 +57,12 @@ export class Zodula {
     async action<AP extends Zodula.ActionPath = Zodula.ActionPath>(action: AP, options?: {
         data?: Zodula.ActionRequest[AP]
         params?: Record<string, string>
+        /** Extra request headers, e.g. `{ "Content-Type": "multipart/form-data" }` for file uploads. */
+        headers?: Record<string, string>
     }): Promise<Zodula.ActionResponse[AP]> {
         return (await this.api.post(`/api/action/${action}`, options?.data, {
-            params: options?.params
+            params: options?.params,
+            headers: options?.headers,
         }))?.data
     }
 
@@ -68,6 +72,11 @@ export class Zodula {
 
     get utils() {
         return zodulaUtils
+    }
+
+    /** Face recognition helpers (shared constants + browser loaders); server uses `@/zodula/face/server`. */
+    get face() {
+        return zodulaFace
     }
 
     get date() {
@@ -127,24 +136,24 @@ export const zodula = createZodulaClient(zodulaUtils.BASE_URL, {
             errorMessage = JSON.stringify(response.response.data.error)
         }
 
-        const isLoginPage = location.pathname.startsWith("/login")
-        if (response.status === 401) {
-            !isLoginPage && toast.error(`Unauthorized`, errorMessage, {
-                id: "unauthorized",
-            });
-            throw new Error(errorMessage)
-        }
+        // const isLoginPage = location.pathname.startsWith("/login")
+        // if (response.status === 401) {
+        //     !isLoginPage && toast.error(`Unauthorized`, errorMessage, {
+        //         id: "unauthorized",
+        //     });
+        //     throw new Error(errorMessage)
+        // }
 
-        if (response.status === 403) {
-            !isLoginPage && toast.error(`Forbidden`, errorMessage, {
-                id: "forbidden",
-            });
-            throw new Error(errorMessage)
-        }
+        // if (response.status === 403) {
+        //     !isLoginPage && toast.error(`Forbidden`, errorMessage, {
+        //         id: "forbidden",
+        //     });
+        //     throw new Error(errorMessage)
+        // }
 
-        toast.error(`Error`, errorMessage, {
-            id: errorMessage
-        });
+        // toast.error(`Error`, errorMessage, {
+        //     id: errorMessage
+        // });
         throw new Error(errorMessage)
     },
 });

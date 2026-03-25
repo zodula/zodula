@@ -1,20 +1,23 @@
 import React from "react";
 import { FormPlugin } from "../plugin";
 import { Input } from "../../ui/input";
-import { useOrganization } from "@/zodula/ui/hooks/use-organization";
+import { useDocAll } from "@/zodula/ui/hooks/use-doc-all";
 
 export const CurrencyPlugin = new FormPlugin({
     types: ["Currency"],
     supportOperators: ["=", "!=", ">", ">=", "<", "<=", "IS NULL", "IS NOT NULL"],
     render: (props) => {
-    const { organization } = useOrganization();
+    const { doc: globalSetting } = useDocAll({
+        doctype: "Global Setting",
+        id: "Global Setting",
+    });
     return (
         <Input
             placeholder="0.00"
             type="text"
             value={props.value || ""}
             readOnly={props.readonly}
-            prefix={organization?.currency || "$"}
+            prefix={globalSetting?.currency || "$"}
             onChange={(e) => {
                 // Don't allow changes if readonly
                 if (!props.readonly) {
@@ -34,7 +37,10 @@ export const CurrencyPlugin = new FormPlugin({
 
     },
     renderFilter: (props) => {
-    const { organization } = useOrganization();
+    const { doc: globalSetting } = useDocAll({
+        doctype: "Global Setting",
+        id: "Global Setting",
+    });
 
     // Don't render input for null operators
     if (["IS NULL", "IS NOT NULL"].includes(props.operator || "")) {
@@ -43,10 +49,10 @@ export const CurrencyPlugin = new FormPlugin({
 
     return (
         <Input
-            placeholder={getPlaceholder(props.operator)}
+            placeholder={props.placeholder || props.fieldOptions.label || "0.00"}
             type="text"
             value={props.value || ""}
-            prefix={organization?.currency || "$"}
+            prefix={globalSetting?.currency || "$"}
             onChange={(e) => {
                 props.onChange?.(props.fieldPath || "", e.target.value);
             }}
@@ -55,13 +61,3 @@ export const CurrencyPlugin = new FormPlugin({
     );
     }
 });
-
-function getPlaceholder(operator?: string): string {
-    if (["IN", "NOT IN"].includes(operator || "")) {
-        return "comma-separated values";
-    }
-    if (["LIKE", "NOT LIKE"].includes(operator || "")) {
-        return "use % as wildcard";
-    }
-    return "0.00";
-}

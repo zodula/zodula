@@ -71,7 +71,7 @@ export function ListTable<TDoc extends Record<string, any>>({
   };
   const wrapperClass = compact
     ? "zd:w-full zd:max-w-full zd:overflow-auto zd:max-h-[60vh] zd:rounded zd:border"
-    : "zd:relative zd:w-full zd:max-w-full zd:overflow-x-auto zd:shadow zd:rounded zd:border zd:min-h-[50vh]";
+    : "zd:relative zd:w-full zd:max-w-full zd:overflow-x-auto zd:rounded zd:border zd:min-h-[50vh]";
   const tableClass = compact ? "zd:w-full zd:text-sm" : "zd:absolute zd:top-0 zd:w-full zd:text-sm";
   const tableRef = useRef<HTMLTableElement>(null);
   const wrapperStyle = compact ? undefined : { height: tableRef?.current?.clientHeight ? `${tableRef?.current?.clientHeight + 20}px` : "50vh" };

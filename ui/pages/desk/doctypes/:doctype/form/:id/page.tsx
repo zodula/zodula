@@ -9,8 +9,6 @@ export default function FormPage() {
   const prefill = location.state?.prefill;
   const formId = `edit|${doctype}|${id}`;
   return (
-    <div className="zd:pb-16">
-      <DocFormView doctype={doctype} id={id} prefill={prefill} formId={formId} />
-    </div>
+    <DocFormView doctype={doctype} id={id} prefill={prefill} formId={formId} />
   );
 }

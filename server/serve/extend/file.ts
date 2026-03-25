@@ -23,10 +23,33 @@ export function extendFile() {
                 filename = files[0]
             }
             const url = `/${doctype}/${docId}/${fieldName}/${filename}`
-            const canDoc = await zodula?.doctype(doctype as Zodula.DoctypeName).get(docId!)
             const isPublicFile = loader.from("doctype").get(doctype as Zodula.DoctypeName)?.schema?.fields[fieldName as any]?.is_public === 1
 
-            if (!canDoc?.id && !isPublicFile) {
+            // Permission check:
+            // - Public files are always accessible.
+            // - For Attachment docs: bypass Attachment-level permissions and instead
+            //   verify the session user can access the document the attachment belongs to.
+            // - For all other doctypes: standard can_get check on the owning doc.
+            let isAuthorized = isPublicFile
+            if (!isAuthorized) {
+                if (doctype === "Attachment") {
+                    const attachment = await zodula
+                        ?.doctype("Attachment" as Zodula.DoctypeName)
+                        .get(docId!)
+                        .bypass(true)
+                    const refDoctype = (attachment as any)?.doctype as Zodula.DoctypeName | undefined
+                    const refDocId = (attachment as any)?.docId as string | undefined
+                    if (refDoctype && refDocId) {
+                        const refDoc = await zodula?.doctype(refDoctype).get(refDocId)
+                        isAuthorized = !!refDoc?.id
+                    }
+                } else {
+                    const canDoc = await zodula?.doctype(doctype as Zodula.DoctypeName).get(docId!)
+                    isAuthorized = !!canDoc?.id
+                }
+            }
+
+            if (!isAuthorized) {
                 return ctx.json("You are not authorized to access this file", 403)
             }
             const filePath = path.join(process.cwd(), ".zodula_data", "files", url)

@@ -11,7 +11,6 @@ import { zodula } from "@/zodula/client/zodula";
 import React, { useEffect, useMemo } from "react";
 import type { GenerateMetadata } from "../components/metadata";
 import { ErrorBoundary } from "../components/custom/error-boundary";
-import { OnboardingChecklistBox } from "../components/onboarding/OnboardingChecklistBox";
 import { useOrganizationStore } from "../hooks/use-organization";
 
 export const generateMetadata: GenerateMetadata = async (ctx) => {
@@ -117,7 +116,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     }
     return <ErrorBoundary>
         {children}
-        {router.pathname.startsWith("/desk") && <OnboardingChecklistBox />}
         <ToastPortal />
         <DialogPortal />
     </ErrorBoundary>

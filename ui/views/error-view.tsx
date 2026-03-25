@@ -40,7 +40,7 @@ export default function ErrorView(props: ErrorViewProps) {
     }
 
     const handleGoHome = () => {
-        router.push("/")
+        window.location.href = "/"
     }
 
     const handleRetry = () => {

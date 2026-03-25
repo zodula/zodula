@@ -12,39 +12,47 @@ export default $action(async (ctx) => {
         currency,
     } = ctx.body;
 
-    const payload: Zodula.UpdateDoctype<"Organization"> = {};
+    const payloadOrg: Zodula.UpdateDoctype<"Organization"> = {};
+    const payloadGlobal: Zodula.UpdateDoctype<"Global Setting"> = {};
 
     if (organization_name != null && organization_name !== "") {
-        payload.organization_name = String(organization_name).trim();
+        payloadOrg.organization_name = String(organization_name).trim();
     }
     if (abbr != null && abbr !== "") {
-        payload.abbr = String(abbr).trim();
+        payloadOrg.abbr = String(abbr).trim();
     }
     if (tax_id != null && tax_id !== "") {
-        payload.tax_id = String(tax_id).trim();
+        payloadOrg.tax_id = String(tax_id).trim();
     }
     if (address != null && address !== "") {
-        payload.address = String(address).trim();
+        payloadOrg.address = String(address).trim();
     }
     if (phone != null && phone !== "") {
-        payload.phone = String(phone).trim();
+        payloadOrg.phone = String(phone).trim();
     }
     if (email != null && email !== "") {
-        payload.email = String(email).trim();
+        payloadOrg.email = String(email).trim();
     }
     if (website != null && website !== "") {
-        payload.website = String(website).trim();
+        payloadOrg.website = String(website).trim();
     }
     if (currency != null && currency !== "") {
-        payload.currency = String(currency).trim();
+        payloadGlobal.currency = String(currency).trim();
     }
 
-    const updated = await $zodula
+    const updatedOrg = await $zodula
         .doctype("Organization")
-        .update("Organization", payload)
+        .update("Organization", payloadOrg)
         .bypass(true);
 
-    return ctx.json(updated);
+    if (payloadGlobal && Object.keys(payloadGlobal).length > 0) {
+        await $zodula
+            .doctype("Global Setting")
+            .update("Global Setting", payloadGlobal)
+            .bypass(true);
+    }
+
+    return ctx.json(updatedOrg);
 }, {
     body: z.object({
         organization_name: z.string().optional(),

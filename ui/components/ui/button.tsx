@@ -6,27 +6,27 @@ import { Loader2 } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 const buttonVariants = cva(
-  "zd:inline-flex zd:items-center zd:justify-center zd:rounded zd:shadow-sm zd:transition-[color,box-shadow] zd:disabled:pointer-events-none zd:disabled:opacity-50 zd:cursor-pointer zd:h-8 zd:px-3 zd:w-fit zd:gap-2",
+  "zd:inline-flex zd:items-center zd:justify-center zd:rounded-lg zd:transition-all zd:duration-150 zd:disabled:pointer-events-none zd:disabled:opacity-50 zd:cursor-pointer zd:h-9 zd:px-3.5 zd:w-fit zd:gap-1.5 zd:text-sm zd:font-medium zd:select-none zd:focus-visible:outline-none zd:focus-visible:ring-2 zd:focus-visible:ring-ring zd:focus-visible:ring-offset-1",
   {
     variants: {
       variant: {
         destructive:
-          "zd:bg-destructive zd:text-primary-foreground zd:shadow-sm zd:hover:bg-destructive/90 zd:hover:shadow-md zd:active:bg-destructive/95 zd:active:shadow-inner",
+          "zd:bg-destructive zd:text-white zd:hover:bg-destructive/90 zd:active:scale-[0.98] zd:shadow-sm",
         solid:
-          "zd:bg-primary zd:text-primary-foreground zd:shadow-sm zd:hover:bg-primary/90 zd:hover:shadow-md zd:active:bg-primary/95 zd:active:shadow-inner",
+          "zd:bg-primary zd:text-primary-foreground zd:hover:bg-primary/90 zd:active:scale-[0.98] zd:shadow-sm",
         subtle:
-          "zd:bg-secondary zd:text-secondary-foreground zd:shadow-sm zd:hover:bg-secondary/80 zd:hover:shadow zd:active:bg-secondary/90 zd:active:shadow-inner",
+          "zd:bg-secondary zd:text-secondary-foreground zd:hover:bg-secondary/70 zd:active:scale-[0.98]",
         outline:
-          "zd:border zd:border-input zd:bg-background zd:shadow-sm zd:hover:bg-accent zd:hover:text-accent-foreground zd:hover:border-accent zd:hover:shadow zd:active:bg-accent/80 zd:active:shadow-inner",
+          "zd:border zd:border-border zd:bg-background zd:text-foreground zd:hover:bg-accent zd:hover:text-accent-foreground zd:active:scale-[0.98]",
         ghost:
-          "zd:shadow-none zd:hover:bg-accent zd:hover:text-accent-foreground zd:hover:shadow-sm zd:active:bg-accent/80",
+          "zd:text-foreground zd:hover:bg-accent zd:hover:text-accent-foreground zd:active:scale-[0.98]",
         success:
-          "zd:bg-success zd:text-success-foreground zd:shadow-sm zd:hover:bg-success/90 zd:hover:shadow-md zd:active:bg-success/95 zd:active:shadow-inner",
+          "zd:bg-success zd:text-success-foreground zd:hover:bg-success/90 zd:active:scale-[0.98] zd:shadow-sm",
       },
       size: {
-        default: "zd:h-8 zd:text-base",
-        sm: "zd:h-7 zd:text-sm",
-        lg: "zd:h-10 zd:text-lg",
+        default: "zd:h-9 zd:text-sm",
+        sm: "zd:h-7 zd:text-xs zd:px-2.5",
+        lg: "zd:h-10 zd:text-base zd:px-5",
       },
     },
     defaultVariants: {

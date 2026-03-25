@@ -6,7 +6,6 @@ import { BASE_URL } from "@/zodula/client/utils";
 export const FileUploadPlugin = new FormPlugin({
     types: ["File"],
     render: (props) => {
-        console.log("value", props.value);
         return (
             <>
                 <FileUpload
@@ -14,7 +13,6 @@ export const FileUploadPlugin = new FormPlugin({
                     value={props.value}
                     accept={props.fieldOptions.accept || ""}
                     onChange={(value: File | string) => {
-                        console.log(value);
                         props.onChange?.(props.fieldPath || "", value);
                     }}
                 />

@@ -5,46 +5,45 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/zodula/ui/lib/utils"
 
 const badgeVariants = cva(
-  "zd:inline-flex zd:items-center zd:justify-center zd:rounded-lg zd:px-2 zd:py-1 zd:w-fit zd:whitespace-nowrap zd:shrink-0 [&>svg]:size-3 zd:gap-1 [&>svg]:pointer-events-none focus-visible:ring-ring/50 focus-visible:ring-[3px] zd:aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 zd:transition-[color,box-shadow] zd:overflow-hidden zd:h-fit",
+  "zd:inline-flex zd:items-center zd:justify-center zd:rounded-full zd:w-fit zd:whitespace-nowrap zd:shrink-0 [&>svg]:size-3 zd:gap-1 [&>svg]:pointer-events-none zd:transition-colors zd:overflow-hidden zd:h-fit zd:font-medium",
   {
     variants: {
       variant: {
         default:
-          "zd:border-transparent zd:bg-primary zd:text-primary-foreground zd:[a&]:hover:bg-primary/90",
+          "zd:bg-primary zd:text-primary-foreground zd:[a&]:hover:bg-primary/90",
         secondary:
-          "zd:border-transparent zd:bg-secondary zd:text-secondary-foreground zd:[a&]:hover:bg-secondary/90",
+          "zd:bg-secondary zd:text-secondary-foreground zd:[a&]:hover:bg-secondary/80",
         destructive:
-          "zd:border-transparent zd:bg-pink-100 zd:text-pink-800 zd:dark:bg-pink-900/20 zd:dark:text-pink-400",
+          "zd:bg-red-100 zd:text-red-700 zd:dark:bg-red-900/30 zd:dark:text-red-400",
         warning:
-          "zd:border-transparent zd:bg-warning zd:text-warning-foreground zd:[a&]:hover:bg-warning/90 zd:focus-visible:ring-warning/20 dark:zd:focus-visible:ring-warning/40",
+          "zd:bg-amber-100 zd:text-amber-700 zd:dark:bg-amber-900/30 zd:dark:text-amber-400",
         success:
-          "zd:border-transparent zd:bg-green-100 zd:text-green-800 zd:[a&]:hover:bg-success/90 zd:focus-visible:ring-success/20 dark:zd:focus-visible:ring-success/40",
+          "zd:bg-emerald-100 zd:text-emerald-700 zd:dark:bg-emerald-900/30 zd:dark:text-emerald-400",
         outline:
-          "zd:border zd:border-border zd:text-foreground zd:[a&]:hover:bg-accent zd:[a&]:hover:text-accent-foreground",
-        // Status-specific variants for beautiful color-coded badges
+          "zd:border zd:border-border zd:text-foreground zd:bg-transparent zd:[a&]:hover:bg-accent",
+        // Status-specific variants
         draft:
-          "zd:border-transparent zd:bg-red-100 zd:text-red-800 zd:dark:bg-red-900/20 zd:dark:text-red-400",
+          "zd:bg-red-100 zd:text-red-700 zd:dark:bg-red-900/30 zd:dark:text-red-400",
         submitted:
-          "zd:border-transparent zd:bg-green-100 zd:text-green-800 zd:dark:bg-green-900/20 zd:dark:text-green-400",
+          "zd:bg-emerald-100 zd:text-emerald-700 zd:dark:bg-emerald-900/30 zd:dark:text-emerald-400",
         cancelled:
-          "zd:border-transparent zd:bg-pink-100 zd:text-pink-800 zd:dark:bg-pink-900/20 zd:dark:text-pink-400",
+          "zd:bg-zinc-100 zd:text-zinc-600 zd:dark:bg-zinc-800 zd:dark:text-zinc-400",
         pending:
-          "zd:border-transparent zd:bg-blue-100 zd:text-blue-800 zd:dark:bg-blue-900/20 zd:dark:text-blue-400",
+          "zd:bg-blue-100 zd:text-blue-700 zd:dark:bg-blue-900/30 zd:dark:text-blue-400",
         approved:
-          "zd:border-transparent zd:bg-emerald-100 zd:text-emerald-800 zd:dark:bg-emerald-900/20 zd:dark:text-emerald-400",
+          "zd:bg-emerald-100 zd:text-emerald-700 zd:dark:bg-emerald-900/30 zd:dark:text-emerald-400",
         rejected:
-          "zd:border-transparent zd:bg-rose-100 zd:text-rose-800 zd:dark:bg-rose-900/20 zd:dark:text-rose-400",
-        // Muted variants for subtle badges
+          "zd:bg-rose-100 zd:text-rose-700 zd:dark:bg-rose-900/30 zd:dark:text-rose-400",
         muted:
-          "zd:border-transparent zd:bg-gray-100 zd:text-gray-800 zd:dark:bg-gray-800 zd:dark:text-gray-300",
+          "zd:bg-muted zd:text-muted-foreground",
         info:
-          "zd:border-transparent zd:bg-sky-100 zd:text-sky-800 zd:dark:bg-sky-900/20 zd:dark:text-sky-400",
+          "zd:bg-sky-100 zd:text-sky-700 zd:dark:bg-sky-900/30 zd:dark:text-sky-400",
       },
       size: {
-        default: "zd:text-[14px] zd:p-1 zd:px-2 zd:leading-none",
-        sm: "zd:text-[14px] zd:p-1 zd:px-2 zd:leading-none",
-        lg: "zd:text-sm zd:px-3 zd:py-1.5",
-        xl: "zd:text-base zd:px-4 zd:py-2",
+        default: "zd:px-3 zd:py-1 zd:leading-none",
+        sm: "zd:text-sm zd:px-2 zd:py-1 zd:leading-none",
+        lg: "zd:text-lg zd:px-4 zd:py-2",
+        xl: "zd:text-lg zd:px-4 zd:py-2",
       },
     },
     defaultVariants: {

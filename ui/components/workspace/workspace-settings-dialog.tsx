@@ -37,8 +37,8 @@ export const WorkspaceSettingsDialog = ({
                 icon: "Folder",
                 app: "zodula",
                 is_system: 0,
-                children: [],
-                items: []
+                url: null,
+                children: []
             })
         }
     }, [workspace])
@@ -112,6 +112,20 @@ export const WorkspaceSettingsDialog = ({
                                         System Workspace
                                     </span>
                                 </div>
+                            </FormControl>
+
+                            {/* URL field */}
+                            <FormControl
+                                label="URL"
+                                fieldKey="url"
+                                value={editedWorkspace.url}
+                                onChange={handleValueChange}
+                            >
+                                <Input
+                                    value={editedWorkspace.url || ""}
+                                    onChange={(e) => handleValueChange('url', e.target.value || null)}
+                                    placeholder="e.g. /desk/doctypes/Sales Invoice/list"
+                                />
                             </FormControl>
 
                             {/* Icon field */}

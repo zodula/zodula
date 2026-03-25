@@ -1,18 +1,1 @@
-[
-  {
-    "id": "a445dbff120a2607",
-    "idx": 0,
-    "type": "Link - Doctype",
-    "value": "Warehouse",
-    "label": "",
-    "url": "",
-    "html": "",
-    "text": "",
-    "filters": "",
-    "heading_level": "2",
-    "badge_variant": null,
-    "parentid": "0199819b-1964-7000-98e2-0a1a6e4a540d",
-    "parentype": "Workspace",
-    "parentfield": "workspace_items"
-  }
-]
+[]

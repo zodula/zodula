@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react"
 import * as LucideIcons from "lucide-react"
-import { useWorkspace, useWorkspaceEdit, type WorkspaceWithChildren, type WorkspaceItem } from "./use-workspace"
+import { useNavigate } from "react-router"
+import { useWorkspace, useWorkspaceEdit, type WorkspaceWithChildren } from "./use-workspace"
 import { useWorkspaceDnd } from "../../hooks/use-workspace-dnd"
 import { cn } from "../../lib/utils"
 import { Button } from "../ui/button"
@@ -14,10 +15,10 @@ const EXPANDED_STORAGE_KEY = 'zodula-expanded-workspaces';
 
 export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
     const { t } = useTranslation()
-    const { setSelectedWorkspace, selectedWorkspace, hierarchicalWorkspaces, workspaces, workspaceItems, reloadWorkspaceItems, reloadWorkspaces } = useWorkspace()
+    const navigate = useNavigate()
+    const { setSelectedWorkspace, selectedWorkspace, hierarchicalWorkspaces, reloadWorkspaces } = useWorkspace()
     const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(new Set())
     const { editedWorkspaces, isEditing, reorderWorkspace, initializeEditMode, addWorkspace, updateWorkspace, deleteWorkspace, saveEdit } = useWorkspaceEdit()
-
 
     // Workspace settings dialog state
     const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
@@ -27,9 +28,7 @@ export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
     // Helper function to find workspace in hierarchy
     const findWorkspaceInHierarchy = (workspaces: WorkspaceWithChildren[], workspaceId: string): WorkspaceWithChildren | null => {
         for (const workspace of workspaces) {
-            if (workspace.id === workspaceId) {
-                return workspace;
-            }
+            if (workspace.id === workspaceId) return workspace;
             if (workspace.children.length > 0) {
                 const found = findWorkspaceInHierarchy(workspace.children, workspaceId);
                 if (found) return found;
@@ -50,12 +49,7 @@ export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
 
     // Use edited workspaces when editing, otherwise use hierarchical workspaces
     const workspacesToRender = useMemo(() => {
-        if (isEditing) {
-            // editedWorkspaces is already hierarchical, so we can use it directly
-            return editedWorkspaces;
-        } else {
-            return hierarchicalWorkspaces;
-        }
+        return isEditing ? editedWorkspaces : hierarchicalWorkspaces;
     }, [isEditing, editedWorkspaces, hierarchicalWorkspaces])
 
     // Flatten workspaces for drag and drop
@@ -73,41 +67,25 @@ export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
         return flatten(workspacesToRender)
     }, [workspacesToRender])
 
-    // Reset editing state and initialize edit mode when hierarchical workspaces change
+    // Initialize edit mode from hierarchical workspaces
     useEffect(() => {
-        // Only initialize edit mode when NOT in editing mode and we have no edited workspaces (fresh load)
-        // This prevents resetting edit mode when deleting workspaces during editing
         if (!isEditing && editedWorkspaces.length === 0) {
-            // Flatten hierarchical workspaces to include all workspaces (including children)
-            const flattenWorkspaces = (workspaces: WorkspaceWithChildren[]): WorkspaceWithChildren[] => {
+            const flattenAll = (workspaces: WorkspaceWithChildren[]): WorkspaceWithChildren[] => {
                 const result: WorkspaceWithChildren[] = [];
                 const flatten = (ws: WorkspaceWithChildren[]) => {
                     ws.forEach(workspace => {
                         result.push(workspace);
-                        if (workspace.children.length > 0) {
-                            flatten(workspace.children);
-                        }
+                        if (workspace.children.length > 0) flatten(workspace.children);
                     });
                 };
                 flatten(workspaces);
                 return result;
             };
 
-            const allWorkspaces = flattenWorkspaces(hierarchicalWorkspaces);
-
-            // Create original workspace items map from the flat workspaceItems
-            const originalWorkspaceItems: Record<string, WorkspaceItem[]> = {};
-            workspaceItems.forEach(item => {
-                const pid = item.parentid ?? "";
-                if (!originalWorkspaceItems[pid]) {
-                    originalWorkspaceItems[pid] = [];
-                }
-                originalWorkspaceItems[pid]!.push(item);
-            });
-
-            initializeEditMode(allWorkspaces, allWorkspaces, originalWorkspaceItems)
+            const allWorkspaces = flattenAll(hierarchicalWorkspaces);
+            initializeEditMode(allWorkspaces, allWorkspaces)
         }
-    }, [hierarchicalWorkspaces, editedWorkspaces.length, initializeEditMode, workspaceItems, isEditing])
+    }, [hierarchicalWorkspaces, editedWorkspaces.length, initializeEditMode, isEditing])
 
     // Drag and drop functionality
     const {
@@ -157,12 +135,6 @@ export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
     }
 
     // Workspace settings dialog handlers
-    const handleOpenSettings = (workspace: WorkspaceWithChildren) => {
-        setSelectedWorkspaceForEdit(workspace)
-        setIsCreatingNewWorkspace(false)
-        setSettingsDialogOpen(true)
-    }
-
     const handleCloseSettings = () => {
         setSettingsDialogOpen(false)
         setSelectedWorkspaceForEdit(null)
@@ -171,9 +143,7 @@ export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
 
     const handleApplySettings = async (updatedWorkspace: WorkspaceWithChildren) => {
         if (isCreatingNewWorkspace) {
-            // Add new workspace
             addWorkspace(updatedWorkspace)
-            // If this is the first workspace, automatically save it
             if (workspacesToRender.length === 0) {
                 try {
                     await saveEdit()
@@ -182,7 +152,6 @@ export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
                 }
             }
         } else {
-            // Update existing workspace
             updateWorkspace(updatedWorkspace.id, updatedWorkspace)
         }
     }
@@ -197,7 +166,6 @@ export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
         deleteWorkspace(workspaceId)
     }
 
-    // Handler for adding new workspace
     const handleAddWorkspace = () => {
         setSelectedWorkspaceForEdit(null)
         setIsCreatingNewWorkspace(true)
@@ -209,13 +177,20 @@ export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
         const isExpanded = expandedWorkspaces.has(workspace.id)
         const isSelected = selectedWorkspace?.id === workspace.id
 
-        // Get drag and drop props for this specific workspace
         const dropZoneProps = getDropZoneProps(workspace, level)
         const dragProps = getDragProps(workspace, level)
         const beforeIndicatorProps = getDropIndicatorProps(workspace, 'before')
         const afterIndicatorProps = getDropIndicatorProps(workspace, 'after')
         const insideIndicatorProps = getDropIndicatorProps(workspace, 'inside')
 
+        // Click handler: navigate if url, toggle if has children, else no-op
+        const handleClick = () => {
+            if (workspace.url) {
+                navigate(workspace.url)
+            } else if (hasChildren) {
+                toggleExpanded(workspace.id)
+            }
+        }
 
         return (
             <div key={workspace.id} className="zd:flex zd:flex-col zd:gap-1">
@@ -233,16 +208,18 @@ export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
                     <div {...afterIndicatorProps} />
                     <div {...insideIndicatorProps} />
 
-                    {/* Drag handle */}
+                    {/* Drag handle / clickable row */}
                     <div
                         {...dragProps}
                         className={cn(
                             dragProps.className,
-                            "zd:flex zd:items-center zd:gap-2 zd:flex-1 zd:p-2 zd:pl-4 ",
-                            !readonly && (isDragging ? "zd:cursor-grabbing" : "zd:cursor-grab")
+                            "zd:flex zd:items-center zd:gap-2 zd:flex-1 zd:p-2 zd:pl-4",
+                            !readonly && (isDragging ? "zd:cursor-grabbing" : "zd:cursor-grab"),
+                            (workspace.url || hasChildren) ? "zd:cursor-pointer" : ""
                         )}
-                        onClick={() => setSelectedWorkspace(workspace)}
+                        onClick={!isEditing ? handleClick : undefined}
                     >
+                        {/* Expand/collapse chevron for items with children */}
                         {hasChildren && (
                             <button
                                 onClick={(e) => {
@@ -258,8 +235,8 @@ export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
                                 )}
                             </button>
                         )}
+
                         {isEditing && !readonly ? (
-                            // In editing mode, show compact icon picker
                             <WorkspaceIconPicker
                                 selectedIcon={workspace.icon || "Folder"}
                                 onIconSelect={(iconName) => handleIconSelect(workspace.id, iconName)}
@@ -267,7 +244,6 @@ export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
                                 variant="compact"
                             />
                         ) : (
-                            // In normal mode, show static icon
                             <div className="zd:rounded-md zd:p-1">
                                 <DynamicIcon
                                     iconName={workspace.icon as IconName}
@@ -276,7 +252,7 @@ export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
                             </div>
                         )}
 
-                        {/* Floating edit toolbar - only show in editing mode */}
+                        {/* Floating edit toolbar */}
                         {isEditing && !readonly && (
                             <div className="zd:absolute zd:right-8 zd:bottom-0.5 zd:bg-muted zd:flex zd:items-center zd:justify-center zd:w-fit zd:h-fit zd:p-1 zd:rounded zd:gap-1 zd:opacity-20 zd:group-hover:opacity-100 zd:transition-opacity">
                                 <button
@@ -310,11 +286,15 @@ export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
                                 </button>
                             </div>
                         )}
-                        <span className={cn(
-                            "zd:flex-1"
-                        )}>
+
+                        <span className="zd:flex-1 zd:truncate">
                             {t(workspace.name)}
                         </span>
+
+                        {/* Link indicator for url items */}
+                        {workspace.url && !isEditing && (
+                            <LucideIcons.ExternalLink className="zd:w-3 zd:h-3 zd:text-muted-foreground zd:opacity-0 zd:group-hover:opacity-100 zd:transition-opacity zd:shrink-0" />
+                        )}
                     </div>
                 </div>
                 {hasChildren && isExpanded && (
@@ -370,6 +350,5 @@ export const WorkspaceList = ({ readonly = false }: { readonly?: boolean }) => {
             onApply={handleApplySettings}
             isCreatingNew={isCreatingNewWorkspace}
         />
-
     </div>
 }
