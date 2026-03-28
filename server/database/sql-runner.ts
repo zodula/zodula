@@ -25,7 +25,7 @@
 //     ): Promise<DatabaseOperationResult> {
 //         try {
 //             // For now, use raw SQL to create tables
-//             // This is a simplified approach - in production you'd want to use the schema builder
+//             // This is a simplified approach - in itemion you'd want to use the schema builder
 //             const columnDefs = Object.entries(columns)
 //                 .map(([name, def]) => {
 //                     let sql = `"${name}" ${def.type}`

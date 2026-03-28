@@ -201,7 +201,7 @@ export default function DoctypeCalendarPage() {
   return (
     <DeskNavbarLayout
       title={t(`${doctypeDoc?.label || doctype}`)}
-      defaultOpen={false}
+      defaultRightOpen={false}
       primaryAction={primaryActions}
       actionSection={
         <ViewSelector

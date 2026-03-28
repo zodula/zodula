@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router";
-import { Plus, Printer, Download, X, Trash2, RefreshCw, ChevronDown } from "lucide-react";
+import { Plus, Printer, Download, X, Trash2, RefreshCw, Check } from "lucide-react";
 import { useRouter } from "@/zodula/ui/components/router";
 import { DeskNavbarLayout, type ActionItem, type PrimaryAction, type SecondaryAction } from "@/zodula/ui/layout/desk-navbar-layout";
 import { ListView } from "@/zodula/ui/components/list/ListView";
@@ -26,9 +25,16 @@ import { QuickEntryDialog } from "@/zodula/ui/components/dialogs/quick-entry-dia
 import { zodula } from "@/zodula/client";
 import { useZui } from "@/zodula/ui";
 
-export default function DoctypeListPage() {
-    const { params, push, replace, search, location } = useRouter();
-    const doctype = params.doctype as Zodula.DoctypeName;
+function DoctypeListPageContent({
+    doctype,
+    doctypeDoc,
+    reloadDoctype,
+}: {
+    doctype: Zodula.DoctypeName;
+    doctypeDoc: Zodula.SelectDoctype<"Doctype">;
+    reloadDoctype: () => void;
+}) {
+    const { params, push, search, location } = useRouter();
     const { roles } = useAuth();
     const { t } = useTranslation();
     const zui = useZui();
@@ -69,6 +75,16 @@ export default function DoctypeListPage() {
         [doctype]
     );
     const calendarEnabled = calendarRows.length > 0;
+    const { docs: doctypePermissions, loading: loadingDoctypePermissions } = useDocList(
+        {
+            doctype: "Doctype Permission",
+            limit: 200,
+            sort: "idx",
+            order: "asc",
+            filters: [["doctype", "=", doctype] as any],
+        },
+        [doctype]
+    );
 
     const docsRef = useRef(docs);
     const selectedRef = useRef(selected);
@@ -91,24 +107,12 @@ export default function DoctypeListPage() {
         [allFields, doctype]
     );
 
-    const { doc: doctypeDoc, reload: reloadDoctype, loading: loadingDoctype } = useDocAll({
-        doctype: "Doctype",
-        id: doctype,
-    });
-
-    useEffect(() => {
-        if (doctypeDoc?.is_single) {
-            replace(`/desk/doctypes/${doctype}`);
-        }
-    }, [doctypeDoc, replace, doctype]);
-
     useEffect(() => {
         reloadFields();
         reloadDoctype();
         reload();
     }, [doctype, search, params]);
 
-    // ----- ZUI list context & secondary actions -----
     const listContext = useMemo(
         () => ({
             doctype,
@@ -168,10 +172,34 @@ export default function DoctypeListPage() {
                 sortable: true,
             },
             ..._columns]
-    }, [fields]);
+    }, [fields, doctypeDoc]);
 
     const isSubmittable = doctypeDoc?.is_submittable === 1;
     const isQuickEntry = doctypeDoc?.is_quick_entry === 1;
+    const permissionFields: Array<{
+        key: keyof Zodula.SelectDoctype<"Doctype Permission">;
+        label: string;
+    }> = [
+            { key: "can_get", label: "Get" },
+            { key: "can_select", label: "Select" },
+            { key: "can_create", label: "Create" },
+            { key: "can_update", label: "Update" },
+            { key: "can_delete", label: "Delete" },
+            { key: "can_submit", label: "Submit" },
+            { key: "can_cancel", label: "Cancel" },
+        ];
+    const ownPermissionFields: Array<{
+        key: keyof Zodula.SelectDoctype<"Doctype Permission">;
+        label: string;
+    }> = [
+            { key: "can_own_get", label: "Own Get" },
+            { key: "can_own_select", label: "Own Select" },
+            { key: "can_own_create", label: "Own Create" },
+            { key: "can_own_update", label: "Own Update" },
+            { key: "can_own_delete", label: "Own Delete" },
+            { key: "can_own_submit", label: "Own Submit" },
+            { key: "can_own_cancel", label: "Own Cancel" },
+        ];
 
     const handleCreate = async () => {
         if (isQuickEntry) {
@@ -215,19 +243,24 @@ export default function DoctypeListPage() {
     const handleExportCSV = async () => {
         // TODO: Implement CSV export functionality
         if (selected.size > 0) {
-            const { fields: selectedFields } = await popup(CSVDialog, {
+            const csvResult = (await popup(CSVDialog, {
                 title: `Export CSV for ${doctype}`,
                 description: `Selected ${selected.size} item(s)`
             }, {
                 doctype,
                 selected: Array.from(selected)
-            }) || {}
-            if (selectedFields) {
+            })) as { fields: string[]; labels: string[] } | null | undefined
+            const selectedFields = csvResult?.fields
+            const fieldLabels = csvResult?.labels
+            if (selectedFields?.length) {
                 const res = await zodula.action("zodula.exports.csv", {
                     data: {
                         doctype,
                         ids: Array.from(selected),
-                        fields: columns.map((column) => column.key)
+                        fields: selectedFields,
+                        ...(fieldLabels?.length === selectedFields.length
+                            ? { headers: fieldLabels }
+                            : {}),
                     }
                 })
                 const blob = new Blob([res], { type: "text/csv" })
@@ -299,30 +332,28 @@ export default function DoctypeListPage() {
         reload();
     };
 
-    const handleSwitchToSheetView = () => {
-        push(`/desk/doctypes/${doctype}/sheet${location.search}`);
-    };
-
     const handlePrint = () => {
         if (selected.size === 0) return;
         const ids = JSON.stringify(Array.from(selected));
         push(`/desk/print?doctype=${encodeURIComponent(doctype)}&ids=${encodeURIComponent(ids)}`);
     };
 
-    const primaryActions: PrimaryAction[] = [
-        {
+    const primaryActions: PrimaryAction[] = []
+
+    if (doctypeDoc?.is_system_generated !== 1) {
+        primaryActions.push({
             label: t("Create"),
             icon: <Plus className="zd:h-4 zd:w-4" />,
             onClick: handleCreate
-        },
-        {
-            label: "",
-            icon: <RefreshCw className="zd:h-4 zd:w-4" />,
-            onClick: handleRefresh,
-            variant: "outline",
-            disabled: isRefreshing
-        }
-    ];
+        });
+    }
+    primaryActions.push({
+        label: "",
+        icon: <RefreshCw className="zd:h-4 zd:w-4" />,
+        onClick: handleRefresh,
+        variant: "outline",
+        disabled: isRefreshing
+    });
 
     const actions: ActionItem[] = [
         {
@@ -348,7 +379,6 @@ export default function DoctypeListPage() {
         });
     }
 
-    // Add cancel action if doctype is submittable
     if (isSubmittable) {
         actions.push({
             id: "cancel",
@@ -358,7 +388,6 @@ export default function DoctypeListPage() {
         });
     }
 
-    // Add delete action
     actions.push({
         id: "delete",
         label: t("Delete"),
@@ -367,57 +396,145 @@ export default function DoctypeListPage() {
         variant: "destructive"
     });
 
+    return <DeskNavbarLayout
+        title={t(`${doctypeDoc?.label || doctype}`)}
+        defaultRightOpen={false}
+        primaryAction={primaryActions}
+        secondaryActions={secondaryActions}
+        actions={selected.size > 0 ? actions : []}
+        rightSidebar={
+            <div className="zd:flex zd:flex-col zd:gap-2">
+                <div className="zd:flex zd:items-center zd:justify-between">
+                    <div className="zd:text-sm zd:font-medium">{t("Doctype Permission")}</div>
+                    <div className="zd:text-xs zd:text-muted-foreground">
+                        {doctypePermissions.length}
+                    </div>
+                </div>
+                {loadingDoctypePermissions ? (
+                    <div className="zd:text-xs zd:text-muted-foreground">
+                        {t("Loading permissions...")}
+                    </div>
+                ) : doctypePermissions.length === 0 ? (
+                    <div className="zd:text-xs zd:text-muted-foreground">
+                        {t("No doctype permission found")}
+                    </div>
+                ) : (
+                    <div className="zd:flex zd:flex-col zd:gap-1.5">
+                        {doctypePermissions.map((permission) => (
+                            <div key={permission.id} className="zd:border zd:rounded-md zd:px-2 zd:py-1.5 zd:space-y-1">
+                                <div className="zd:flex zd:items-center zd:justify-between">
+                                    <div className="zd:text-xs zd:font-medium">{permission.role || "-"}</div>
+                                    <div className="zd:text-[10px] zd:text-muted-foreground">
+                                        {t("Level")} {permission.perm_level || "0"}
+                                    </div>
+                                </div>
+                                <div className="zd:flex zd:flex-wrap zd:gap-1 zd:leading-none">
+                                    {permissionFields.map((field) => (
+                                        <span
+                                            key={`${permission.id}-${field.key}`}
+                                            className={`zd:inline-flex zd:items-center zd:gap-1 zd:text-[10px] zd:px-1.5 zd:py-0.5 zd:rounded ${permission[field.key] ? "zd:bg-success/15 zd:text-success" : "zd:bg-muted zd:text-muted-foreground"
+                                                }`}
+                                        >
+                                            {permission[field.key] ? <Check className="zd:w-2.5 zd:h-2.5" /> : <X className="zd:w-2.5 zd:h-2.5" />}
+                                            {t(field.label)}
+                                        </span>
+                                    ))}
+                                </div>
+                                <div className="zd:flex zd:flex-wrap zd:gap-1 zd:leading-none">
+                                    {ownPermissionFields.map((field) => (
+                                        <span
+                                            key={`${permission.id}-${field.key}`}
+                                            className={`zd:inline-flex zd:items-center zd:gap-1 zd:text-[10px] zd:px-1.5 zd:py-0.5 zd:rounded ${permission[field.key] ? "zd:bg-success/15 zd:text-success" : "zd:bg-muted zd:text-muted-foreground"
+                                                }`}
+                                        >
+                                            {permission[field.key] ? <Check className="zd:w-2.5 zd:h-2.5" /> : <X className="zd:w-2.5 zd:h-2.5" />}
+                                            {t(field.label)}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        }
+        actionSection={
+            <ViewSelector
+                views={getDoctypeViewOptions(t, fields as FieldLike[], doctype, { calendarEnabled })}
+                value={getDoctypeViewFromPath(location.pathname)}
+                onChange={(value) => {
+                    if (value === "list") {
+                        push(`/desk/doctypes/${doctype}/list${location.search}`);
+                    } else if (value === "tree") {
+                        push(`/desk/doctypes/${doctype}/tree${location.search}`);
+                    } else if (value === "calendar") {
+                        push(`/desk/doctypes/${doctype}/calendar${location.search}`);
+                    } else {
+                        push(`/desk/doctypes/${doctype}/sheet${location.search}`);
+                    }
+                }}
+            />
+        }
+    >
+        <ListView
+            hideDocStatus={doctypeDoc?.is_submittable !== 1}
+            doctype={doctype}
+            columns={columns}
+            docs={docs}
+            count={count}
+            loading={loading}
+            error={error}
+            limit={limit}
+            sort={sort}
+            order={order}
+            searchQuery={q}
+            fields={fields}
+            filters={filters}
+            onLimitChange={onLimitChange}
+            onSort={onSort}
+            onSortChange={onSortChange}
+            onOrderChange={onOrderChange}
+            onSearch={onSearch}
+            onApplyFilters={onApplyFilters}
+            onClearFilter={onClearFilter}
+            selected={selected}
+            setSelected={setSelected}
+        />
+    </DeskNavbarLayout>
+}
+
+export default function DoctypeListPage() {
+    const { params, replace } = useRouter();
+    const doctype = params.doctype as Zodula.DoctypeName;
+    const { t } = useTranslation();
+    const { doc: doctypeDoc, loading: loadingDoctype, reload: reloadDoctype } = useDocAll({
+        doctype: "Doctype",
+        id: doctype,
+    });
+
+    useEffect(() => {
+        if (doctypeDoc?.is_single) {
+            replace(`/desk/doctypes/${doctype}`);
+        }
+    }, [doctypeDoc, replace, doctype]);
+
     if (!doctypeDoc?.id && !loadingDoctype) {
         return <ErrorView message="Doctype not found" status={404} />
     }
 
-    return <DeskNavbarLayout
-        title={t(`${doctypeDoc?.label || doctype}`)}
-        defaultOpen={false}
-        primaryAction={primaryActions}
-        secondaryActions={secondaryActions}
-        actions={selected.size > 0 ? actions : []}
-        actionSection={
-                <ViewSelector
-                    views={getDoctypeViewOptions(t, fields as FieldLike[], doctype, { calendarEnabled })}
-                    value={getDoctypeViewFromPath(location.pathname)}
-                    onChange={(value) => {
-                        if (value === "list") {
-                            push(`/desk/doctypes/${doctype}/list${location.search}`);
-                        } else if (value === "tree") {
-                            push(`/desk/doctypes/${doctype}/tree${location.search}`);
-                        } else if (value === "calendar") {
-                            push(`/desk/doctypes/${doctype}/calendar${location.search}`);
-                        } else {
-                            push(`/desk/doctypes/${doctype}/sheet${location.search}`);
-                        }
-                    }}
-                />
-            }
-        >
-            <ListView
-                hideDocStatus={doctypeDoc?.is_submittable !== 1}
-                doctype={doctype}
-                columns={columns}
-                docs={docs}
-                count={count}
-                loading={loading}
-                error={error}
-                limit={limit}
-                sort={sort}
-                order={order}
-                searchQuery={q}
-                fields={fields}
-                filters={filters}
-                onLimitChange={onLimitChange}
-                onSort={onSort}
-                onSortChange={onSortChange}
-                onOrderChange={onOrderChange}
-                onSearch={onSearch}
-                onApplyFilters={onApplyFilters}
-                onClearFilter={onClearFilter}
-                selected={selected}
-                setSelected={setSelected}
-            />
-    </DeskNavbarLayout>
+    if (loadingDoctype || !doctypeDoc?.id) {
+        return (
+            <div className="zd:flex zd:min-h-[50vh] zd:items-center zd:justify-center zd:text-muted-foreground">
+                {t("Loading")}…
+            </div>
+        );
+    }
+
+    return (
+        <DoctypeListPageContent
+            doctype={doctype}
+            doctypeDoc={doctypeDoc}
+            reloadDoctype={reloadDoctype}
+        />
+    );
 }

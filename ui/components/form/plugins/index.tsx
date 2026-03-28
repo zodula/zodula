@@ -11,6 +11,7 @@ import { ReferenceTablePlugin } from "./reference-table";
 import { ExtendPlugin } from "./extend";
 import { CurrencyPlugin } from "./currency";
 import { SignaturePlugin } from "./signature";
+import { ScannerPlugin } from "./scanner";
 
 export const plugins = [
     TextInputPlugin,
@@ -25,7 +26,8 @@ export const plugins = [
     ReferenceTablePlugin,
     ExtendPlugin,
     CurrencyPlugin,
-    SignaturePlugin
+    SignaturePlugin,
+    ScannerPlugin
 ] as const;
 
-export { TextInputPlugin, TextareaPlugin, SelectPlugin, ReferencePlugin, DateTimePlugin, CheckboxPlugin, EditorPlugin, FileUploadPlugin, ImagePreviewPlugin, ReferenceTablePlugin, CurrencyPlugin, SignaturePlugin };
+export { TextInputPlugin, TextareaPlugin, SelectPlugin, ReferencePlugin, DateTimePlugin, CheckboxPlugin, EditorPlugin, FileUploadPlugin, ImagePreviewPlugin, ReferenceTablePlugin, CurrencyPlugin, SignaturePlugin, ScannerPlugin };

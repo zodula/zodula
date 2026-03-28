@@ -23,7 +23,7 @@ const DEFAULT_ROW_ID = "__default";
 export interface TemplateItemForPrint {
   id?: string;
   idx?: number;
-  type: "text" | "field" | "image" | "line" | "reference" | "custom_html" | "anchor";
+  type: "text" | "field" | "image" | "line" | "reference" | "custom_html" | "anchor" | "empty";
   value?: string | null;
   field_name?: string | null;
   label?: string | null;
@@ -69,18 +69,6 @@ function getDefaultColumnsForReferenceTable(childDoctypeName: string): string[] 
       .map(([name]) => name);
   } catch {
     return [];
-  }
-}
-
-/** Recursively collect field objects from a row (handles nested arrays). */
-function collectFieldObjectsFromRow(row: unknown[], out: Record<string, unknown>[]): void {
-  for (const entry of row) {
-    if (Array.isArray(entry)) {
-      collectFieldObjectsFromRow(entry, out);
-      continue;
-    }
-    const obj = entry as Record<string, unknown>;
-    if (obj?.type === "field" && typeof obj.value === "string") out.push(obj);
   }
 }
 
@@ -130,7 +118,7 @@ export function tabsToTemplateItem(
       type: "field",
       field_name: value,
       label: label ?? value,
-      hide_no_value: 0,
+      hide_no_value: 1,
       align: "left",
       group,
       ...refTableExtras,
@@ -143,15 +131,41 @@ export function tabsToTemplateItem(
     for (const entry of layout) {
       const row = toRowArray(entry);
       if (row.length === 0) continue;
-      const fieldObjs: Record<string, unknown>[] = [];
-      collectFieldObjectsFromRow(row, fieldObjs);
-      if (fieldObjs.length === 0) continue;
       const rowId = `row_${rowIndex}`;
       rowIndex += 1;
-      for (const obj of fieldObjs) {
-        const val = obj.value as string;
-        const label = (schemaFields[val]?.label as string) ?? "";
-        collectField(val, label, rowId);
+      let rowHasPrintable = false;
+      function visitCell(node: unknown) {
+        if (Array.isArray(node)) {
+          for (const n of node) visitCell(n);
+          return;
+        }
+        const obj = node as Record<string, unknown>;
+        if (obj?.type === "empty") {
+          rowHasPrintable = true;
+          items.push({
+            id: `empty_${idx}`,
+            idx,
+            type: "empty",
+            hide_no_value: 1,
+            align: "left",
+            group: rowId,
+          });
+          idx += 1;
+          return;
+        }
+        if (obj?.type === "field" && typeof obj.value === "string") {
+          const val = obj.value;
+          const fieldDef = schemaFields[val] as { type?: string; reference?: string; no_print?: number; height?: number } | undefined;
+          if (fieldDef?.no_print === 1) return;
+          const label = (schemaFields[val]?.label as string) ?? "";
+          const countBefore = items.length;
+          collectField(val, label, rowId);
+          if (items.length > countBefore) rowHasPrintable = true;
+        }
+      }
+      for (const cell of row) visitCell(cell);
+      if (!rowHasPrintable) {
+        rowIndex -= 1;
       }
     }
   }
@@ -239,44 +253,65 @@ async function renderReferenceTable(
       const label = nestedColumnField?.label as string ?? "";
       html += `<th class="print-th">${translate(label, language)}</th>`;
     } else {
-      const columnField = childDoctypeMeta?.schema?.fields[column as keyof typeof parentDoctypeMeta.schema.fields];
+      const columnField = childDoctypeMeta?.schema?.fields[column as keyof typeof childDoctypeMeta.schema.fields];
       const label = columnField?.label as string ?? "";
       html += `<th class="print-th">${translate(label, language)}</th>`;
     }
   }
-  html += `</tr></thead><tbody>`
+  html += `</tr></thead><tbody>`;
 
-  const childDocs = doc[item.field_name as keyof typeof doc];
+  const childDocsRaw = doc[item.field_name as keyof typeof doc];
+  const childDocs = Array.isArray(childDocsRaw) ? childDocsRaw : [];
+
+  const refIdForNested = (row: Record<string, unknown>): string | null => {
+    if (!item.nested_field) return null;
+    const raw = row[item.nested_field as keyof typeof row];
+    if (raw == null || raw === "") return null;
+    if (typeof raw === "object" && raw !== null && "id" in raw) return String((raw as { id?: unknown }).id ?? "");
+    return String(raw);
+  };
+
+  const cellText = (v: unknown): string => {
+    if (v == null) return "";
+    if (typeof v === "object") return "";
+    return escapeHtml(String(v));
+  };
+
   for (const childDoc of childDocs) {
+    const row = childDoc as Record<string, unknown>;
+
     html += `<tr class="print-td-row">`;
-    for (const childItem of childDocs) {
-      for (const column of allColumns) {
-        if (!column.includes(".")) {
-          const columnField = childDoctypeMeta?.schema?.fields[column as keyof typeof childDoctypeMeta.schema.fields];
-          const value = childDoc[column as keyof typeof childDoc];
-          html += `<td class="print-td">${value || ""}</td>`;
-        } else {
-          html += `<td class="print-td"></td>`
-        }
-      }
-      if (nestedChildDoctypeMeta?.name) {
-        const { docs: nestedChildDocs } = await $zodula.doctype(nestedChildDoctypeMeta?.name).select().where("parentid", "=", childDoc[item.nested_field as keyof typeof childDoc])
-        for (const nestedChildDoc of nestedChildDocs) {
-          html += `<tr class="print-td-row">`;
-          for (const column of allColumns) {
-            if (column.includes(".")) {
-              const [, nestedColumnName] = column.split(".");
-              const value = nestedChildDoc[nestedColumnName as keyof typeof nestedChildDoc];
-              html += `<td class="print-td">${value || ""}</td>`;
-            } else {
-              html += `<td class="print-td"></td>`
-            }
-          }
-          html += `</tr>`;
-        }
+    for (const column of allColumns) {
+      if (!column.includes(".")) {
+        const value = row[column as keyof typeof row];
+        html += `<td class="print-td">${cellText(value)}</td>`;
+      } else {
+        html += `<td class="print-td"></td>`;
       }
     }
     html += `</tr>`;
+
+    const parentRef = refIdForNested(row);
+    if (nestedChildDoctypeMeta?.name && parentRef) {
+      const { docs: nestedChildDocs } = await $zodula
+        .doctype(nestedChildDoctypeMeta.name)
+        .select()
+        .where("parentid", "=", parentRef);
+      for (const nestedChildDoc of nestedChildDocs ?? []) {
+        const nrow = nestedChildDoc as unknown as Record<string, unknown>;
+        html += `<tr class="print-td-row print-ref-nested-row">`;
+        for (const column of allColumns) {
+          if (column.includes(".")) {
+            const [, nestedColumnName] = column.split(".");
+            const value = nrow[nestedColumnName as keyof typeof nrow];
+            html += `<td class="print-td">${cellText(value)}</td>`;
+          } else {
+            html += `<td class="print-td"></td>`;
+          }
+        }
+        html += `</tr>`;
+      }
+    }
   }
   html += `</tbody></table>` + wrapClose;
   return html;
@@ -286,6 +321,12 @@ function isEmptyPrintValue(raw: unknown): boolean {
   if (raw === "" || raw === null || raw === undefined) return true;
   if (Array.isArray(raw) && raw.length === 0) return true;
   return false;
+}
+
+/** When true, omit this field cell in print/PDF if the value is empty. Tab-derived items default hide_no_value to 0 (show empty). */
+function itemHidesWhenEmpty(item: TemplateItemForPrint): boolean {
+  const h = item.hide_no_value;
+  return h === true || h === 1;
 }
 
 async function renderFieldCellValue(
@@ -298,14 +339,16 @@ async function renderFieldCellValue(
   fetchRefDoc?: (doctype: string, id: string) => Promise<Record<string, unknown> | null>
 ): Promise<string | null> {
   const raw = item.field_name ? doc?.[item.field_name as keyof typeof doc] : null;
-  if (isEmptyPrintValue(raw) && item.hide_no_value) return null;
+  if (isEmptyPrintValue(raw) && itemHidesWhenEmpty(item)) return null;
   const textAlign = item.align === "center" || item.align === "right" ? item.align : "left";
   let escapedValue = raw != null ? String(raw) : "";
   if (field?.type === "Select" && field?.no_translate !== 1) {
     escapedValue = translate(escapedValue as string, language);
   }
   if (field?.type === "File" && field?.accept?.includes("image/*")) {
-    if(!escapedValue) return null;
+    if (!escapedValue) {
+      return itemHidesWhenEmpty(item) ? null : "";
+    }
     const imageFile = fs.readFileSync(path.join(process.cwd(), ".zodula_data", escapedValue));
     escapedValue = `<div class="print-image-container" style="float:${textAlign}"><img class="print-image" src="data:image/jpeg;base64,${imageFile.toString('base64')}" alt="" style="width: 100%; max-height: 150px; object-fit: contain;" /></div>`;
   }
@@ -330,7 +373,7 @@ async function renderFieldCellValue(
       </div>
     `;
   }
-  if (item.hide_no_value && isEmptyPrintValue(raw)) return null;
+  if (itemHidesWhenEmpty(item) && isEmptyPrintValue(raw)) return null;
   return escapedValue;
 }
 
@@ -342,18 +385,21 @@ async function renderCellContent(
   language: string,
   fetchRefDoc?: (doctype: string, id: string) => Promise<Record<string, unknown> | null>
 ): Promise<string | null> {
+  if (item.type === "empty") {
+    return Promise.resolve('<div class="print-cell-inner print-cell-empty">&nbsp;</div>');
+  }
   if (item.type === "field") {
     const label = translate(item.label as string ?? item.field_name as string ?? "", language);
     const doctypeMeta = loader.from("doctype").get(doctype);
     const field = doctypeMeta.schema.fields[item.field_name as keyof typeof doctypeMeta.schema.fields];
     const escapedValue = await renderFieldCellValue(doctype, field, item, doc, renderCustomHtml, language, fetchRefDoc);
-    if (escapedValue == null && item.hide_no_value) return null;
+    if (escapedValue == null && itemHidesWhenEmpty(item)) return null;
     const align = item.align === "center" || item.align === "right" ? item.align : "left";
     const labelPosition = (item.label_position ?? "top").toLowerCase();
     const isLabelOnTop = labelPosition === "top" || labelPosition === "bottom";
     if (isLabelOnTop) {
       const labelBlock = `<div class="print-label">${escapeHtml(label)}</div>`;
-      const valueBlock = `<div class="print-value" style="text-align:${align}">${escapedValue}</div>`;
+      const valueBlock = `<div class="print-value" style="text-align:${align}">${escapedValue ?? ""}</div>`;
       const order = labelPosition === "top" ? labelBlock + valueBlock : valueBlock + labelBlock;
       return Promise.resolve(
         `<div class="print-cell-inner print-cell-label-${labelPosition}" style="text-align:${align}">${order}</div>`
@@ -369,7 +415,7 @@ async function renderCellContent(
   if (item.type === "text") {
     const v = item.value ?? "";
     if (!v) return null;
-    return Promise.resolve(`<span class="print-text">${escapeHtml(v)}</span>`);
+    return Promise.resolve(`<span class="print-text">${escapeHtml(translate(v, language))}</span>`);
   }
   if (item.type === "custom_html" && item.value) {
     return await renderCustomHtml(item.value).then((html) => html).catch(() => "<span class=\"print-error\">Template error</span>");
@@ -403,12 +449,17 @@ export async function templateItemToHtml(
   // @ts-ignore - binba may not have type definitions
   const { Template } = await import("binba");
   const parts: string[] = [];
+  const lang = options?.language ?? "en";
 
+  const headingParts: string[] = [];
   if (options?.title) {
-    parts.push(`<h1 class="print-title">${escapeHtml(options.title)}</h1>`);
+    headingParts.push(`<h1 class="print-title">${escapeHtml(translate(options.title, lang))}</h1>`);
   }
   if (options?.subtitle) {
-    parts.push(`<p class="print-subtitle">${escapeHtml(options.subtitle)}</p>`);
+    headingParts.push(`<p class="print-subtitle">${escapeHtml(translate(options.subtitle, lang))}</p>`);
+  }
+  if (headingParts.length) {
+    parts.push(`<div class="print-doc-heading">${headingParts.join("\n")}</div>`);
   }
 
   const renderCustomHtml = async (html: string) => {
@@ -429,7 +480,9 @@ export async function templateItemToHtml(
     const cells: string[] = [];
     for (let i = 0; i < cellResults.length; i++) {
       const content = cellResults[i];
-      if (content != null && content !== "") cells.push(`<div class="print-cell">${content}</div>`);
+      if (content != null) {
+        cells.push(`<div class="print-cell">${content}</div>`);
+      }
     }
     if (cells.length) rowHtml.push(`<div class="print-row">${cells.join("")}</div>`);
   }
@@ -459,6 +512,9 @@ export function generatePrintItemCss(items: TemplateItemForPrint[]): string {
     .print-cell {
     flex: 1;
     }
+    .print-cell-empty {
+    min-height: 1em;
+    }
     .print-cell-inner {
     display: flex;
     flex-direction: column;
@@ -468,6 +524,18 @@ export function generatePrintItemCss(items: TemplateItemForPrint[]): string {
     h1 {
     font-size: 20px;
     font-weight: bold;
+    }
+    .print-doc-heading {
+    margin-top: 16px;
+    margin-bottom: 0;
+    }
+    h1.print-title {
+    margin-top: 0;
+    margin-bottom: 8px;
+    }
+    p.print-subtitle {
+    margin-top: 0;
+    margin-bottom: 12px;
     }
     h2 {
     font-size: 18px;

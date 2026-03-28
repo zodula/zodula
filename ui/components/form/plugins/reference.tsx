@@ -128,10 +128,8 @@ const ReferenceInput = (props: {
       }
     }
 
-    rawFilters = rawFilters.filter(f => !f?.[2]?.includes?.("{{"))
-
     const formData = props.formData;
-    if (!formData || !Array.isArray(rawFilters)) return rawFilters;
+    if (!formData || !Array.isArray(rawFilters)) return rawFilters.filter(f => !f?.[2]?.includes?.("{{"));
     const cleanedFilters = rawFilters.map((filter: any) => {
       if (!Array.isArray(filter) || filter.length < 3) return filter;
       const [fieldPath, operator, filterValue] = filter;
@@ -155,8 +153,6 @@ const ReferenceInput = (props: {
     (props as any).childTableFieldPropertyOverrides,
     props.fieldPath,
   ]);
-
-  console.log("filters", filters);
 
   useEffect(() => {
     if (!referenceDoctype) return;
@@ -479,7 +475,8 @@ const ReferenceInput = (props: {
   const handleBlur = useCallback(
     async (opts?: { reason: "selection" | "blur"; value: string }) => {
       if (opts?.reason === "selection") return;
-      const currentValue = (opts?.value ?? searchText ?? "").trim();
+      // Keep committed value when blur happens without typing.
+      const currentValue = String(opts?.value ?? searchText ?? props.value ?? "").trim();
       setSearchText(undefined);
 
       if (!currentValue) {
@@ -539,6 +536,7 @@ const ReferenceInput = (props: {
       fieldPath,
       referenceDoctype,
       props.multiple,
+      props.value,
       props.onChange,
       props.onBlur,
       searchText,

@@ -66,7 +66,8 @@ export function WebsiteNavbar({
   }, []);
 
   const homeActive = currentPage === "Home" || pathname === "/" || pathname === "";
-  const contactActive = currentPage === "Contact" || pathname === "/contact";
+  const aboutUsActive =
+    currentPage === "About Us" || currentPage === "Contact" || pathname === "/about-us" || pathname === "/contact";
 
   const isInternalActive = (url: string) =>
     pathname === url || (url !== "/" && pathname.startsWith(`${url}/`));
@@ -92,8 +93,8 @@ export function WebsiteNavbar({
           <Link to="/" className={navLinkClass(homeActive)}>
             Home
           </Link>
-          <Link to="/contact" className={navLinkClass(contactActive)}>
-            Contact
+          <Link to="/about-us" className={navLinkClass(aboutUsActive)}>
+            About Us
           </Link>
           {additionalMenu.map((item, i) => {
             const external = isAbsoluteHttpUrl(item.url);

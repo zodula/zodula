@@ -474,21 +474,14 @@ export function DocFormView({
           const next = { ...data, [fieldPath]: value };
           formDataCache[formId] = next;
           setFormData(next);
-          // Debounce scripts so typing stays responsive; run once after user pauses
-          const debounceMs = 10;
-          if (scriptDebounceRef.current.timer) clearTimeout(scriptDebounceRef.current.timer);
-          scriptDebounceRef.current.fieldPath = fieldPath as string;
-          scriptDebounceRef.current.timer = setTimeout(() => {
-            scriptDebounceRef.current.timer = null;
-            const doc = formDataCache[formId] ?? formDataRef.current;
-            const ctx = buildFormContextRef.current({
-              doc,
-              get_value: (field: string) => getNestedFormValue(doc, field),
-            });
-            if (!options?.noScripts) {
-              zui._.executeFormScripts(doctype as any, scriptDebounceRef.current.fieldPath, ctx).catch((err: unknown) => console.error("form script error", err));
-            }
-          }, debounceMs);
+          const doc = formDataCache[formId] ?? formDataRef.current;
+          const ctx = buildFormContextRef.current({
+            doc,
+            get_value: (field: string) => getNestedFormValue(doc, field),
+          });
+          if (!options?.noScripts) {
+            await zui._.executeFormScripts(doctype as any, fieldPath, ctx).catch((err: unknown) => console.error("form script error", err));
+          }
         } else if (Array.isArray(value)) {
           // reorder the reference table index fields
           const oldIds = oldValue?.map((item: any) => item.id) || [];
@@ -711,6 +704,11 @@ export function DocFormView({
     formFieldsOverride: Record<string, any>
   ): Promise<Record<string, any>> {
     const hasPrefill = prefill && typeof prefill === "object" && Object.keys(prefill).length > 0;
+    if (hasPrefill) {
+      // reset the form
+      setFormData({});
+      formDataCache[formId] = {};
+    }
     const cached = formDataCache[formId];
     const cacheHasContent = cached != null && Object.keys(cached).length > 0;
     let nextFormData: Record<string, any> = {};
@@ -934,18 +932,33 @@ export function DocFormView({
         prefill && typeof prefill === "object" && Object.keys(prefill).length > 0;
 
       if (hasPrefill && !appliedPrefillRef.current) {
-        // reset the form
-        setFormData({});
-        formDataCache[formId] = {};
         appliedPrefillRef.current = true;
         const prefillObj = prefill as Record<string, any>;
         const keys = Object.keys(prefillObj).filter((k) => prefillObj[k] !== undefined);
         const byDots = (a: string, b: string) =>
           (a.split(".").length - 1) - (b.split(".").length - 1);
         keys.sort(byDots);
+        const nestedKeys: string[] = [];
 
         for (const key of keys) {
-          await handleFieldChange(key as any, prefillObj[key], { noScripts: false, noFetchFrom: false });
+          const isNestedPath = key.includes(".");
+          if (isNestedPath) nestedKeys.push(key);
+          await handleFieldChange(key as any, prefillObj[key], {
+            // Run scripts for top-level fields, but keep nested table prefill scriptless
+            // to avoid async reset races on child-table hydration.
+            noScripts: isNestedPath,
+            noFetchFrom: isNestedPath,
+          });
+        }
+
+        // Second pass: now that top-level prefill scripts have stabilized form state,
+        // trigger scripts for nested paths (e.g., references.0.reference_id) so row-level
+        // handlers can calculate derived values.
+        for (const key of nestedKeys) {
+          await handleFieldChange(key as any, prefillObj[key], {
+            noScripts: false,
+            noFetchFrom: false,
+          });
         }
       }
 
@@ -964,6 +977,7 @@ export function DocFormView({
       // Update base doc + form data cache
       setDoc(d);
       setFormData(d);
+      setIsUserHasType(false);
       formDataCache[formId] = d;
 
       // Re‑apply field permissions so submitted docs become readonly as needed
@@ -1044,7 +1058,13 @@ export function DocFormView({
         variant: "default",
       });
       if (con) {
-        await zodula.doc.submit_doc(doctype, id || "")
+        await zodula.doc.submit_doc(doctype, id || "").catch((error: any) => {
+          alert({
+            variant: "destructive",
+            message: error?.message,
+          });
+          return null;
+        });
         handleReload();
       }
     } catch (error) {
@@ -1178,13 +1198,22 @@ export function DocFormView({
       return;
     }
     try {
-      const updatedDoc = await zodula.doc.update_doc(doctype, id || "", payload);
+      const updatedDoc = await zodula.doc.update_doc(doctype, id || "", payload).catch((error: any) => {
+        alert({
+          variant: "destructive",
+          message: error?.message,
+        });
+        return null;
+      });
+      if (!updatedDoc) {
+        return;
+      }
       if (updatedDoc.id !== id && !isSingle) {
         formDataCache[formId] = undefined;
-        formDataCache[updatedDoc.id] = updatedDoc;
+        formDataCache[updatedDoc.id] = updatedDoc as Record<string, any>;
         replace(`/desk/doctypes/${doctype}/form/${updatedDoc.id}`);
       } else {
-        handleReload();
+        await handleReload();
       }
     } catch (error) {
       console.error("Error saving doc:", error);

@@ -2,7 +2,7 @@
 export interface PrintTemplateBuilderItem {
   id: string;
   idx: number;
-  type: "text" | "field" | "image" | "line" | "reference" | "custom_html" | "anchor";
+  type: "text" | "field" | "image" | "line" | "reference" | "custom_html" | "anchor" | "empty";
   value?: string | null;
   code?: string | null;
   group?: string | null;
@@ -37,7 +37,7 @@ export interface PrintTemplateBuilderItem {
 
 /** Palette entry: draggable from sidebar */
 export interface PaletteEntry {
-  type: "field" | "anchor" | "text" | "custom_html";
+  type: "field" | "anchor" | "text" | "custom_html" | "empty";
   field_name?: string;
   label: string;
   isTable?: boolean;

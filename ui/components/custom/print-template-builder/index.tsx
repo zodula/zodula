@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { useDocListAll } from "@/zodula/ui/hooks/use-doc-list-all";
+import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
 import { useDnd } from "@/zodula/ui/hooks/use-dnd";
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
 import { ClientFieldHelper } from "@/zodula/client/field";
@@ -102,15 +103,62 @@ function TableColumnsConfigPopup({
     return (allFields as any[]).find((f: any) => f.doctype === nestedDoctype && f.name === fieldName);
   }, [nestedDoctype, nestedTableField, item?.nested_table_field, allFields]);
 
-  const nestedChildDoctype = (nestedTableFieldDoctype ?? item?.nested_table_field_doctype) ?? (resolvedNestedTableField as any)?.reference ?? null;
+  const nestedChildDoctype = (() => {
+    const manual = nestedTableFieldDoctype ?? item?.nested_table_field_doctype;
+    if (manual != null && String(manual).trim() !== "") return String(manual).trim();
+    const ref = (resolvedNestedTableField as any)?.reference;
+    if (ref == null || ref === "") return null;
+    const s = String(ref).trim();
+    return s || null;
+  })();
 
-  const nestedColumnFields = useMemo(() => {
-    if (!nestedChildDoctype) return [];
-    return (allFields as any[])
-      .filter((f: any) => f.doctype === nestedChildDoctype && !ClientFieldHelper.isStandardField(f.name || ""))
+  /** Dropdown path but Field row has no `reference` — manual path already has its own doctype field. */
+  const needsNestedChildDoctypeInput =
+    !!(nestedTableField || item?.nested_table_field) &&
+    !!nestedDoctype &&
+    !nestedChildDoctype &&
+    nestedTableFieldOptions.length > 0;
+
+  /** Child table Field rows are often missing from a single global Field fetch; load explicitly by doctype. */
+  const NESTED_FIELD_FETCH_SKIP = "__PrintTemplateNestedFieldFetchSkip__";
+  const { docs: nestedFieldsForChildRaw, loading: nestedFieldsLoading } = useDocList(
+    {
+      doctype: "Field" as Zodula.DoctypeName,
+      limit: -1,
+      sort: "idx",
+      order: "asc",
+      filters: nestedChildDoctype ? ([["doctype", "=", nestedChildDoctype]] as any) : ([["doctype", "=", NESTED_FIELD_FETCH_SKIP]] as any),
+    },
+    [nestedChildDoctype]
+  );
+
+  const pickPrintableColumns = useCallback((rows: any[]) => {
+    return rows
+      .filter((f: any) => !ClientFieldHelper.isStandardField(f.name || ""))
       .filter((f: any) => f.type !== "Reference Table" && f.type !== "Extend")
       .sort((a: any, b: any) => (a.idx ?? 0) - (b.idx ?? 0));
-  }, [nestedChildDoctype, allFields]);
+  }, []);
+
+  const nestedColumnFieldsFromAll = useMemo(() => {
+    if (!nestedChildDoctype) return [];
+    return pickPrintableColumns(
+      (allFields as any[]).filter((f: any) => f.doctype === nestedChildDoctype)
+    );
+  }, [nestedChildDoctype, allFields, pickPrintableColumns]);
+
+  const nestedColumnFieldsFromQuery = useMemo(() => {
+    if (!nestedChildDoctype) return [];
+    return pickPrintableColumns(nestedFieldsForChildRaw as any[]);
+  }, [nestedChildDoctype, nestedFieldsForChildRaw, pickPrintableColumns]);
+
+  const nestedColumnFields = useMemo(() => {
+    const byName = new Map<string, any>();
+    for (const f of nestedColumnFieldsFromQuery) byName.set(f.name, f);
+    for (const f of nestedColumnFieldsFromAll) {
+      if (!byName.has(f.name)) byName.set(f.name, f);
+    }
+    return Array.from(byName.values()).sort((a: any, b: any) => (a.idx ?? 0) - (b.idx ?? 0));
+  }, [nestedColumnFieldsFromQuery, nestedColumnFieldsFromAll]);
 
   React.useEffect(() => {
     setSelectedColumns(parseJsonArray(item?.columns ?? item?.fields));
@@ -213,31 +261,58 @@ function TableColumnsConfigPopup({
           </FormControl>
         </>
       )}
-      {(nestedTableField || item?.nested_table_field) && nestedChildDoctype && nestedColumnFields.length > 0 && (
+      {needsNestedChildDoctypeInput && (
+        <FormControl
+          label={t("Child table doctype")}
+          fieldKey="nested_child_doctype_fallback"
+          helperText={t("Field metadata has no child doctype for this table. Enter it (e.g. Delivery Note Item) to pick nested columns.")}
+        >
+          <Input
+            value={nestedTableFieldDoctype ?? ""}
+            onChange={(e) => {
+              const v = e.target.value.trim();
+              setNestedTableFieldDoctype(v || null);
+            }}
+            placeholder={t("e.g. Delivery Note Item")}
+            className="zd:w-full"
+          />
+        </FormControl>
+      )}
+      {(nestedTableField || item?.nested_table_field) && nestedChildDoctype && (
         <FormControl label={t("Nested columns")} fieldKey="nested_columns" helperText={t("Columns from nested table (e.g. delivery_note_items), extended to the right.")}>
           <div className="zd:max-h-48 zd:overflow-auto zd:border zd:rounded-md zd:p-2 zd:space-y-1">
-            {nestedColumnFields.map((f: any) => {
-              const isSelected = selectedNestedColumns.includes(f.name);
-              const idx = isSelected ? selectedNestedColumns.indexOf(f.name) + 1 : 0;
-              return (
-                <div
-                  key={f.name}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => toggleNestedColumn(f.name)}
-                  onKeyDown={(e) => e.key === "Enter" && toggleNestedColumn(f.name)}
-                  className="zd:flex zd:items-center zd:gap-2 zd:cursor-pointer zd:text-sm zd:py-0.5 zd:rounded hover:zd:bg-muted/50"
-                >
-                  <div className={cn(
-                    "zd:flex zd:items-center zd:justify-center zd:shrink-0 zd:w-5 zd:h-5 zd:rounded-full zd:border zd:border-input",
-                    isSelected ? "zd:bg-primary zd:text-primary-foreground" : "zd:bg-background zd:text-muted-foreground"
-                  )}>
-                    <span className="zd:text-xs zd:font-medium">{idx || ""}</span>
+            {nestedFieldsLoading && (
+              <span className="zd:text-muted-foreground zd:text-sm">{t("Loading columns…")}</span>
+            )}
+            {!nestedFieldsLoading && nestedColumnFields.length === 0 && (
+              <span className="zd:text-muted-foreground zd:text-sm">
+                {t("No fields found for this nested table doctype. Confirm nested table field / doctype and Field permissions.")}{" "}
+                <span className="zd:font-mono">({nestedChildDoctype})</span>
+              </span>
+            )}
+            {!nestedFieldsLoading &&
+              nestedColumnFields.map((f: any) => {
+                const isSelected = selectedNestedColumns.includes(f.name);
+                const idx = isSelected ? selectedNestedColumns.indexOf(f.name) + 1 : 0;
+                return (
+                  <div
+                    key={f.name}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => toggleNestedColumn(f.name)}
+                    onKeyDown={(e) => e.key === "Enter" && toggleNestedColumn(f.name)}
+                    className="zd:flex zd:items-center zd:gap-2 zd:cursor-pointer zd:text-sm zd:py-0.5 zd:rounded hover:zd:bg-muted/50"
+                  >
+                    <div className={cn(
+                      "zd:flex zd:items-center zd:justify-center zd:shrink-0 zd:w-5 zd:h-5 zd:rounded-full zd:border zd:border-input",
+                      isSelected ? "zd:bg-primary zd:text-primary-foreground" : "zd:bg-background zd:text-muted-foreground"
+                    )}>
+                      <span className="zd:text-xs zd:font-medium">{idx || ""}</span>
+                    </div>
+                    <span>{f.label || f.name}</span>
                   </div>
-                  <span>{f.label || f.name}</span>
-                </div>
-              );
-            })}
+                );
+              })}
           </div>
         </FormControl>
       )}
@@ -266,6 +341,7 @@ function FieldConfigPopup({
   const { t } = useTranslation();
   const { item, onApply, onRemove } = initialData ?? { item: null as any, onApply: () => {} };
   const isRefTable = item?.type === "field" && (item?.fields != null || item?.columns != null);
+  const isEmptyColumn = item?.type === "empty";
   const [label, setLabel] = React.useState(item?.label ?? "");
   const [hideNoValue, setHideNoValue] = React.useState(!!item?.hide_no_value);
   const [align, setAlign] = React.useState(item?.align ?? "left");
@@ -283,6 +359,11 @@ function FieldConfigPopup({
   }, [item?.id, item?.type]);
   const handleApply = () => {
     if (!item) return;
+    if (isEmptyColumn) {
+      onApply({ label: label || null });
+      onClose();
+      return;
+    }
     const patch: Partial<PrintTemplateBuilderItem> = {
       label: label || null,
       hide_no_value: hideNoValue ? 1 : 0,
@@ -295,6 +376,9 @@ function FieldConfigPopup({
   };
   return (
     <div className="zd:space-y-4">
+      {isEmptyColumn && (
+        <p className="zd:text-sm zd:text-muted-foreground">{t("Reserves a flex column in this row. Prints as blank space.")}</p>
+      )}
       {isCustomHtml && (
         <FormControl label={t("Template (binba)")} fieldKey="template" helperText={t("Uses binba template syntax, e.g. {{ doc.id }}")}>
           <textarea
@@ -309,22 +393,26 @@ function FieldConfigPopup({
       <FormControl label={t("Label")} fieldKey="label">
         <Input value={label} onChange={(e) => setLabel(e.target.value)} className="zd:w-full" placeholder={t("Label")} />
       </FormControl>
-      <FormControl label={t("Text align")} fieldKey="align">
-        <Select
-          options={TEXT_ALIGN_OPTIONS.map((o) => ({ value: o.value, label: t(o.label) }))}
-          value={align}
-          onChange={(v) => setAlign(v)}
-          className="zd:w-full"
-        />
-      </FormControl>
-      <FormControl label={t("Hide empty")} fieldKey="hide_no_value">
-        <input
-          type="checkbox"
-          checked={hideNoValue}
-          onChange={(e) => setHideNoValue(e.target.checked)}
-          className="zd:h-4 zd:w-4 zd:rounded zd:border-input"
-        />
-      </FormControl>
+      {!isEmptyColumn && (
+        <>
+          <FormControl label={t("Text align")} fieldKey="align">
+            <Select
+              options={TEXT_ALIGN_OPTIONS.map((o) => ({ value: o.value, label: t(o.label) }))}
+              value={align}
+              onChange={(v) => setAlign(v)}
+              className="zd:w-full"
+            />
+          </FormControl>
+          <FormControl label={t("Hide empty")} fieldKey="hide_no_value">
+            <input
+              type="checkbox"
+              checked={hideNoValue}
+              onChange={(e) => setHideNoValue(e.target.checked)}
+              className="zd:h-4 zd:w-4 zd:rounded zd:border-input"
+            />
+          </FormControl>
+        </>
+      )}
       {isRefTable && (
         <FormControl label={t("Min height (px)")} fieldKey="height" helperText={t("Minimum height for this table in PDF/print.")}>
           <Input
@@ -455,8 +543,9 @@ export function PrintTemplateBuilder({
     if (!excludeCustomHtml) {
       out.push({ type: "custom_html", label: "Custom HTML" });
     }
+    out.push({ type: "empty", label: t("Empty Column") });
     return out;
-  }, [fieldsForDoctype, excludeCustomHtml]);
+  }, [fieldsForDoctype, excludeCustomHtml, t]);
 
   const availablePaletteEntries = useMemo(() => {
     return paletteEntries.filter((entry) => {
@@ -502,10 +591,19 @@ export function PrintTemplateBuilder({
   const addItemFromPalette = useCallback(
     (entry: PaletteEntry, insertIndex: number, rowId: string) => {
       const isCustomHtml = entry.type === "custom_html" || (entry.type === "text" && entry.label === "Custom HTML");
+      const isEmptyPalette = entry.type === "empty";
       const newItem: PrintTemplateBuilderItem = {
         id: newId(),
         idx: insertIndex,
-        type: entry.type === "anchor" ? "anchor" : isCustomHtml ? "custom_html" : entry.type === "text" ? "text" : "field",
+        type: entry.type === "anchor"
+          ? "anchor"
+          : isCustomHtml
+            ? "custom_html"
+            : isEmptyPalette
+              ? "empty"
+              : entry.type === "text"
+                ? "text"
+                : "field",
         value: isCustomHtml || entry.type === "text" ? "" : undefined,
         field_name: entry.field_name ?? undefined,
         label: entry.label ?? undefined,
@@ -647,7 +745,14 @@ export function PrintTemplateBuilder({
         FieldConfigPopup as React.ComponentType<{ isOpen: boolean; onClose: (r?: any) => void; initialData?: any }>,
         {
           title: t("Configure field"),
-          description: item.type === "custom_html" ? t("Custom HTML (binba template)") : item.field_name ? `${t("Field")}: ${item.field_name}` : undefined,
+          description:
+            item.type === "custom_html"
+              ? t("Custom HTML (binba template)")
+              : item.type === "empty"
+                ? t("Empty column (layout spacer)")
+                : item.field_name
+                  ? `${t("Field")}: ${item.field_name}`
+                  : undefined,
           width: 420,
         },
         {
@@ -806,7 +911,8 @@ export function PrintTemplateBuilder({
       },
     };
     const isTable = !!(item.type === "field" && item.fields);
-    const displayLabel = item.label || item.field_name || item.type || t("Item");
+    const displayLabel =
+      item.type === "empty" ? item.label || t("Empty Column") : item.label || item.field_name || item.type || t("Item");
     const customHtmlSubtitle = item.type === "custom_html" ? (item.value?.trim() ? `${item.value.slice(0, 40)}${(item.value?.length ?? 0) > 40 ? "…" : ""}` : t("(empty template)")) : null;
     const selectedCols = parseJsonArray(item.columns ?? item.fields);
     const selectedNestedCols = parseJsonArray(item.nested_columns);

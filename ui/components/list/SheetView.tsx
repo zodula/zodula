@@ -1,5 +1,14 @@
-import React, { useMemo, useState, useEffect, useRef, useImperativeHandle, forwardRef } from "react";
+import React, {
+  useMemo,
+  useState,
+  useEffect,
+  useRef,
+  useImperativeHandle,
+  forwardRef,
+  useCallback,
+} from "react";
 import { useDocList } from "../../hooks/use-doc-list";
+import { useDocListAll } from "../../hooks/use-doc-list-all";
 import { useDoc } from "../../hooks/use-doc";
 import { ListToolbar } from "./ListToolbar";
 import type { ListColumn } from "./ListTable";
@@ -36,11 +45,16 @@ import { useColumnSettings } from "../../hooks/use-column-settings";
 import { useColumnResize } from "../../hooks/use-column-resize";
 import { useParams } from "react-router";
 import {
-  columnFilterMatchesCell,
   defaultOperatorForSheetColumn,
   getSupportedOperatorOptionsForSheetColumn,
   resolveSheetColumnOperator,
 } from "./filter-operator-utils";
+import type { SheetColumnFilterState } from "./sheet-column-filters-to-ifilters";
+import {
+  getSheetCellValue,
+  getStaggeredSheetCellValue,
+  maxChildRowsForDoc,
+} from "./sheet-field-utils";
 
 // Table header cell component that uses the resize hook
 interface TableHeaderCellProps {
@@ -207,6 +221,9 @@ interface SheetViewProps {
   strictColumns?: boolean;
   stateKey?: string;
   onVisibleColumnsChange?: (columns: string[]) => void;
+  /** Controlled: sent to server as extra filters (not shown in Filter dialog). */
+  columnFilters: SheetColumnFilterState;
+  onColumnFiltersChange: (next: SheetColumnFilterState) => void;
 }
 
 /** Escape a value for CSV (wrap in quotes if contains comma, newline, or quote). */
@@ -218,14 +235,26 @@ function escapeCsvValue(value: unknown): string {
   return s;
 }
 
+export type SheetCsvExportPayload =
+  | {
+      kind: "script";
+      columns: { key: string; label: string }[];
+      rows: Record<string, unknown>[];
+    }
+  | {
+      kind: "query";
+      fields: string[];
+      headers: string[];
+      ids: string[];
+    };
+
 export interface SheetViewExportHandle {
   exportCSV(): void;
+  getCsvExportPayload(): SheetCsvExportPayload | null;
   getVisibleColumns(): string[];
   setVisibleColumns(columns: string[]): void;
   resetVisibleColumns(): void;
 }
-
-type ColumnFilterState = Record<string, { operator: IOperator; value: string }>;
 
 export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps>(function SheetView(
   {
@@ -257,6 +286,8 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
     strictColumns = false,
     stateKey,
     onVisibleColumnsChange,
+    columnFilters,
+    onColumnFiltersChange,
   },
   ref
 ) {
@@ -286,9 +317,12 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
     id: doctype,
   });
 
+  const { docs: allFieldRows } = useDocListAll({
+    doctype: "Field",
+  });
+
   const [hasActiveFilter, setHasActiveFilter] = useState(false);
   const [searchInput, setSearchInput] = useState(searchQuery);
-  const [columnFilters, setColumnFilters] = useState<ColumnFilterState>({});
   const [filterPopupOpen, setFilterPopupOpen] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({
@@ -363,15 +397,31 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
       sortable: true,
     });
 
-    // Add ALL fields (not just in_list_view fields)
+    // Add ALL fields: Reference Table → child columns `parent.child`, not the table field itself
     fields.forEach((field: any) => {
       if (ClientFieldHelper.isStandardField(field.name)) return;
       if (ClientFieldHelper.isLayoutField(field)) return;
-      if (field.name !== displayField) {
+      if (field.name === displayField) return;
+
+      if (field.type === "Reference Table" && field.reference) {
+        const childRows = allFieldRows.filter(
+          (cf: any) =>
+            cf.doctype === field.reference &&
+            !ClientFieldHelper.isLayoutField(cf)
+        );
+        for (const cf of childRows) {
+          cols.push({
+            key: `${field.name}.${cf.name}`,
+            label: `${field.label || field.name} > ${cf.label || cf.name}`,
+            sortable: false,
+          });
+        }
+      } else if (field.type !== "Extend") {
         cols.push({
           key: field.name,
           label: field.label || field.name,
-          sortable: field.type !== "Reference Table" && field.type !== "Extend",
+          sortable:
+            field.type !== "Reference Table" && field.type !== "Extend",
         });
       }
     });
@@ -393,7 +443,7 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
     }
 
     return merged;
-  }, [docs, columns, doctypeDoc, fields, strictColumns]);
+  }, [docs, columns, doctypeDoc, fields, strictColumns, allFieldRows]);
 
   // Get default columns (system defined - only in_list_view and required fields)
   const defaultColumns = useMemo(() => {
@@ -412,7 +462,8 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
       if (
         field.name !== displayField &&
         (field.in_list_view === 1 || field.required === 1) &&
-        !zodula.utils.isStandardField(field.name)
+        !zodula.utils.isStandardField(field.name) &&
+        field.type !== "Reference Table"
       ) {
         defaultCols.push(field.name);
       }
@@ -542,27 +593,28 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
     }));
   }, [allAvailableColumns, visibleColumns, sheetView, t]);
 
-  // UI-only column filters applied in-memory (does not call server)
-  const filteredDocs = useMemo(() => {
-    const visibleFilterColumns = new Set(derivedColumns.map((col) => String(col.key)));
-    const activeFilters = Object.entries(columnFilters).filter(([key, cfg]) => {
-      if (!visibleFilterColumns.has(key)) return false;
-      const op = resolveSheetColumnOperator(fields, key, cfg.operator);
-      if (op === "IS NULL" || op === "IS NOT NULL") return true;
-      return String(cfg?.value || "").trim().length > 0;
-    });
+  const buildCsvExportPayload = useCallback((): SheetCsvExportPayload | null => {
+    const cols = derivedColumns;
+    if (!cols.length) return null;
 
-    if (activeFilters.length === 0) {
-      return docs;
+    if (strictColumns) {
+      return {
+        kind: "script",
+        columns: cols.map((c) => ({
+          key: String(c.key),
+          label: String(c.label ?? c.key),
+        })),
+        rows: docs.map((d) => ({ ...d })) as Record<string, unknown>[],
+      };
     }
 
-    return docs.filter((doc) =>
-      activeFilters.every(([key, cfg]) => {
-        const op = resolveSheetColumnOperator(fields, key, cfg.operator);
-        return columnFilterMatchesCell(doc?.[key], op, cfg.value ?? "");
-      })
-    );
-  }, [docs, derivedColumns, columnFilters, fields]);
+    return {
+      kind: "query",
+      fields: cols.map((c) => String(c.key)),
+      headers: cols.map((c) => String(c.label ?? c.key)),
+      ids: Array.from(selected),
+    };
+  }, [derivedColumns, docs, strictColumns, selected]);
 
   // Keep latest data for imperative exportCSV
   const exportDataRef = useRef({
@@ -587,6 +639,9 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
   useImperativeHandle(
     ref,
     () => ({
+      getCsvExportPayload() {
+        return buildCsvExportPayload();
+      },
       exportCSV() {
         const ref = exportDataRef.current;
         const aggConfig = ref.aggregationConfig;
@@ -635,7 +690,9 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
         if (selectedDocs.length === 0) return;
         const header = cols.map((k) => escapeCsvValue(k)).join(",");
         const dataRows = selectedDocs.map((doc) =>
-          cols.map((key) => escapeCsvValue(doc[key])).join(",")
+          cols
+            .map((key) => escapeCsvValue(getSheetCellValue(doc, key)))
+            .join(",")
         );
         const csv = [header, ...dataRows].join("\n");
         const blob = new Blob([csv], { type: "text/csv" });
@@ -656,7 +713,14 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
         resetVisibleColumns();
       },
     }),
-    [doctype, t, visibleColumns, setVisibleColumns, resetVisibleColumns]
+    [
+      doctype,
+      t,
+      visibleColumns,
+      setVisibleColumns,
+      resetVisibleColumns,
+      buildCsvExportPayload,
+    ]
   );
 
   // Get available sort fields from columns - pass full field metadata for FilterPopup
@@ -678,10 +742,10 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
   const aggregatedData = useMemo(() => {
     const aggregationConfig = sheetView.aggregationConfig;
     if (!aggregationConfig.groupBy) {
-      return filteredDocs;
+      return docs;
     }
 
-    const grouped = filteredDocs.reduce(
+    const grouped = docs.reduce(
       (acc, doc) => {
         const groupKey = String(doc[aggregationConfig.groupBy!] || "null");
         if (!acc[groupKey]) {
@@ -798,7 +862,57 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
     }
 
     return aggregatedRows;
-  }, [filteredDocs, sheetView.aggregationConfig, t]);
+  }, [docs, sheetView.aggregationConfig, t]);
+
+  const hasStaggerChildColumns = useMemo(
+    () => derivedColumns.some((c) => String(c.key).includes(".")),
+    [derivedColumns]
+  );
+
+  const sheetDisplayRows = useMemo(() => {
+    const colKeys = derivedColumns.map((c) => String(c.key));
+    const rows: Array<{
+      doc: any;
+      flatKey: string;
+      stagger: "none" | "parent" | "child";
+      childIndex?: number;
+    }> = [];
+
+    aggregatedData.forEach((doc, i) => {
+      if (doc._isAggregated) {
+        rows.push({
+          doc,
+          flatKey: `agg-${i}-${doc._groupKey ?? doc.id ?? i}`,
+          stagger: "none",
+        });
+        return;
+      }
+      if (!hasStaggerChildColumns) {
+        rows.push({
+          doc,
+          flatKey: String(doc.id ?? `row-${i}`),
+          stagger: "none",
+        });
+        return;
+      }
+      const max = maxChildRowsForDoc(doc, colKeys);
+      rows.push({
+        doc,
+        flatKey: `${doc.id}-p`,
+        stagger: "parent",
+      });
+      for (let c = 0; c < max; c++) {
+        rows.push({
+          doc,
+          flatKey: `${doc.id}-c-${c}`,
+          stagger: "child",
+          childIndex: c,
+        });
+      }
+    });
+
+    return rows;
+  }, [aggregatedData, derivedColumns, hasStaggerChildColumns]);
 
   // Keep ref in sync for exportCSV when in aggregation mode
   useEffect(() => {
@@ -936,10 +1050,11 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
       const rowIdx = parseInt(rowIdxStr, 10);
       if (isNaN(rowIdx)) return;
 
-      const doc = aggregatedData[rowIdx];
+      const disp = sheetDisplayRows[rowIdx];
+      const doc = disp?.doc;
       const col = derivedColumns.find((c) => String(c.key) === colKey);
 
-      if (doc && col) {
+      if (doc && col && disp) {
         if (!cellsByRow[rowIdx]) {
           cellsByRow[rowIdx] = [];
         }
@@ -959,9 +1074,15 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
           } else {
             cellValue = null;
           }
+        } else if (disp.stagger === "none") {
+          cellValue = getSheetCellValue(doc as any, colKey);
         } else {
-          // Use raw value for copying, not the rendered/formatted value
-          cellValue = (doc as any)[colKey];
+          cellValue = getStaggeredSheetCellValue(
+            doc,
+            colKey,
+            disp.stagger,
+            disp.childIndex
+          );
         }
 
         cellsByRow[rowIdx]!.push({ colKey, value: cellValue });
@@ -1078,11 +1199,8 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
     const currentIndex = currentVisible.indexOf(columnKey);
     if (currentIndex === -1) return;
 
-    // Get available columns to add
     const availableToAdd = allAvailableColumns
-      .filter(
-        (col) => !currentVisible.includes(String(col.key)) && col.sortable
-      )
+      .filter((col) => !currentVisible.includes(String(col.key)))
       .map((col) => ({ key: col.key, label: t(col.label || String(col.key)) }));
 
     if (availableToAdd.length === 0) {
@@ -1090,7 +1208,6 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
       return;
     }
 
-    // Show column selection dialog
     const selectedColumnKey = await popup(
       ColumnSelectDialog,
       {
@@ -1115,11 +1232,8 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
     const currentIndex = currentVisible.indexOf(columnKey);
     if (currentIndex === -1) return;
 
-    // Get available columns to add
     const availableToAdd = allAvailableColumns
-      .filter(
-        (col) => !currentVisible.includes(String(col.key)) && col.sortable
-      )
+      .filter((col) => !currentVisible.includes(String(col.key)))
       .map((col) => ({ key: col.key, label: t(col.label || String(col.key)) }));
 
     if (availableToAdd.length === 0) {
@@ -1127,7 +1241,6 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
       return;
     }
 
-    // Show column selection dialog
     const selectedColumnKey = await popup(
       ColumnSelectDialog,
       {
@@ -1163,7 +1276,7 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
       },
       {
         doctype,
-        availableColumns: allAvailableColumns.filter((col) => col.sortable),
+        availableColumns: allAvailableColumns,
         visibleColumns,
         defaultColumns,
       }
@@ -1517,15 +1630,24 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
                       ? 100
                       : sheetView.getColumnWidth(columnKey);
                   const operatorOptions =
-                    getSupportedOperatorOptionsForSheetColumn(fields, columnKey);
+                    getSupportedOperatorOptionsForSheetColumn(
+                      fields,
+                      columnKey,
+                      allFieldRows as any
+                    );
                   const filterConfig = columnFilters[columnKey] || {
-                    operator: defaultOperatorForSheetColumn(fields, columnKey),
+                    operator: defaultOperatorForSheetColumn(
+                      fields,
+                      columnKey,
+                      allFieldRows as any
+                    ),
                     value: "",
                   };
                   const resolvedOp = resolveSheetColumnOperator(
                     fields,
                     columnKey,
-                    filterConfig.operator
+                    filterConfig.operator,
+                    allFieldRows as any
                   );
                   const valueHidden =
                     resolvedOp === "IS NULL" || resolvedOp === "IS NOT NULL";
@@ -1560,13 +1682,13 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
                               <DropdownMenuItem
                                 key={opt.value}
                                 onClick={() => {
-                                  setColumnFilters((prev) => ({
-                                    ...prev,
+                                  onColumnFiltersChange({
+                                    ...columnFilters,
                                     [columnKey]: {
                                       operator: opt.value,
-                                      value: prev[columnKey]?.value ?? "",
+                                      value: columnFilters[columnKey]?.value ?? "",
                                     },
-                                  }));
+                                  });
                                 }}
                               >
                                 <span className="zd:font-mono zd:text-xs">
@@ -1581,17 +1703,18 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
                             value={filterConfig.value}
                             onChange={(e) => {
                               const nextValue = e.target.value;
-                              setColumnFilters((prev) => ({
-                                ...prev,
+                              onColumnFiltersChange({
+                                ...columnFilters,
                                 [columnKey]: {
                                   operator: resolveSheetColumnOperator(
                                     fields,
                                     columnKey,
-                                    prev[columnKey]?.operator
+                                    columnFilters[columnKey]?.operator,
+                                    allFieldRows as any
                                   ),
                                   value: nextValue,
                                 },
-                              }));
+                              });
                             }}
                             className="zd:h-7 zd:min-w-0 zd:flex-1"
                           />
@@ -1603,7 +1726,7 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
               </tr>
             </thead>
             <tbody>
-              {aggregatedData.length === 0 ? (
+              {sheetDisplayRows.length === 0 ? (
                 <tr>
                   <td
                     colSpan={derivedColumns.length + 1}
@@ -1613,27 +1736,34 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
                   </td>
                 </tr>
               ) : (
-                aggregatedData.map((doc, idx) => {
+                sheetDisplayRows.map((disp, flatIdx) => {
+                  const doc = disp.doc;
                   const isAggregated = doc._isAggregated;
                   const isTotals = doc._isTotals;
+                  const showDocCheckbox =
+                    !isAggregated &&
+                    (disp.stagger === "none" || disp.stagger === "parent");
                   return (
                     <tr
-                      key={idx}
+                      key={disp.flatKey}
                       className={cn(
                         "zd:border-b zd:border-border",
                         isAggregated && "zd:bg-muted/50 zd:font-semibold",
                         isTotals && "zd:bg-muted/70",
-                        !isAggregated && "zd:hover:bg-muted/30"
+                        disp.stagger === "child" && "zd:bg-muted/20",
+                        !isAggregated && disp.stagger !== "child" && "zd:hover:bg-muted/30",
+                        !isAggregated &&
+                          disp.stagger === "child" &&
+                          "zd:hover:bg-muted/25"
                       )}
                       onMouseUp={handleCellMouseUp}
                     >
-                      {/* Checkbox column */}
                       <td
                         className="zd:z-10 zd:px-2 zd:py-1.5 zd:bg-background zd:border-r zd:border-border"
                         style={{ width: 40, minWidth: 40, maxWidth: 40 }}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        {!isAggregated && (
+                        {showDocCheckbox && (
                           <Checkbox
                             checked={selected.has(doc.id)}
                             onCheckedChange={(checked) =>
@@ -1652,9 +1782,7 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
                           />
                         )}
                       </td>
-                      {/* Data columns */}
                       {derivedColumns.map((col, index) => {
-                        const isFirstColumn = index === 0;
                         const columnKey = String(col.key);
                         const width =
                           columnKey === "_count"
@@ -1662,38 +1790,36 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
                             : sheetView.getColumnWidth(columnKey);
                         const aggConfig = sheetView.aggregationConfig;
 
-                        // For aggregated rows, show the aggregated value or count
                         let cellValue: any;
                         if (isAggregated) {
                           if (columnKey === "_count") {
-                            // Count column
                             cellValue = doc._count;
                           } else if (
                             aggConfig.aggregateField &&
                             columnKey === aggConfig.aggregateField
                           ) {
-                            // Aggregated field column - show the aggregated value
                             cellValue = doc[columnKey];
                           } else if (columnKey === aggConfig.groupBy) {
-                            // Group by column - show group value or "Totals"
                             cellValue = doc[columnKey];
                           } else {
-                            // Should not happen in aggregation mode, but handle gracefully
                             cellValue = null;
                           }
+                        } else if (disp.stagger === "none") {
+                          cellValue = getSheetCellValue(doc, columnKey);
                         } else {
-                          cellValue = doc[columnKey];
+                          cellValue = getStaggeredSheetCellValue(
+                            doc,
+                            columnKey,
+                            disp.stagger,
+                            disp.childIndex
+                          );
                         }
 
                         const cellDisplayValue =
-                          cellValue != null ? (
-                            String(cellValue)
-                          ) : (
-                            <span className="zd:text-muted-foreground zd:italic">
-                              -
-                            </span>
-                          );
-                        const cellKey = getCellKey(idx, columnKey);
+                          cellValue != null && cellValue !== ""
+                            ? String(cellValue)
+                            : null;
+                        const cellKey = getCellKey(flatIdx, columnKey);
                         const isCellSelected = selectedCells.has(cellKey);
 
                         return (
@@ -1703,25 +1829,30 @@ export const SheetView = forwardRef<SheetViewExportHandle | null, SheetViewProps
                               "zd:truncate  zd:px-2 zd:py-1.5 zd:whitespace-nowrap zd:bg-background zd:border-r zd:border-border zd:cursor-cell",
                               isAggregated && "zd:bg-muted/50",
                               isTotals && "zd:bg-muted/70",
+                              disp.stagger === "child" && "zd:bg-muted/15",
                               isCellSelected &&
                                 "zd:bg-blue-100 dark:zd:bg-blue-900/30 zd:outline zd:outline-2 zd:outline-blue-500 zd:outline-offset-[-1px]"
                             )}
                             style={{ width, minWidth: width, maxWidth: width }}
                             onMouseDown={(e) =>
-                              readonly ? undefined : handleCellMouseDown(e, idx, columnKey, doc)
+                              readonly
+                                ? undefined
+                                : handleCellMouseDown(e, flatIdx, columnKey, doc)
                             }
                             onMouseEnter={() =>
-                              readonly ? undefined : handleCellMouseEnter(idx, columnKey, doc)
+                              readonly
+                                ? undefined
+                                : handleCellMouseEnter(flatIdx, columnKey, doc)
                             }
                             onContextMenu={(e) =>
                               readonly
                                 ? undefined
                                 : handleCellContextMenu(
-                                  e,
-                                  cellValue,
-                                  idx,
-                                  columnKey
-                                )
+                                    e,
+                                    cellValue,
+                                    flatIdx,
+                                    columnKey
+                                  )
                             }
                           >
                             {cellDisplayValue}

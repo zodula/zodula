@@ -65,17 +65,30 @@ export default function PrintPage() {
     }
     setDefaultsLoaded(false);
     const loadDefaults = async () => {
-      const printRes = await zodula.doc.select_docs("Print Template", {
-        filters: [["is_default", "=", 1], ["doctype", "=", doctype]],
-        limit: 1,
-        sort: "name",
-        order: "asc",
-      });
+      const [printRes, printSetting] = await Promise.all([
+        zodula.doc.select_docs("Print Template", {
+          filters: [["is_default", "=", 1], ["doctype", "=", doctype]],
+          limit: 1,
+          sort: "name",
+          order: "asc",
+        }),
+        zodula.doc
+          .get_doc("Print Setting" as Zodula.DoctypeName, "Print Setting")
+          .catch(() => null),
+      ]);
       const defaultPrintTemplate = printRes.docs[0];
-      const defaultLang = defaultPrintTemplate?.default_language ?? "";
+      const ps = printSetting as {
+        default_lang?: string | null;
+        default_letter_head?: string | null;
+      } | null;
+      const defaultLang = ps?.default_lang ?? "";
+      const letterHeadFromTemplate = String(
+        defaultPrintTemplate?.default_letter_head ?? ""
+      ).trim();
+      const letterHeadFallback = String(ps?.default_letter_head ?? "").trim();
       setPrintTemplate(defaultPrintTemplate?.id ?? "");
       setLang(defaultLang);
-      setLetterHead(defaultPrintTemplate?.default_letter_head ?? "");
+      setLetterHead(letterHeadFromTemplate || letterHeadFallback);
     };
     loadDefaults().finally(() => setDefaultsLoaded(true));
   }, [doctype, ids.length]);
@@ -90,7 +103,7 @@ export default function PrintPage() {
       <FormControl
         label="Print Template"
         fieldKey="print_template"
-        field={{ type: "Reference", reference: "Print Template" }}
+        field={{ type: "Reference", reference: "Print Template", filters: JSON.stringify([["doctype", "=", doctype]]) }}
         value={printTemplate}
         onChange={(_k, v) => setPrintTemplate(v ?? "")}
       />
@@ -116,34 +129,33 @@ export default function PrintPage() {
       title="Print"
       subtitle={subtitle}
       rightSidebar={sidebarContent}
-      defaultOpen
       primaryAction={
-          pdfUrl
-            ? {
-              label: "Open PDF",
-              onClick: () => window.open(pdfUrl, "_blank"),
-            }
-            : undefined
-        }
-      >
-        <div className="zd:h-full zd:min-h-0 zd:flex zd:flex-col">
-          {pdfUrl ? (
-            <iframe
-              key={pdfUrl}
-              src={pdfUrl}
-              title="PDF"
-              className="zd:w-full zd:flex-1 zd:min-h-0 zd:border-0 zd:rounded"
-            />
-          ) : (
-            <div className="zd:flex zd:items-center zd:justify-center zd:h-64 zd:text-muted-foreground">
-              {doctype && ids.length > 0
-                ? !defaultsLoaded
-                  ? "Loading default print template..."
-                  : "Select Print Template and Letter Head to preview."
-                : "Add doctype and ids to the URL (e.g. ?doctype=Delivery%20Trip&ids=[\"DOC-001\"])"}
-            </div>
-          )}
-        </div>
+        pdfUrl
+          ? {
+            label: "Open PDF",
+            onClick: () => window.open(pdfUrl, "_blank"),
+          }
+          : undefined
+      }
+    >
+      <div className="zd:h-full zd:min-h-0 zd:flex zd:flex-col">
+        {pdfUrl ? (
+          <iframe
+            key={pdfUrl}
+            src={pdfUrl}
+            title="PDF"
+            className="zd:w-full zd:flex-1 zd:min-h-0 zd:border-0 zd:rounded"
+          />
+        ) : (
+          <div className="zd:flex zd:items-center zd:justify-center zd:h-64 zd:text-muted-foreground">
+            {doctype && ids.length > 0
+              ? !defaultsLoaded
+                ? "Loading default print template..."
+                : "Select Print Template and Letter Head to preview."
+              : "Add doctype and ids to the URL (e.g. ?doctype=Delivery%20Trip&ids=[\"DOC-001\"])"}
+          </div>
+        )}
+      </div>
     </DeskNavbarLayout>
   );
 }

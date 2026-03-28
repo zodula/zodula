@@ -1,19 +1,5 @@
 [
   {
-    "id": "Desk User",
-    "name": "Desk User",
-    "description": "User who can access Desk UI",
-    "is_system": 1,
-    "owner": null,
-    "created_at": null,
-    "updated_at": null,
-    "created_by": null,
-    "updated_by": null,
-    "doc_status": "Draft",
-    "idx": null,
-    "vector": null
-  },
-  {
     "id": "Anonymous",
     "name": "Anonymous",
     "description": "The person who is not logged in",
@@ -31,20 +17,6 @@
     "id": "Authenticated",
     "name": "Authenticated",
     "description": "The person who is logged in",
-    "is_system": 1,
-    "owner": null,
-    "created_at": null,
-    "updated_at": null,
-    "created_by": null,
-    "updated_by": null,
-    "doc_status": "Draft",
-    "idx": null,
-    "vector": null
-  },
-  {
-    "id": "OpenAPI User",
-    "name": "OpenAPI User",
-    "description": "The person who can access the OpenAPI docs",
     "is_system": 1,
     "owner": null,
     "created_at": null,

@@ -110,7 +110,7 @@ function Button({
       role={!asChild && href ? "button" : undefined}
       {...props}
     >
-      {isButtonLoading && !hideLoading && (
+      {!asChild && isButtonLoading && !hideLoading && (
         <Loader2 className="zd:mr-2 zd:h-4 zd:w-4 zd:animate-spin" />
       )}
       {children}

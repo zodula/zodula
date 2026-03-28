@@ -132,7 +132,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
             top: rect.bottom + 4,
             left,
             minWidth: Math.max(rect.width, 280),
-            maxWidth: 300,
+            maxWidth: 280,
         });
     }, []);
 

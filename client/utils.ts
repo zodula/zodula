@@ -187,10 +187,10 @@ export function getFormatFieldConfig(fieldConfig: Zodula.Field, doc: any) {
         return config
     }
     if (!!config?.readonly_on) {
-        config.readonly = safeEval(config?.readonly_on, { doc: doc })
+        config.readonly = safeEval(config?.readonly_on, { doc: doc }) ? 1 : 0
     }
     if (!!config?.required_on) {
-        config.required = safeEval(config?.required_on, { doc: doc })
+        config.required = safeEval(config?.required_on, { doc: doc }) ? 1 : 0
     }
     if (!!config?.depends_on) {
         config.hidden = safeEval(config?.depends_on, { doc: doc }) ? 0 : 1

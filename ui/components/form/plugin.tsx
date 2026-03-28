@@ -5,6 +5,7 @@ import type { IOperator } from "@/zodula/server/zodula/type";
 export class FormPlugin<FieldSupports extends string[] = string[]> {
     public types: FieldSupports = [] as unknown as FieldSupports;
     public supportOperators?: IOperator[];
+    public quickFilterOperator: IOperator = "=";
     public render: ({
         fieldOptions,
         model,
@@ -125,9 +126,11 @@ export class FormPlugin<FieldSupports extends string[] = string[]> {
             fieldPath?: string;
         }) => React.ReactNode;
         supportOperators?: IOperator[];
+        quickFilterOperator?: IOperator;
     }) {
         this.types = ctx.types;
         this.supportOperators = ctx.supportOperators;
+        this.quickFilterOperator = ctx.quickFilterOperator || "=";
         this.render = ctx.render.bind(this);
         this.cellRender = ctx.cellRender || (({ value }) => {
             // Default cell render: show string value or dash if empty

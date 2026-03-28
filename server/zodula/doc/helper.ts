@@ -4,7 +4,7 @@ import { zodula } from ".."
 import { Database } from "../../database/database"
 import type { DoctypeRelative, DoctypeChild } from "../../loader/plugins/doctype"
 import { loader } from "../../loader"
-import { parseDate } from "@/zodula/client/utils"
+import { parseDate, safeEval } from "@/zodula/client/utils"
 import { ErrorWithCode } from "@/zodula/error"
 import { ClientFieldHelper } from "@/zodula/client/field"
 
@@ -160,6 +160,15 @@ export class ZodulaDoctypeHelper {
 
     }
 
+    /** File field values as stored; absolute http(s)/data URLs pass through unchanged. */
+    static fileValueToPublicUrl(value: unknown): unknown {
+        if (value == null || value === "") return value
+        const s = String(value).trim()
+        if (!s) return s
+        if (/^https?:\/\//i.test(s) || s.startsWith("data:")) return s
+        return s
+    }
+
     static formatDocResult<TN extends Zodula.DoctypeName>(result: Zodula.SelectDoctype<TN>, doctype: Zodula.DoctypeSchema) {
         if (!result) return result
         // if field is password, set it to empty string
@@ -169,7 +178,9 @@ export class ZodulaDoctypeHelper {
             // if (config.type === "Password" as FieldType) {
             //     (result as any)[fieldName] = "****"
             // }
-            if (config?.type === "Check") {
+            if (config?.type === "File" && fieldValue != null && fieldValue !== "") {
+                (result as any)[fieldName] = ZodulaDoctypeHelper.fileValueToPublicUrl(fieldValue)
+            } else if (config?.type === "Check") {
                 if (fieldValue === null || fieldValue === undefined || fieldValue === "" || fieldValue === "0" || fieldValue === 0) {
                     (result as any)[fieldName] = 0
                 } else {
@@ -333,10 +344,14 @@ export class ZodulaDoctypeHelper {
         //     })
         // }
 
-        // check for required
+        // check for required (required_on overrides static required when present — same as client getFormatFieldConfig)
         for (const [fieldName, fieldConfig] of Object.entries(doctype.fields)) {
             const value = input[fieldName as keyof typeof input]
-            if (fieldConfig.required === 1 && (value === undefined || value === null || value === "")) {
+            const fc = fieldConfig as { required?: number; required_on?: string | null }
+            const isRequired = fc.required_on
+                ? !!safeEval(fc.required_on, { doc: input })
+                : fc.required === 1
+            if (isRequired && (value === undefined || value === null || value === "")) {
                 throw new ErrorWithCode(`Field ${fieldName} is required`, {
                     status: 400,
                 })

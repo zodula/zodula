@@ -87,6 +87,19 @@ export class Zodula {
         return new ZodulaClientRealtime(this.baseUrl)
     }
 
+    get session() {
+        return {
+            user: async () => {
+                const result = await this.action("zodula.auth.me")
+                return result?.user || null
+            },
+            roles: async () => {
+                const result = await this.action("zodula.auth.roles")
+                return result?.roles || []
+            }
+        }
+    }
+
     get theme() {
         return {
             isDark: () => {

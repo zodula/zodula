@@ -13,6 +13,7 @@ import { loader } from "../loader";
 import type { BackgroundMetadata } from "../loader/plugins/background";
 import { Database } from "../database/database";
 import { globalContext } from "../async-context";
+import { translate as translateFromStore } from "../serve/extend/translation";
 
 // Extended JobData with requester
 interface ExtendedJobData extends JobData {
@@ -24,7 +25,8 @@ export class ZodulaSDK {
     private worker: Queue;
     private jobMetadata: Map<string, { requester: string | null; backgroundPath: string }> = new Map();
     private _emailInstance: ZodulaEmail | null = null;
-    
+    private _lang: string = process.env.ZODULA_PUBLIC_DEFAULT_LANGUAGE || "en";
+
     constructor() {
         this.worker = new Queue(process.env.WORKER_COUNT ? parseInt(process.env.WORKER_COUNT) : 4)
         
@@ -176,6 +178,13 @@ export class ZodulaSDK {
     doctype<TN extends Zodula.DoctypeName = Zodula.DoctypeName>(doctypeName: TN) {
         return new ZodulaDoctype<TN>(doctypeName)
     }
+
+    set_lang(lang?: string | null) {
+        const t = lang != null && String(lang).trim() !== "" ? String(lang).trim() : null;
+        this._lang = t ?? (process.env.ZODULA_PUBLIC_DEFAULT_LANGUAGE || "en");
+    }
+
+    translate = (key: string) => translateFromStore(key, this._lang);
 
     get session() {
         return new ZodulaSession()

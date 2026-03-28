@@ -17,6 +17,10 @@ function getFieldPlugin(field: Zodula.Field) {
   return plugins.find((p) => p.types.includes(field.type as never));
 }
 
+function getQuickFilterOperator(field: Zodula.Field): IOperator {
+  return getFieldPlugin(field)?.quickFilterOperator ?? "=";
+}
+
 function getQuickFilterValue(value: any): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "number") return String(value);
@@ -41,8 +45,9 @@ export function QuickFilterBar({
     const map: Record<string, string> = {};
     for (const field of quickFilterFields) {
       const name = field.name as string;
+      const operator = getQuickFilterOperator(field);
       const existing = filters?.find(
-        (f) => (f[0] as string) === name && (f[1] as IOperator) === "LIKE"
+        (f) => (f[0] as string) === name && (f[1] as IOperator) === operator
       );
       map[name] = existing ? getQuickFilterValue(existing[2]) : "";
     }
@@ -56,8 +61,9 @@ export function QuickFilterBar({
       const next = { ...prev };
       for (const field of quickFilterFields) {
         const name = field.name as string;
+        const operator = getQuickFilterOperator(field);
         const existing = filters?.find(
-          (f) => (f[0] as string) === name && (f[1] as IOperator) === "LIKE"
+          (f) => (f[0] as string) === name && (f[1] as IOperator) === operator
         );
         const nextVal = existing ? getQuickFilterValue(existing[2]) : "";
         if (next[name] !== nextVal) next[name] = nextVal;
@@ -84,6 +90,7 @@ export function QuickFilterBar({
         })
         .map((f) => {
           const v = newValues[f.name as string] ?? "";
+          const operator = getQuickFilterOperator(f);
           // parseFloat("2026-03-23") === 2026 — dashes truncate ISO dates; keep date-like fields as strings
           const dateLike =
             f.type === "Date" || f.type === "DateTime" || f.type === "Time";
@@ -94,7 +101,7 @@ export function QuickFilterBar({
               value = num;
             }
           }
-          return [f.name, "LIKE" as IOperator, value] as IFilter<any, any, IOperator>;
+          return [f.name, operator, value] as IFilter<any, any, IOperator>;
         });
       onApplyFilters([...otherFilters, ...quickFilters]);
     },
@@ -118,6 +125,7 @@ export function QuickFilterBar({
         const fieldName = field.name as string;
         const value = values[fieldName] ?? "";
         const plugin = getFieldPlugin(field);
+        const operator = plugin?.quickFilterOperator ?? "=";
 
         return (
           <div
@@ -130,7 +138,7 @@ export function QuickFilterBar({
                 fieldPath={fieldName}
                 value={value}
                 onChange={(_fieldPath, value) => handleChange(fieldName, value)}
-                operator="LIKE"
+                operator={operator}
                 placeholder={t(field.label || field.name || "")}
               />
             ) : (

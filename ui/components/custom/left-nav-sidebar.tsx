@@ -4,12 +4,15 @@ import { useNavbar } from "../../hooks/use-navbar";
 import { useDocAll } from "../../hooks/use-doc-all";
 import { useTranslation } from "../../hooks/use-translation";
 import { useWorkspace } from "../workspace/use-workspace";
+import { useAuth } from "../../hooks/use-auth";
 import { cn } from "../../lib/utils";
 import { DynamicIcon, type IconName } from "../ui/dynamic-icon";
 import {
   PanelLeftClose,
   ChevronRight,
   ChevronsUpDown,
+  Settings2,
+  GitBranch,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import {
@@ -20,6 +23,9 @@ import {
 } from "../ui/dropdown-menu";
 import { useState, useEffect, useMemo } from "react";
 import { Separator } from "@radix-ui/react-dropdown-menu";
+import { useIsTabletOrUp } from "../../hooks/use-media-query";
+import { popup } from "../ui/popit";
+import { WorkspaceEditPopup } from "../workspace/workspace-edit-popup";
 
 // ─── Nearest-match helper ─────────────────────────────────────────────────────
 
@@ -189,8 +195,16 @@ const WorkspaceNavTree = ({
 
 // ─── Main sidebar ────────────────────────────────────────────────────────────
 
-export const LeftNavSidebar = () => {
-  const { leftSidebarOpen, toggleLeftSidebar } = useNavbar();
+export const LeftNavSidebar = ({ mobileDrawer = false }: { mobileDrawer?: boolean }) => {
+  const {
+    leftSidebarOpenDesktop,
+    leftSidebarOpenMobile,
+    toggleLeftSidebarDesktop,
+    toggleLeftSidebarMobile,
+  } = useNavbar();
+  const isTabletOrUp = useIsTabletOrUp();
+  const leftSidebarOpen = isTabletOrUp ? leftSidebarOpenDesktop : leftSidebarOpenMobile;
+  const toggleLeftSidebar = isTabletOrUp ? toggleLeftSidebarDesktop : toggleLeftSidebarMobile;
   const { pathname } = useRouter();
   const { doc: globalSetting, loading: globalLoading } = useDocAll({
     doctype: "Global Setting",
@@ -202,6 +216,42 @@ export const LeftNavSidebar = () => {
   });
   const { t } = useTranslation();
   const { workspaces } = useWorkspace();
+  const { roles } = useAuth()
+  const isSystemAdmin = roles.includes("System Admin")
+
+  const openRootWorkspaceEdit = async () => {
+    await popup(
+      WorkspaceEditPopup,
+      {
+        title: "Edit Root Workspaces",
+        description: "Manage root workspace names, icons, and order.",
+        width: "840px",
+        maxWidth: "94vw",
+      },
+      {
+        workspaces,
+        selectedRootId,
+        mode: "root",
+      }
+    )
+  }
+
+  const openChildWorkspaceEdit = async () => {
+    await popup(
+      WorkspaceEditPopup,
+      {
+        title: "Edit Child Workspaces",
+        description: "Manage child workspace names, URLs, icons, and order at every level under each root.",
+        width: "960px",
+        maxWidth: "96vw",
+      },
+      {
+        workspaces,
+        selectedRootId,
+        mode: "child",
+      }
+    )
+  }
 
   // Root workspaces (no parent)
   const rootWorkspaces = useMemo(
@@ -321,7 +371,11 @@ export const LeftNavSidebar = () => {
         className={cn(
           "zd:h-full zd:flex zd:flex-col zd:shrink-0 zd:border-r zd:border-border zd:bg-sidebar",
           "zd:transition-all zd:duration-300 zd:ease-in-out zd:overflow-hidden no-print",
-          leftSidebarOpen ? "zd:w-64 zd:min-w-64" : "zd:w-0 zd:min-w-0"
+          mobileDrawer
+            ? "zd:w-full zd:min-w-0"
+            : leftSidebarOpen
+              ? "zd:w-64 zd:min-w-64"
+              : "zd:w-0 zd:min-w-0"
         )}
       >
         <div className="zd:flex zd:flex-col zd:h-full zd:gap-2">
@@ -373,9 +427,9 @@ export const LeftNavSidebar = () => {
             </Button>
           </div>
 
-          {/* Root workspace selector */}
-          {rootWorkspaces.length > 0 && (
-            <div className="zd:px-2 zd:shrink-0">
+          {/* Root workspace selector / workspace edit */}
+          <div className="zd:px-2 zd:shrink-0 zd:flex zd:items-center zd:gap-1">
+            {rootWorkspaces.length > 0 ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -418,8 +472,37 @@ export const LeftNavSidebar = () => {
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
-            </div>
-          )}
+            ) : (
+              <Button
+                variant="ghost"
+                className="zd:w-full zd:justify-start zd:px-2 zd:h-8 zd:text-sm zd:font-medium zd:text-muted-foreground zd:bg-accent/30 zd:hover:bg-accent"
+                onClick={openRootWorkspaceEdit}
+                disabled={!isSystemAdmin}
+              >
+                {t("Create workspace")}
+              </Button>
+            )}
+            {isSystemAdmin && (
+              <>
+                <Button
+                  variant="ghost"
+                  className="zd:h-8 zd:w-8 zd:p-0!"
+                  title="Edit root workspaces"
+                  onClick={openRootWorkspaceEdit}
+                >
+                  <Settings2 className="zd:w-4 zd:h-4 zd:text-muted-foreground" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="zd:h-8 zd:w-8 zd:p-0!"
+                  title="Edit child workspaces"
+                  onClick={openChildWorkspaceEdit}
+                >
+                  <GitBranch className="zd:w-4 zd:h-4 zd:text-muted-foreground" />
+                </Button>
+              </>
+            )}
+          </div>
 
           <Separator className="zd:h-[1px] zd:bg-border/50" />
 

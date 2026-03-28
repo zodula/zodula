@@ -1,10 +1,9 @@
-import { zodula } from "../.."
-
 declare global {
     var $translation: Zodula.SelectDoctype<"Translation">[]
 }
 
 export const extendTranslation = async () => {
+    const { zodula } = await import("../..")
     const translations = await zodula.doctype("Translation").select().fields(["key", "translation", "language"]).bypass(true)
     global.$translation = translations.docs
 }

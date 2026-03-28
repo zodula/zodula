@@ -30,10 +30,30 @@ function isReferenceTableCountColumn(
   );
 }
 
+/** Resolve field metadata for a sheet column (plain name or `parent.child` child column). */
+export function getFieldForSheetColumn(
+  fields: Zodula.Field[],
+  columnKey: string,
+  allFields?: Zodula.Field[] | null
+): Zodula.Field | undefined {
+  const direct = fields.find((f) => f.name === columnKey);
+  if (direct) return direct;
+  if (!allFields?.length || !columnKey.includes(".")) return undefined;
+  const i = columnKey.indexOf(".");
+  const parent = columnKey.slice(0, i);
+  const child = columnKey.slice(i + 1);
+  const pf = fields.find((f) => f.name === parent);
+  if (!pf || pf.type !== "Reference Table" || !pf.reference) return undefined;
+  return allFields.find(
+    (f) => f.doctype === pf.reference && f.name === child
+  ) as Zodula.Field | undefined;
+}
+
 /** Operators allowed for a sheet column, from the field's FormPlugin.supportOperators (same idea as FilterContent). */
 export function getSupportedOperatorOptionsForSheetColumn(
   fields: Zodula.Field[],
-  columnKey: string
+  columnKey: string,
+  allFields?: Zodula.Field[] | null
 ): { value: IOperator; label: string }[] {
   if (columnKey === "_count") {
     return COUNT_OPERATORS;
@@ -41,7 +61,9 @@ export function getSupportedOperatorOptionsForSheetColumn(
   if (isReferenceTableCountColumn(fields, columnKey)) {
     return COUNT_OPERATORS;
   }
-  const field = fields.find((f) => f.name === columnKey);
+  const field =
+    getFieldForSheetColumn(fields, columnKey, allFields) ||
+    fields.find((f) => f.name === columnKey);
   if (!field) {
     return FILTER_OPERATOR_OPTIONS;
   }
@@ -56,20 +78,27 @@ export function getSupportedOperatorOptionsForSheetColumn(
 
 export function defaultOperatorForSheetColumn(
   fields: Zodula.Field[],
-  columnKey: string
+  columnKey: string,
+  allFields?: Zodula.Field[] | null
 ): IOperator {
-  const opts = getSupportedOperatorOptionsForSheetColumn(fields, columnKey);
+  const opts = getSupportedOperatorOptionsForSheetColumn(
+    fields,
+    columnKey,
+    allFields
+  );
   return opts[0]?.value ?? "=";
 }
 
 export function resolveSheetColumnOperator(
   fields: Zodula.Field[],
   columnKey: string,
-  stored: IOperator | undefined
+  stored: IOperator | undefined,
+  allFields?: Zodula.Field[] | null
 ): IOperator {
   const allowed = getSupportedOperatorOptionsForSheetColumn(
     fields,
-    columnKey
+    columnKey,
+    allFields
   ).map((o) => o.value);
   if (stored && allowed.includes(stored)) {
     return stored;

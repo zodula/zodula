@@ -139,12 +139,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     // Internal methods
     loadUser: async () => {
         try {
-            const response = await zodula.action("zodula.auth.me")
-            if (response?.user) {
+            const user = await zodula.session.user()
+            if (user) {
                 set({
                     user: {
-                        ...response.user,
-                        id: response.user.id || ""
+                        ...user,
+                        id: user.id || ""
                     }
                 })
             } else {
@@ -164,12 +164,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
                 return
             }
 
-            const response = await zodula.action("zodula.auth.roles")
-            if (response?.roles) {
-                set({ roles: response.roles })
-            } else {
-                set({ roles: [] })
-            }
+            const roles = await zodula.session.roles()
+            set({ roles })
         } catch (err) {
             console.error("Failed to load roles:", err)
             set({ roles: [] })

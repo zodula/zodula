@@ -13,6 +13,45 @@ type ColumnResult = {
   sortable: boolean;
 };
 
+function reportColumnFromItem(
+  item: any,
+  schemaFields: Record<string, any>
+): ColumnResult | null {
+  const fieldName = String(item?.doctype_field || "");
+  if (!fieldName) return null;
+
+  const top = schemaFields[fieldName];
+  if (top) {
+    return {
+      key: fieldName,
+      label: String(item.label || (top as any).label || fieldName),
+      sortable:
+        item.sortable !== 0 &&
+        (top as any).type !== "Reference Table" &&
+        (top as any).type !== "Extend",
+    };
+  }
+
+  const dot = fieldName.indexOf(".");
+  if (dot <= 0) return null;
+  const parentName = fieldName.slice(0, dot);
+  const childName = fieldName.slice(dot + 1);
+  const parentField = schemaFields[parentName];
+  if (!parentField || (parentField as any).type !== "Reference Table") {
+    return null;
+  }
+  const childDoctype = (parentField as any).reference as string;
+  if (!childDoctype) return null;
+  const childMeta = loader.from("doctype").get(childDoctype as any);
+  const childSchema = childMeta?.schema?.fields?.[childName];
+  if (!childSchema) return null;
+  return {
+    key: fieldName,
+    label: String(item.label || (childSchema as any).label || fieldName),
+    sortable: item.sortable !== 0,
+  };
+}
+
 function parseJsonSafe<T>(value: unknown, fallback: T): T {
   if (!value || typeof value !== "string") {
     return fallback;
@@ -139,16 +178,8 @@ export default $action(async (ctx) => {
     const doctypeMeta = loader.from("doctype").get(targetDoctype);
     const schemaFields = doctypeMeta?.schema?.fields ?? {};
     columns = reportItems
-      .filter((item) => !!item?.doctype_field && !!schemaFields[item.doctype_field])
-      .map((item) => {
-        const fieldName = String(item.doctype_field);
-        const field = schemaFields[fieldName];
-        return {
-          key: fieldName,
-          label: String(item.label || field?.label || fieldName),
-          sortable: item.sortable !== 0,
-        };
-      });
+      .map((item) => reportColumnFromItem(item, schemaFields))
+      .filter(Boolean) as ColumnResult[];
   }
 
   if (!columns.length) {

@@ -138,6 +138,7 @@ export class ZodulaDoctypeGetter<
         input: undefined as any,
       });
 
+      // Non-unsafe: File fields pass through formatDocResult (relative paths unchanged)
       return this.options.unsafe
         ? result
         : ZodulaDoctypeHelper.formatDocResult(result, doctype.schema);

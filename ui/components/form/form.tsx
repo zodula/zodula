@@ -354,8 +354,8 @@ export const Form = <T extends Record<string, Zodula.Field>>(
                       );
                       const isFieldReadonly =
                         !!field.readonly ||
-                        (field.only_once === 1 && props.isCreate === false)
-                        props.readonly;
+                        (field.only_once === 1 && props.isCreate === false) ||
+                        !!props.readonly;
                       const isFieldRequired = field.required === 1;
 
                       if (key.startsWith("empty_")) {

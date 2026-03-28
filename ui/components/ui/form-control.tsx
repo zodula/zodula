@@ -96,6 +96,7 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
             data-form-control-multiple={multiple}
             data-form-control-form-data={formData}
             data-form-control-no-print={noPrint}
+            className=""
           >
             <plugin.render
               id={id || fieldKey}

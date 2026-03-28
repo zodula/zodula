@@ -16,6 +16,7 @@ import {
 } from "../components/ui/dropdown-menu";
 import { cn } from "../lib/utils";
 import { useSidebarStore } from "../hooks/use-layout-state";
+import { useEffect } from "react";
 
 // ─── Re-export store hook so existing callers don't need to update imports ────
 export { useSidebarStore } from "../hooks/use-layout-state";
@@ -68,7 +69,8 @@ export interface DeskNavbarLayoutProps {
   primaryAction?: PrimaryAction | PrimaryAction[];
   secondaryActions?: SecondaryAction[];
   actions?: ActionItem[];
-  defaultOpen?: boolean;
+  /** Right panel (desktop/tablet) open by default. Mobile drawer defaults to closed. */
+  defaultRightOpen?: boolean;
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────────
@@ -85,16 +87,39 @@ export const DeskNavbarLayout = ({
   primaryAction,
   secondaryActions = [],
   actions = [],
-  defaultOpen = true,
+  defaultRightOpen = true,
 }: DeskNavbarLayoutProps) => {
   const { fullWidth } = useNavbar();
+  const {
+    leftSidebarOpenDesktop,
+    leftSidebarOpenMobile,
+    setLeftSidebarOpenMobile
+  } = useNavbar();
   const router = useRouter();
   const isDesk = router.pathname.startsWith("/desk");
   const isTabletOrUp = useIsTabletOrUp();
-  const { sidebarOpen, setSidebarOpen, toggleSidebar } = useSidebarStore(
-    router.pathname,
-    defaultOpen
-  );
+  const {
+    desktopOpen,
+    mobileOpen,
+    setMobileOpen,
+    toggleDesktop,
+    toggleMobile,
+  } = useSidebarStore(router.pathname, {
+    defaultDesktopOpen: defaultRightOpen,
+    defaultMobileOpen: false,
+  });
+
+  const rightPanelOpen = isTabletOrUp ? desktopOpen : mobileOpen;
+  const toggleRightPanel = () =>
+    isTabletOrUp ? toggleDesktop() : toggleMobile();
+
+  const leftSidebarOpen = isTabletOrUp ? leftSidebarOpenDesktop : leftSidebarOpenMobile;
+
+  useEffect(() => {
+    if (!isTabletOrUp) {
+      setLeftSidebarOpenMobile(false);
+    }
+  }, [isTabletOrUp, setLeftSidebarOpenMobile]);
 
   // Whether to render the page-header bar
   const hasPageHeader = !!(
@@ -228,26 +253,53 @@ export const DeskNavbarLayout = ({
   return (
     <div className={cn("zd:flex zd:h-screen zd:w-full zd:overflow-hidden", className)}>
       {/* Left navigation sidebar */}
-      <LeftNavSidebar />
+      {isTabletOrUp ? (
+        <LeftNavSidebar />
+      ) : (
+        <Drawer
+          open={leftSidebarOpen}
+          onClose={() => setLeftSidebarOpenMobile(false)}
+          side="left"
+          width="16rem"
+          showCloseButton={false}
+        >
+          <LeftNavSidebar mobileDrawer />
+        </Drawer>
+      )}
 
       {/* Right panel: sticky navbar + content area */}
       <div className="zd:flex zd:flex-col zd:flex-1 zd:min-w-0 zd:overflow-hidden">
         {/* Sticky top bar — panel toggle injected directly to avoid store timing gaps */}
         <DeskNavbar
           panelToggle={
-            rightSidebar ? (
+            <div className="zd:relative zd:shrink-0 no-print">
               <Button
+                type="button"
                 variant="ghost"
-                onClick={toggleSidebar}
-                className="zd:h-8 zd:w-8 zd:p-0! zd:shrink-0 no-print"
-                title={sidebarOpen ? "Close panel" : "Open panel"}
-              >
-                {sidebarOpen
-                  ? <PanelRightClose className="zd:w-4 zd:h-4 zd:text-muted-foreground" />
-                  : <PanelRightOpen className="zd:w-4 zd:h-4 zd:text-muted-foreground" />
+                onClick={toggleRightPanel}
+                disabled={!rightSidebar}
+                className="zd:h-8 zd:w-8 zd:p-0! zd:shrink-0 zd:disabled:pointer-events-none zd:disabled:opacity-40"
+                title={
+                  rightSidebar
+                    ? rightPanelOpen
+                      ? "Close panel"
+                      : "Open panel"
+                    : "No side panel on this page"
                 }
+              >
+                {rightPanelOpen ? (
+                  <PanelRightClose className="zd:w-4 zd:h-4 zd:text-muted-foreground" />
+                ) : (
+                  <PanelRightOpen className="zd:w-4 zd:h-4 zd:text-muted-foreground" />
+                )}
               </Button>
-            ) : undefined
+              {rightSidebar ? (
+                <span
+                  className="zd:pointer-events-none zd:absolute zd:top-1 zd:right-1 zd:h-1 zd:w-1 zd:rounded-full zd:bg-yellow-500 zd:ring-2 zd:ring-background"
+                  aria-hidden
+                />
+              ) : null}
+            </div>
           }
         />
 
@@ -295,12 +347,14 @@ export const DeskNavbarLayout = ({
             {/* Mobile drawer (< tablet) */}
             {!isTabletOrUp && rightSidebar && (
               <Drawer
-                open={sidebarOpen}
-                onClose={() => setSidebarOpen(false)}
+                open={mobileOpen}
+                onClose={() => setMobileOpen(false)}
                 side="right"
-                width="min(300px, 85vw)"
+                width="min(450px, 85vw)"
               >
-                {rightSidebar}
+                <div className="zd:p-4">
+                  {rightSidebar}
+                </div>
               </Drawer>
             )}
           </div>
@@ -310,12 +364,12 @@ export const DeskNavbarLayout = ({
             <div
               className={cn(
                 "zd:flex zd:flex-col zd:shrink-0 zd:transition-all zd:duration-300 zd:ease-in-out zd:overflow-hidden",
-                sidebarOpen
+                desktopOpen
                   ? "zd:w-72 zd:min-w-72 zd:opacity-100"
                   : "zd:w-0 zd:min-w-0 zd:opacity-0"
               )}
             >
-              {sidebarOpen && (
+              {desktopOpen && (
                 <div className="zd:flex zd:flex-col zd:h-full zd:border-l zd:border-border zd:bg-card zd:overflow-y-auto zd:shadow-sm zd:p-3">
                   {rightSidebar}
                 </div>

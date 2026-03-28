@@ -2,7 +2,7 @@ import { z } from "bxo"
 import type { SQLType } from "./type"
 
 interface BaseFieldPluginOptions {
-    fieldType: Zodula.FieldType
+    fieldType: string
     sqlType: SQLType
     // typescript type example: string, number, boolean, "0 | 1", "0 | 1 | 2"
     typescriptType: (fieldConfig: Zodula.Field) => string

@@ -39,6 +39,14 @@ export const DataFieldPlugin = new BaseFieldPlugin({
     textZodSchema: () => `z.string()`
 })
 
+export const ScannerFieldPlugin = new BaseFieldPlugin({
+    fieldType: "Scanner" as any,
+    sqlType: "TEXT",
+    typescriptType: () => "string",
+    zodSchema: () => z.string(),
+    textZodSchema: () => `z.string()`
+})
+
 export const EmailFieldPlugin = new BaseFieldPlugin({
     fieldType: "Email",
     sqlType: "TEXT",
@@ -255,6 +263,7 @@ export const REGISTERED_PLUGINS = {
     "Long Text": LongTextFieldPlugin,
     Password: PasswordFieldPlugin,
     Data: DataFieldPlugin,
+    Scanner: ScannerFieldPlugin,
     Email: EmailFieldPlugin,
     Integer: IntegerFieldPlugin,
     Float: FloatFieldPlugin,

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react"
+import React, { useState, useRef, useEffect, useMemo } from "react"
 import { createPortal } from "react-dom"
 import { cn } from "../../lib/utils"
 import * as LucideIcons from "lucide-react"
@@ -45,9 +45,17 @@ export const IconSelectPopup: React.FC<IconSelectPopupProps> = ({
   className = ""
 }) => {
   const [focusedIndex, setFocusedIndex] = useState(-1)
+  const [query, setQuery] = useState("")
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 })
   const containerRef = useRef<HTMLDivElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  const filteredIcons = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return availableIcons
+    return availableIcons.filter((iconName) => iconName.toLowerCase().includes(q))
+  }, [availableIcons, query])
 
   // Calculate dropdown position
   const calculateDropdownPosition = () => {
@@ -71,7 +79,7 @@ export const IconSelectPopup: React.FC<IconSelectPopupProps> = ({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!isOpen) return
 
-    const totalIcons = availableIcons.length
+    const totalIcons = filteredIcons.length
 
     switch (e.key) {
       case 'ArrowDown':
@@ -89,7 +97,7 @@ export const IconSelectPopup: React.FC<IconSelectPopupProps> = ({
       case 'Enter':
         e.preventDefault()
         if (focusedIndex >= 0 && focusedIndex < totalIcons) {
-          handleIconSelect(availableIcons[focusedIndex] || "")
+          handleIconSelect(filteredIcons[focusedIndex] || "")
         }
         break
       case 'Escape':
@@ -140,19 +148,27 @@ export const IconSelectPopup: React.FC<IconSelectPopupProps> = ({
   // Scroll focused icon into view
   useEffect(() => {
     if (focusedIndex >= 0 && dropdownRef.current) {
-      const focusedElement = dropdownRef.current.children[focusedIndex] as HTMLElement
+      const focusedElement = dropdownRef.current.querySelector(
+        `[data-icon-index="${focusedIndex}"]`
+      ) as HTMLElement | null
       if (focusedElement) {
         focusedElement.scrollIntoView({ block: 'nearest' })
       }
     }
-  }, [focusedIndex])
+  }, [focusedIndex, filteredIcons.length])
 
   // Reset focus when opening
   useEffect(() => {
     if (isOpen) {
       setFocusedIndex(-1)
+      setQuery("")
+      setTimeout(() => searchInputRef.current?.focus(), 0)
     }
   }, [isOpen])
+
+  useEffect(() => {
+    setFocusedIndex(-1)
+  }, [query])
 
   if (!isOpen) return null
 
@@ -175,9 +191,17 @@ export const IconSelectPopup: React.FC<IconSelectPopupProps> = ({
           onKeyDown={handleKeyDown}
           tabIndex={-1}
         >
-          <div className="zd:p-2">
-            <div className="zd:grid zd:grid-cols-6 zd:gap-2">
-              {availableIcons.map((iconName, index) => {
+          <div className="zd:p-2 zd:space-y-2">
+            <input
+              ref={searchInputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search icon..."
+              className="zd:w-full zd:h-8 zd:px-2 zd:text-sm zd:border zd:border-border zd:rounded-md zd:bg-background"
+            />
+            <div className="zd:max-h-[240px] zd:overflow-y-auto">
+              <div className="zd:grid zd:grid-cols-2 zd:gap-2">
+              {filteredIcons.map((iconName, index) => {
                 const Icon = (LucideIcons as any)[iconName]
                 const isSelected = selectedIcon === iconName
 
@@ -185,8 +209,9 @@ export const IconSelectPopup: React.FC<IconSelectPopupProps> = ({
                   <button
                     key={iconName}
                     type="button"
+                    data-icon-index={index}
                     className={cn(
-                      "zd:flex zd:flex-col zd:items-center zd:justify-center zd:p-3 zd:rounded-full zd:w-10 zd:h-10",
+                      "zd:flex zd:items-center zd:justify-start zd:gap-2 zd:p-2 zd:rounded-md",
                       "zd:transition-colors zd:cursor-pointer",
                       "zd:hover:bg-muted zd:focus:bg-muted zd:focus:outline-none",
                       isSelected ? "zd:bg-primary zd:text-primary-foreground" : "",
@@ -196,10 +221,17 @@ export const IconSelectPopup: React.FC<IconSelectPopupProps> = ({
                     onMouseEnter={() => setFocusedIndex(index)}
                     tabIndex={-1}
                   >
-                    {Icon && <Icon className="zd:w-5 zd:h-5" />}
+                    {Icon && <Icon className="zd:w-4 zd:h-4 zd:shrink-0" />}
+                    <span className="zd:text-xs zd:text-left zd:truncate">{iconName}</span>
                   </button>
                 )
               })}
+              </div>
+              {filteredIcons.length === 0 && (
+                <div className="zd:px-2 zd:py-6 zd:text-sm zd:text-muted-foreground">
+                  No icon found.
+                </div>
+              )}
             </div>
           </div>
         </div>,

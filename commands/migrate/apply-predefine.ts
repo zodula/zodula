@@ -631,6 +631,7 @@ async function upsertDoctype(
       is_child_doctype: doctype.config.is_child_doctype ? 1 : 0,
       is_quick_entry: doctype.config.is_quick_entry ? 1 : 0,
       additional_connections: doctype.config.additional_connections || null,
+      default_show_id_qrcode: doctype.config.default_show_id_qrcode ? 1 : 0,
       ...basePayload,
     } satisfies Required<Zodula.SelectDoctype<"Doctype">>;
 

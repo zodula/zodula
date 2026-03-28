@@ -33,9 +33,16 @@ export const SelectPlugin = new FormPlugin({
             />
         );
     },
+    // No hooks here — cellRender runs as a plain function from ListTable/ListView, not as a component.
     cellRender: (props) => {
-        const { t } = useTranslation();
-        return <span className="zd:truncate zd:text-sm zd:bg-muted zd:rounded zd:px-2 zd:py-1">{t(String(props.value || "-"))}</span>;
+        const raw = props.value;
+        const display =
+            raw === null || raw === undefined || raw === "" ? "-" : String(raw);
+        return (
+            <span className="zd:truncate zd:text-sm zd:bg-muted zd:rounded zd:px-2 zd:py-1">
+                {display}
+            </span>
+        );
     },
     renderFilter: (props) => {
         const { t } = useTranslation();

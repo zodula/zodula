@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { ClientFieldHelper } from "@/zodula/client/field";
 import { FilterContent } from "@/zodula/ui/components/list/FilterContent";
 import { ListTable, type ListColumn } from "@/zodula/ui/components/list/ListTable";
+import { plugins } from "@/zodula/ui/components/form/plugins";
 import { zodula } from "@/zodula/client";
 import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
 
@@ -18,8 +19,12 @@ export interface MultiSelectDoctypeDialogInitialData {
   labelField?: string;
   /** Field names for the standard filter form (filter grid); when set, overrides doctype list view fields for filters */
   standard_filter_fields?: string[];
-  /** Field names for table columns (e.g. product_name, customer_name, price, uom, from_date, until_date) */
+  /** Field names for table columns (e.g. item_name, customer_name, price, uom, from_date, until_date) */
   columns?: string[];
+  /** Server list sort field (passed to select_docs; default updated_at) */
+  sort?: string;
+  /** Server list sort direction (default desc) */
+  order?: "asc" | "desc";
   /** When true, only one item can be selected; onClose receives string | null instead of string[] | null */
   single?: boolean;
   /** When true (default), the filters section starts collapsed; pass false to open it by default */
@@ -116,8 +121,15 @@ export function MultiSelectDoctypeDialog({
   );
   const standardFilterFieldNames = initialData?.standard_filter_fields;
   const columnsFieldNames = initialData?.columns;
+  const initialSort = initialData?.sort ?? "updated_at";
+  const initialOrder = initialData?.order ?? "desc";
   const single = initialData?.single === true;
   const extendFields = initialData?.extend_fields ?? [];
+
+  const [listSortState, setListSortState] = useState(() => ({
+    sort: initialSort,
+    order: initialOrder as "asc" | "desc",
+  }));
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [standardFilterValues, setStandardFilterValues] = useState<Record<string, any>>(() =>
@@ -200,8 +212,8 @@ export function MultiSelectDoctypeDialog({
     try {
       const res = await zodula.doc.select_docs(doctype as any, {
         limit,
-        sort: "updated_at",
-        order: "desc",
+        sort: listSortState.sort,
+        order: listSortState.order,
         filters: appliedFilters,
       });
       const list = (res?.docs ?? []) as Record<string, any>[];
@@ -212,7 +224,7 @@ export function MultiSelectDoctypeDialog({
     } finally {
       setLoading(false);
     }
-  }, [doctype, limit, appliedFilters]);
+  }, [doctype, limit, appliedFilters, listSortState.sort, listSortState.order]);
 
   useEffect(() => {
     if (!isOpen || !doctype) return;
@@ -220,7 +232,12 @@ export function MultiSelectDoctypeDialog({
   }, [isOpen, doctype, fetchDocs]);
 
   useEffect(() => {
-    if (!isOpen) {
+    const wasOpen = prevIsOpenRef.current;
+    const opened = !wasOpen && isOpen;
+    const closed = wasOpen && !isOpen;
+    prevIsOpenRef.current = isOpen;
+
+    if (closed) {
       setSelected(new Set());
       setDocs([]);
       setStandardFilterValues(defaultFiltersToStandardValues(defaultFilters));
@@ -234,10 +251,21 @@ export function MultiSelectDoctypeDialog({
       const next = dedupeFilters([...fromStandard, ...initialAdvancedFilters]);
       appliedFiltersJsonRef.current = JSON.stringify(next);
       setAppliedFilters(next);
-    } else {
-      setFiltersExpanded(!(initialData?.defaultFiltersCollapsed ?? true));
+      setListSortState({
+        sort: initialData?.sort ?? "updated_at",
+        order: (initialData?.order ?? "desc") as "asc" | "desc",
+      });
+      return;
     }
-  }, [isOpen, defaultFilters, initialAdvancedFilters, initialData?.defaultFiltersCollapsed, initialData?.extend_values, extendFields]);
+
+    if (opened) {
+      setFiltersExpanded(!(initialData?.defaultFiltersCollapsed ?? true));
+      setListSortState({
+        sort: initialData?.sort ?? "updated_at",
+        order: (initialData?.order ?? "desc") as "asc" | "desc",
+      });
+    }
+  }, [isOpen, defaultFilters, initialAdvancedFilters, initialData?.defaultFiltersCollapsed, initialData?.extend_values, initialData?.sort, initialData?.order, extendFields]);
 
   const getMissingExtendRequired = () => {
     return extendFields.filter((field) => {
@@ -251,6 +279,7 @@ export function MultiSelectDoctypeDialog({
   /** Debounce 500ms: apply filters after user stops typing in standard filters or FilterContent */
   const applyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appliedFiltersJsonRef = useRef<string>(JSON.stringify(initialAppliedFilters));
+  const prevIsOpenRef = useRef<boolean>(isOpen);
   useEffect(() => {
     applyDebounceRef.current && clearTimeout(applyDebounceRef.current);
     applyDebounceRef.current = setTimeout(() => {
@@ -288,6 +317,14 @@ export function MultiSelectDoctypeDialog({
     setAppliedFilters(standardValuesToFilters(standardFilterValues));
   };
 
+  const handleListSort = (field: string) => {
+    setListSortState((s) =>
+      s.sort !== field
+        ? { sort: field, order: "asc" as const }
+        : { sort: field, order: s.order === "asc" ? ("desc" as const) : ("asc" as const) }
+    );
+  };
+
   const toggle = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -311,12 +348,22 @@ export function MultiSelectDoctypeDialog({
 
   const listColumns: ListColumn[] = useMemo(
     () =>
-      tableColumnFields.map((col: any) => ({
-        key: col.name,
-        label: t(col.label || col.name || ""),
-        sortable: false,
-        render: (doc: any) => doc[col.name] != null ? String(doc[col.name]) : "",
-      })),
+      tableColumnFields.map((col: any) => {
+        const plugin = plugins.find((p) => p.types.includes(col.type as never));
+        return {
+          key: col.name,
+          label: t(col.label || col.name || ""),
+          sortable: col.type !== "Reference Table" && col.type !== "Extend",
+          render: plugin
+            ? (doc: any) =>
+                plugin.cellRender({
+                  fieldOptions: col,
+                  value: doc[col.name],
+                  doc,
+                })
+            : (doc: any) => (doc[col.name] != null ? String(doc[col.name]) : ""),
+        };
+      }),
     [tableColumnFields, t]
   );
 
@@ -439,6 +486,9 @@ export function MultiSelectDoctypeDialog({
             <ListTable
               columns={listColumns}
               docs={docs}
+              sort={listSortState.sort}
+              order={listSortState.order}
+              onSort={handleListSort}
               selected={selected}
               setSelected={setSelected}
               compact

@@ -491,6 +491,7 @@ export class ZodulaDoctypeSelector<
             }
           }
 
+          // Non-unsafe: safe() → formatDocResult (File paths as stored)
           return this.options.unsafe
             ? doc
             : zodula.utils.safe(this.doctypeName, doc);

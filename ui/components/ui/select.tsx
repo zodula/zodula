@@ -27,6 +27,8 @@ const getDisplayText = (
 export interface SelectOption {
   value: string;
   label: string;
+  /** Rich label in the dropdown (e.g. highlighted search). Input / filtering still use `label`. */
+  labelContent?: React.ReactNode;
   subtitle?: string;
   disabled?: boolean;
   icon?: keyof typeof LucideIcons;
@@ -69,6 +71,8 @@ export interface SelectProps {
   displayMode?: "label" | "value" | "key";
   autocomplete?: 'on' | 'off';
   hideChevron?: boolean;
+  /** When true, options are already filtered server-side; skip client filter and relevance sort */
+  serverFiltered?: boolean;
 }
 
 const Select = ({
@@ -99,6 +103,7 @@ const Select = ({
   displayMode = "value",
   autocomplete = "off",
   hideChevron = false,
+  serverFiltered = false,
 }: SelectProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
@@ -174,7 +179,7 @@ const Select = ({
 
   // Filter options based on search
   let filteredOptions =
-    searchable && searchValue
+    searchable && searchValue && !serverFiltered
       ? options.filter((option) => {
         const searchTerm =
           multiple && searchValue.includes(",")
@@ -187,7 +192,12 @@ const Select = ({
       : options;
 
   // Sort filtered options by relevance
-  if (searchable && searchValue && filteredOptions.length > 0) {
+  if (
+    searchable &&
+    searchValue &&
+    filteredOptions.length > 0 &&
+    !serverFiltered
+  ) {
     const searchTermForSorting =
       multiple && searchValue.includes(",")
         ? searchValue.split(",").pop()?.trim() || ""
@@ -717,11 +727,11 @@ const Select = ({
                         <div className="zd:flex zd:flex-col zd:flex-1">
                           <div
                             className={cn(
-                              "zd:text-sm zd:font-medium zd:flex zd:items-center zd:gap-2",
+                              "zd:text-sm zd:font-medium zd:block zd:min-w-0 zd:leading-normal",
                               isSelected ? "zd:text-primary" : ""
                             )}
                           >
-                            {option.label}
+                            {option.labelContent ?? option.label}
                           </div>
                           {option.subtitle && (
                             <div className="zd:text-xs zd:text-muted-foreground zd:mt-0.5">

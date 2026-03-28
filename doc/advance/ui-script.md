@@ -37,7 +37,7 @@ export default function MyDoctypeScripts() {
 | `before_update` | Before updating an existing document |
 | `after_update` | After update |
 | `field_name` | When a top-level field changes (e.g. `customer`) |
-| `table_name.child_field` | When a table child field changes (e.g. `delivery_note_items.product`) |
+| `table_name.child_field` | When a table child field changes (e.g. `delivery_note_items.item`) |
 
 ### Form Context (`frm`)
 
@@ -77,20 +77,20 @@ For reference tables (child doctypes), use the pattern `tableName.rowIndex.field
 
 | Path | Meaning |
 |------|---------|
-| `delivery_note_items.0.product` | Row at index 0, field `product` |
-| `delivery_note_items.1.product_name` | Row at index 1, field `product_name` |
+| `delivery_note_items.0.item` | Row at index 0, field `item` |
+| `delivery_note_items.1.item_name` | Row at index 1, field `item_name` |
 
-In **table field change handlers** (e.g. `"delivery_note_items.product"`), `frm.idx` is the row index:
+In **table field change handlers** (e.g. `"delivery_note_items.item"`), `frm.idx` is the row index:
 
 ```ts
 zui.form.on("Delivery Note", {
-  "delivery_note_items.product": async function (frm) {
+  "delivery_note_items.item": async function (frm) {
     const idx = frm.idx;  // 0, 1, 2, ...
-    const productId = frm.get_value(`delivery_note_items.${idx}.product`);
-    const product = await zodula.doc.get_doc("Product", productId);
-    if (product) {
-      await frm.set_value(`delivery_note_items.${idx}.product_name`, product.product_name ?? "");
-      await frm.set_value(`delivery_note_items.${idx}.uom`, product.default_uom ?? "");
+    const itemId = frm.get_value(`delivery_note_items.${idx}.item`);
+    const item = await zodula.doc.get_doc("Item", itemId);
+    if (item) {
+      await frm.set_value(`delivery_note_items.${idx}.item_name`, item.item_name ?? "");
+      await frm.set_value(`delivery_note_items.${idx}.uom`, item.default_uom ?? "");
     }
   },
 });
@@ -101,19 +101,19 @@ zui.form.on("Delivery Note", {
 Use index `-1` to target the **default configuration** for new rows (applies to all new rows added to the table):
 
 ```ts
-// Set filters on the product field for all new rows
-frm.set_df_property("delivery_note_items.-1.product", "filters", 
-  JSON.stringify([["product_customer.customer", "=", frm.get_value("customer")]])
+// Set filters on the item field for all new rows
+frm.set_df_property("delivery_note_items.-1.item", "filters", 
+  JSON.stringify([["item_customer.customer", "=", frm.get_value("customer")]])
 );
 
 // Clear filters
-frm.set_df_property("delivery_note_items.-1.product", "filters", null);
+frm.set_df_property("delivery_note_items.-1.item", "filters", null);
 ```
 
 | Path | Meaning |
 |------|---------|
-| `delivery_note_items.-1.product` | Default config for `product` in new rows |
-| `delivery_note_items.0.product` | Config for `product` in row at index 0 only |
+| `delivery_note_items.-1.item` | Default config for `item` in new rows |
+| `delivery_note_items.0.item` | Config for `item` in row at index 0 only |
 
 ### Extend fields: `extend_field.child_field`
 
@@ -139,7 +139,7 @@ Reads a value by field path. Works for top-level, table, and extend paths.
 const customer = frm.get_value("customer");
 
 // Table row
-const productName = frm.get_value(`delivery_note_items.${frm.idx}.product_name`);
+const itemName = frm.get_value(`delivery_note_items.${frm.idx}.item_name`);
 
 // Extend
 const street = frm.get_value("billing_address.street");
@@ -165,8 +165,8 @@ These functions control **field metadata** (df = docfield), such as visibility, 
 | Context | Path format | Example |
 |---------|-------------|---------|
 | Top-level field | `field_name` | `"customer"` |
-| Table default (new rows) | `table.-1.field` | `"delivery_note_items.-1.product"` |
-| Table row at index | `table.index.field` | `"delivery_note_items.0.product"` |
+| Table default (new rows) | `table.-1.field` | `"delivery_note_items.-1.item"` |
+| Table row at index | `table.index.field` | `"delivery_note_items.0.item"` |
 
 ### set_df_property(fieldPath, property, value)
 
@@ -178,18 +178,18 @@ await frm.set_df_property("internal_notes", "hidden", 1);
 await frm.set_df_property("doc_status", "read_only", 1);
 
 // Set filters on a reference field (for new rows)
-await frm.set_df_property("delivery_note_items.-1.product", "filters", 
-  JSON.stringify([["product_customer.customer", "=", frm.get_value("customer")]])
+await frm.set_df_property("delivery_note_items.-1.item", "filters", 
+  JSON.stringify([["item_customer.customer", "=", frm.get_value("customer")]])
 );
 
 // Clear filters
-await frm.set_df_property("delivery_note_items.-1.product", "filters", null);
+await frm.set_df_property("delivery_note_items.-1.item", "filters", null);
 ```
 
 ### get_df_property(fieldPath, property)
 
 ```ts
-const filters = frm.get_df_property("delivery_note_items.-1.product", "filters");
+const filters = frm.get_df_property("delivery_note_items.-1.item", "filters");
 const isHidden = frm.get_df_property("internal_notes", "hidden");
 ```
 
@@ -208,12 +208,12 @@ const isHidden = frm.get_df_property("internal_notes", "hidden");
 
 When a **table child field** changes, scripts run in two scopes:
 
-1. **Parent doctype** with event `table_name.child_field` (e.g. `delivery_note_items.product`)
+1. **Parent doctype** with event `table_name.child_field` (e.g. `delivery_note_items.item`)
    - `frm.doc` = full document
    - `frm.get_value("table.0.field")` = full path
    - `frm.idx` = row index
 
-2. **Child doctype** with event `child_field` (e.g. `product`)
+2. **Child doctype** with event `child_field` (e.g. `item`)
    - `frm.doctype` = child doctype name
    - `frm.doc` = current row only
    - `frm.get_value("field")` = field name only (no table prefix)
@@ -224,13 +224,13 @@ Example in child scope:
 
 ```ts
 zui.form.on("Delivery Note Item", {
-  product: async function (frm) {
+  item: async function (frm) {
     // frm.doc = current row
-    // frm.set_value("product_name", x) updates delivery_note_items.{idx}.product_name
-    const productId = frm.get_value("product");
-    const product = await zodula.doc.get_doc("Product", productId);
-    if (product) {
-      await frm.set_value("product_name", product.product_name ?? "");
+    // frm.set_value("item_name", x) updates delivery_note_items.{idx}.item_name
+    const itemId = frm.get_value("item");
+    const item = await zodula.doc.get_doc("Item", itemId);
+    if (item) {
+      await frm.set_value("item_name", item.item_name ?? "");
     }
   },
 });
@@ -336,23 +336,23 @@ export default function DeliveryOrderScripts() {
         const customer = await zodula.doc.get_doc("Customer", frm.get_value("customer"));
         if (customer) {
           await frm.set_value("customer_name", customer?.name ?? "");
-          if (frm.get_value("filter_product_by_customer") === 1) {
-            await frm.set_df_property("delivery_note_items.-1.product", "filters",
-              JSON.stringify([["product_customer.customer", "=", frm.get_value("customer")]]));
+          if (frm.get_value("filter_item_by_customer") === 1) {
+            await frm.set_df_property("delivery_note_items.-1.item", "filters",
+              JSON.stringify([["item_customer.customer", "=", frm.get_value("customer")]]));
           }
         } else {
           await frm.set_value("customer_name", "");
-          await frm.set_df_property("delivery_note_items.-1.product", "filters", null);
+          await frm.set_df_property("delivery_note_items.-1.item", "filters", null);
         }
       },
-      "delivery_note_items.product": async (frm) => {
+      "delivery_note_items.item": async (frm) => {
         const idx = frm.idx;
-        const productId = frm.get_value(`delivery_note_items.${idx}.product`);
-        if (productId) {
-          const product = await zodula.doc.get_doc("Product", productId);
-          if (product) {
-            await frm.set_value(`delivery_note_items.${idx}.product_name`, product.product_name ?? "");
-            await frm.set_value(`delivery_note_items.${idx}.uom`, product.default_uom ?? "");
+        const itemId = frm.get_value(`delivery_note_items.${idx}.item`);
+        if (itemId) {
+          const item = await zodula.doc.get_doc("Item", itemId);
+          if (item) {
+            await frm.set_value(`delivery_note_items.${idx}.item_name`, item.item_name ?? "");
+            await frm.set_value(`delivery_note_items.${idx}.uom`, item.default_uom ?? "");
           }
         }
       },

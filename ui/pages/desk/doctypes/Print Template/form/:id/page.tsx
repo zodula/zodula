@@ -38,7 +38,6 @@ export interface PrintTemplateSettingsValues {
   marginLeft: number | "";
   isDefault: boolean;
   defaultLetterHead: string;
-  defaultLanguage: string;
   showIdQrCode: boolean;
 }
 
@@ -61,7 +60,6 @@ function PrintTemplateSettingsPopup({
   const [marginLeft, setMarginLeft] = React.useState<number | "">(initial?.marginLeft ?? 10);
   const [isDefault, setIsDefault] = React.useState(initial?.isDefault ?? false);
   const [defaultLetterHead, setDefaultLetterHead] = React.useState(initial?.defaultLetterHead ?? "");
-  const [defaultLanguage, setDefaultLanguage] = React.useState(initial?.defaultLanguage ?? "");
   const [showIdQrCode, setShowIdQrCode] = React.useState(initial?.showIdQrCode ?? true);
   React.useEffect(() => {
     if (initial) {
@@ -75,10 +73,9 @@ function PrintTemplateSettingsPopup({
       setMarginLeft(initial.marginLeft ?? 10);
       setIsDefault(initial.isDefault ?? false);
       setDefaultLetterHead(initial.defaultLetterHead ?? "");
-      setDefaultLanguage(initial.defaultLanguage ?? "");
       setShowIdQrCode(initial.showIdQrCode ?? true);
     }
-  }, [initial?.name, initial?.format, initial?.customWidth, initial?.customHeight, initial?.marginTop, initial?.marginRight, initial?.marginBottom, initial?.marginLeft, initial?.isDefault, initial?.defaultLetterHead, initial?.defaultLanguage]);
+  }, [initial?.name, initial?.format, initial?.customWidth, initial?.customHeight, initial?.marginTop, initial?.marginRight, initial?.marginBottom, initial?.marginLeft, initial?.isDefault, initial?.defaultLetterHead]);
   const handleApply = () => {
     onApply({
       name: (name.trim() || initial?.name) ?? "",
@@ -93,7 +90,6 @@ function PrintTemplateSettingsPopup({
       marginLeft,
       isDefault,
       defaultLetterHead,
-      defaultLanguage,
       showIdQrCode,
     });
     onClose();
@@ -134,13 +130,6 @@ function PrintTemplateSettingsPopup({
             field={{ type: "Reference", reference: "Letter Head" }}
             value={defaultLetterHead}
             onChange={(_k, v) => setDefaultLetterHead(v ?? "")}
-          />
-          <FormControl
-            label="Default Language"
-            fieldKey="default_language"
-            field={{ type: "Reference", reference: "Language" }}
-            value={defaultLanguage}
-            onChange={(_k, v) => setDefaultLanguage(v ?? "")}
           />
         </div>
       </section>
@@ -306,7 +295,6 @@ export default function PrintTemplateFormPage() {
   const [isHtml, setIsHtml] = useState(false);
   const [isDefault, setIsDefault] = useState(false);
   const [defaultLetterHead, setDefaultLetterHead] = useState("");
-  const [defaultLanguage, setDefaultLanguage] = useState("");
   const [showIdQrCode, setShowIdQrCodeState] = useState(true);
 
   // Fetched items snapshot for dirty check (non-HTML mode); updated when items load or after save
@@ -332,7 +320,6 @@ export default function PrintTemplateFormPage() {
     setMarginLeft(d.margin_left != null && d.margin_left !== "" ? Number(d.margin_left) : 10);
     setIsDefault(d.is_default === 1 || d.is_default === true);
     setDefaultLetterHead(d.default_letter_head ?? "");
-    setDefaultLanguage(d.default_language ?? "");
     setShowIdQrCodeState(d.show_id_qrcode === 0 ? false : true);
     const tableItems = Array.isArray(d.print_template_items) ? d.print_template_items : [];
     setItems(tableItems.map(docToItem));
@@ -360,7 +347,6 @@ export default function PrintTemplateFormPage() {
         margin_left: marginLeft !== "" ? marginLeft : undefined,
         is_default: isDefault ? 1 : 0,
         default_letter_head: defaultLetterHead || undefined,
-        default_language: defaultLanguage || undefined,
       show_id_qrcode: showIdQrCode ? 1 : 0,
         html_content: html,
         css_content: css,
@@ -383,7 +369,7 @@ export default function PrintTemplateFormPage() {
     } finally {
       setSaving(false);
     }
-  }, [id, doc, isHtml, name, heading, docNameExpr, format, customWidth, customHeight, marginTop, marginRight, marginBottom, marginLeft, isDefault, defaultLetterHead, defaultLanguage, html, css, js, items, reload, navigate, showIdQrCode]);
+  }, [id, doc, isHtml, name, heading, docNameExpr, format, customWidth, customHeight, marginTop, marginRight, marginBottom, marginLeft, isDefault, defaultLetterHead, html, css, js, items, reload, navigate, showIdQrCode]);
 
   const doctypeForPalette = useMemo(() => (doc as any)?.doctype ?? "", [(doc as any)?.doctype]);
 
@@ -409,7 +395,6 @@ export default function PrintTemplateFormPage() {
       marginLeft: d.margin_left != null && d.margin_left !== "" ? Number(d.margin_left) : 10,
       isDefault: d.is_default === 1 || d.is_default === true,
       defaultLetterHead: d.default_letter_head ?? "",
-      defaultLanguage: d.default_language ?? "",
       showIdQrCode: d.show_id_qrcode === 0 ? false : true,
     };
     const docDirty =
@@ -429,11 +414,10 @@ export default function PrintTemplateFormPage() {
       marginLeft !== fetched.marginLeft ||
       isDefault !== fetched.isDefault ||
       defaultLetterHead !== fetched.defaultLetterHead ||
-      defaultLanguage !== fetched.defaultLanguage ||
       showIdQrCode !== fetched.showIdQrCode;
     if (isHtml) return docDirty;
     return docDirty || JSON.stringify(items) !== fetchedItemsJsonRef.current;
-  }, [doc, isHtml, name, html, css, js, heading, docNameExpr, format, customWidth, customHeight, marginTop, marginRight, marginBottom, marginLeft, isDefault, defaultLetterHead, defaultLanguage, items]);
+  }, [doc, isHtml, name, html, css, js, heading, docNameExpr, format, customWidth, customHeight, marginTop, marginRight, marginBottom, marginLeft, isDefault, defaultLetterHead, items]);
 
   const openSettingsPopup = useCallback(() => {
     popup(
@@ -453,7 +437,6 @@ export default function PrintTemplateFormPage() {
           marginLeft,
           isDefault,
           defaultLetterHead,
-          defaultLanguage,
           showIdQrCode,
         },
         onApply: (v: PrintTemplateSettingsValues) => {
@@ -469,12 +452,11 @@ export default function PrintTemplateFormPage() {
           setMarginLeft(v.marginLeft);
           setIsDefault(v.isDefault);
           setDefaultLetterHead(v.defaultLetterHead);
-          setDefaultLanguage(v.defaultLanguage);
           setShowIdQrCodeState(v.showIdQrCode);
         },
       }
     );
-  }, [name, heading, docNameExpr, format, customWidth, customHeight, marginTop, marginRight, marginBottom, marginLeft, isDefault, defaultLetterHead, defaultLanguage]);
+  }, [name, heading, docNameExpr, format, customWidth, customHeight, marginTop, marginRight, marginBottom, marginLeft, isDefault, defaultLetterHead]);
 
   const actionSection = (
     <>
@@ -514,7 +496,7 @@ export default function PrintTemplateFormPage() {
       title={id ?? ""}
       primaryAction={saveAction}
       actionSection={actionSection}
-      defaultOpen={false}
+      defaultRightOpen={false}
     >
       {isHtml ? (
         <ZodulaHtmlBuilder

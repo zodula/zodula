@@ -6,6 +6,7 @@ import { cn } from "@/zodula/ui/lib/utils";
 
 export const TextInputPlugin = new FormPlugin({
   types: ["Text", "Password", "Integer", "Float", "Data", "Email"] as const,
+  quickFilterOperator: "LIKE",
   render: (props) => {
     const inputRef = useRef<HTMLInputElement>(null);
     const isUserTypingRef = useRef(false);

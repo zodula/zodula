@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { Select, type SelectOption } from "../ui/select";
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, type ReactNode } from "react";
 import { zodula } from "@/zodula/client";
 import { useRouter } from "../router";
 import {
@@ -11,16 +11,17 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
-import { UserIcon, BookIcon, FileIcon, PanelLeftOpen, Search, X } from "lucide-react";
+import { UserIcon, PanelLeftOpen, Search, X, ScanLine } from "lucide-react";
 import { useAuth } from "../../hooks/use-auth";
-import { useDocListAll } from "../../hooks/use-doc-list-all";
 import { useTranslation } from "../../hooks/use-translation";
 import { AboutZodulaDialog } from "../dialogs/about-zodula-dialog";
 import { confirm, popup } from "../ui/popit";
 import { useNavbar } from "../../hooks/use-navbar";
-import { cn } from "../../lib/utils";
 import { LanguageSelection } from "./language-selection";
 import { Breadcrumb } from "./breadcrumb";
+import { useIsTabletOrUp } from "../../hooks/use-media-query";
+import { ScannerDialog } from "../form/plugins/scanner";
+import { useDocListAll } from "../../hooks/use-doc-list-all";
 
 export interface DeskNavbarProps {
   children?: React.ReactNode;
@@ -28,87 +29,395 @@ export interface DeskNavbarProps {
   panelToggle?: React.ReactNode;
 }
 
+type DeskSearchPayload = {
+  doctypes: { name: string; label: string; listHref: string }[];
+  pages: { name: string; href: string }[];
+  docs: {
+    doctype: string;
+    doctypeLabel: string;
+    name: string;
+    formHref: string;
+  }[];
+};
+
+const DESK_SEARCH_EMPTY_DOCS: DeskSearchPayload["docs"] = [];
+
+/** Wait after last keystroke before doc-id search (empty query clears immediately). */
+const DESK_SEARCH_DEBOUNCE_MS = 500;
+
+function isCheckOn(v: unknown): boolean {
+  return v === 1 || v === "1" || v === true;
+}
+
+function isChildDoctypeRow(d: Record<string, unknown>): boolean {
+  const v = d.is_child_doctype;
+  return v === 1 || v === "1" || v === true;
+}
+
+/**
+ * Fuzzy score for ranking: lower is better. POSITIVE_INFINITY = no match.
+ * Prefers contiguous substring, then subsequence (characters of q in order, gaps allowed).
+ */
+function deskSearchFuzzyScore(qRaw: string, text: string): number {
+  const q = qRaw.trim().toLowerCase();
+  const hay = String(text).toLowerCase();
+  if (!q) return 0;
+  const idx = hay.indexOf(q);
+  if (idx >= 0) return idx;
+  let qi = 0;
+  let gaps = 0;
+  let last = -1;
+  for (let i = 0; i < hay.length && qi < q.length; i++) {
+    if (hay[i] === q[qi]) {
+      if (last >= 0) gaps += i - last - 1;
+      last = i;
+      qi++;
+    }
+  }
+  if (qi < q.length) return Number.POSITIVE_INFINITY;
+  return 1000 + gaps;
+}
+
+function deskSearchBestFuzzyScore(qRaw: string, parts: string[]): number {
+  let best = Number.POSITIVE_INFINITY;
+  for (const p of parts) {
+    const s = deskSearchFuzzyScore(qRaw, p);
+    if (s < best) best = s;
+  }
+  return best;
+}
+
+/** True if `q` is empty, or fuzzy-matches any candidate (substring or subsequence). */
+function deskSearchMatchesQuery(qRaw: string, parts: string[]): boolean {
+  if (!qRaw.trim()) return true;
+  return deskSearchBestFuzzyScore(qRaw, parts) < Number.POSITIVE_INFINITY;
+}
+
+/** Code-unit indices in `text` matching the query (substring or fuzzy subsequence). */
+function deskSearchHighlightIndices(query: string, text: string): Set<number> {
+  const q = query.trim();
+  const set = new Set<number>();
+  if (!q || !text) return set;
+  const hay = text.toLowerCase();
+  const ql = q.toLowerCase();
+  const idx = hay.indexOf(ql);
+  if (idx >= 0) {
+    for (let i = 0; i < ql.length; i++) set.add(idx + i);
+    return set;
+  }
+  let qi = 0;
+  for (let i = 0; i < hay.length && qi < ql.length; i++) {
+    if (hay[i] === ql[qi]) {
+      set.add(i);
+      qi++;
+    }
+  }
+  return set;
+}
+
+/** Include any code unit that shares a grapheme cluster with a highlighted unit (fixes split surrogate pairs). */
+function expandHighlightIndicesToGraphemeClusters(text: string, indices: Set<number>): Set<number> {
+  if (typeof Intl === "undefined" || typeof Intl.Segmenter !== "function") {
+    return new Set(indices);
+  }
+  const out = new Set<number>();
+  indices.forEach((i) => out.add(i));
+  const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+  for (const data of segmenter.segment(text) as Iterable<Intl.SegmentData>) {
+    const start = data.index;
+    const end = start + data.segment.length;
+    let touched = false;
+    for (let i = start; i < end; i++) {
+      if (indices.has(i)) touched = true;
+    }
+    if (touched) {
+      for (let i = start; i < end; i++) out.add(i);
+    }
+  }
+  return out;
+}
+
+/** Thai: vowel/tone after a consonant must stay with it — wrapping only part breaks shaping. */
+function isThaiFollowingVowelOrTone(code: number): boolean {
+  return (
+    (code >= 0x0e31 && code <= 0x0e3a) ||
+    (code >= 0x0e47 && code <= 0x0e4e)
+  );
+}
+
+function isThaiPreposedVowel(code: number): boolean {
+  return code >= 0x0e40 && code <= 0x0e44;
+}
+
+/** Extend highlights so Thai vowels/tone marks are not split from their consonant. */
+function mergeThaiVowelsWithHighlightedConsonants(text: string, indices: Set<number>): Set<number> {
+  const out = new Set(indices);
+  const n = text.length;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let j = 1; j < n; j++) {
+      if (out.has(j)) continue;
+      const c = text.charCodeAt(j);
+      if (!isThaiFollowingVowelOrTone(c)) continue;
+      if (out.has(j - 1)) {
+        out.add(j);
+        changed = true;
+      }
+    }
+    for (let j = 1; j < n; j++) {
+      if (!out.has(j)) continue;
+      const c = text.charCodeAt(j - 1);
+      if (!isThaiPreposedVowel(c)) continue;
+      if (!out.has(j - 1)) {
+        out.add(j - 1);
+        changed = true;
+      }
+    }
+  }
+  return out;
+}
+
+function deskSearchHighlightLabel(text: string, query: string): ReactNode {
+  const q = query.trim();
+  if (!q) return text;
+  let indices = deskSearchHighlightIndices(q, text);
+  indices = expandHighlightIndicesToGraphemeClusters(text, indices);
+  indices = mergeThaiVowelsWithHighlightedConsonants(text, indices);
+  if (indices.size === 0) return text;
+  const n = text.length;
+  const out: ReactNode[] = [];
+  let key = 0;
+  let i = 0;
+  while (i < n) {
+    if (indices.has(i)) {
+      let j = i + 1;
+      while (j < n && indices.has(j)) j++;
+      out.push(
+        <mark
+          key={key++}
+          className="zd:m-0 zd:inline zd:p-0 zd:bg-yellow-200 zd:text-inherit zd:rounded-none zd:box-decoration-clone dark:zd:bg-yellow-500/35"
+        >
+          {text.slice(i, j)}
+        </mark>
+      );
+      i = j;
+    } else {
+      let j = i + 1;
+      while (j < n && !indices.has(j)) j++;
+      out.push(text.slice(i, j));
+      i = j;
+    }
+  }
+  return <>{out}</>;
+}
+
+/** Mirrors `runDeskSearch` doctype/page filtering using `useDocListAll` data + Doctype Permission. `t` includes current-language labels. */
+function buildDeskOmniboxDoctypesAndPages(
+  doctypeRows: Record<string, unknown>[],
+  pageRows: Array<Record<string, unknown>>,
+  permRows: Record<string, unknown>[],
+  roles: string[],
+  qRaw: string,
+  t: (key: string) => string
+): { doctypes: DeskSearchPayload["doctypes"]; pages: DeskSearchPayload["pages"] } {
+  const isSystemAdmin = roles.includes("System Admin");
+
+  const allowedDoctypes = new Set<string>();
+  if (!isSystemAdmin) {
+    for (const p of permRows) {
+      if (String(p.perm_level ?? "") !== "0") continue;
+      const role = String(p.role ?? "");
+      if (!roles.includes(role)) continue;
+      if (isCheckOn(p.can_select) || isCheckOn(p.can_own_select)) {
+        const dt = String(p.doctype ?? "").trim();
+        if (dt) allowedDoctypes.add(dt);
+      }
+    }
+  }
+
+  const qTrim = qRaw.trim();
+  const doctypeRanked: {
+    item: DeskSearchPayload["doctypes"][number];
+    rank: number;
+  }[] = [];
+  for (const row of doctypeRows) {
+    const name = String(row.name ?? "");
+    if (!name || isChildDoctypeRow(row)) continue;
+    if (!isSystemAdmin && !allowedDoctypes.has(name)) continue;
+    const label = String(row.label ?? name);
+    const labelKey = label || name;
+    const parts = [name, label, t(labelKey), t(name)];
+    if (!deskSearchMatchesQuery(qRaw, parts)) continue;
+    const rank = deskSearchBestFuzzyScore(qRaw, parts);
+    doctypeRanked.push({
+      item: {
+        name,
+        label,
+        listHref: `/desk/doctypes/${name}/list`,
+      },
+      rank,
+    });
+  }
+  if (qTrim) {
+    doctypeRanked.sort((a, b) => {
+      if (a.rank !== b.rank) return a.rank - b.rank;
+      return (a.item.label || a.item.name).localeCompare(b.item.label || b.item.name);
+    });
+  } else {
+    doctypeRanked.sort((a, b) =>
+      (a.item.label || a.item.name).localeCompare(b.item.label || b.item.name)
+    );
+  }
+  const doctypes = doctypeRanked.map((x) => x.item);
+
+  const pageRanked: { item: DeskSearchPayload["pages"][number]; rank: number }[] = [];
+  for (const row of pageRows) {
+    const name = String(row.name ?? "");
+    const href = String(row.href ?? "");
+    if (!name || !href) continue;
+    const parts = [name, href, t(name)];
+    if (!deskSearchMatchesQuery(qRaw, parts)) continue;
+    const rank = deskSearchBestFuzzyScore(qRaw, parts);
+    pageRanked.push({ item: { name, href }, rank });
+  }
+  if (qTrim) {
+    pageRanked.sort((a, b) => {
+      if (a.rank !== b.rank) return a.rank - b.rank;
+      return a.item.name.localeCompare(b.item.name);
+    });
+  } else {
+    pageRanked.sort((a, b) => a.item.name.localeCompare(b.item.name));
+  }
+  const pages = pageRanked.map((x) => x.item);
+
+  return { doctypes, pages };
+}
+
+function DeskSearchOmnibox(props: {
+  searchTerm: string;
+  setSearchTerm: (s: string) => void;
+  docHits: DeskSearchPayload["docs"];
+  setDocHits: React.Dispatch<React.SetStateAction<DeskSearchPayload["docs"]>>;
+  onClose: () => void;
+  searchOverlayRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const { t } = useTranslation();
+  const { roles } = useAuth();
+  const router = useRouter();
+  const { docs: doctypeRows } = useDocListAll({ doctype: "Doctype" });
+  const { docs: pageRows } = useDocListAll({ doctype: "Page" });
+  const { docs: permRows } = useDocListAll({ doctype: "Doctype Permission" });
+
+  const { doctypes: filteredDoctypes, pages: filteredPages } = useMemo(
+    () =>
+      buildDeskOmniboxDoctypesAndPages(
+        doctypeRows as unknown as Record<string, unknown>[],
+        pageRows as unknown as Record<string, unknown>[],
+        permRows as unknown as Record<string, unknown>[],
+        roles,
+        props.searchTerm.trim(),
+        t
+      ),
+    [doctypeRows, pageRows, permRows, roles, props.searchTerm, t]
+  );
+
+  const options = useMemo(() => {
+    const q = props.searchTerm.trim();
+    const combined: SelectOption[] = [];
+    for (const d of filteredDoctypes) {
+      const label = t(d.label || d.name);
+      combined.push({
+        label,
+        labelContent: q ? deskSearchHighlightLabel(label, q) : undefined,
+        value: d.listHref,
+        icon: "BookIcon",
+      });
+    }
+    for (const p of filteredPages) {
+      const label = t(p.name);
+      combined.push({
+        label,
+        labelContent: q ? deskSearchHighlightLabel(label, q) : undefined,
+        value: p.href,
+        icon: "FileIcon",
+      });
+    }
+    for (const d of props.docHits) {
+      const label = `${t(d.doctypeLabel)} > ${d.name}`;
+      combined.push({
+        label,
+        labelContent: q ? deskSearchHighlightLabel(label, q) : undefined,
+        value: d.formHref,
+        icon: "BookIcon",
+      });
+    }
+    return combined;
+  }, [filteredDoctypes, filteredPages, props.docHits, props.searchTerm, t]);
+
+  useEffect(() => {
+    const debounceMs =
+      props.searchTerm.trim() === "" ? 0 : DESK_SEARCH_DEBOUNCE_MS;
+    const id = window.setTimeout(() => {
+      const q = props.searchTerm.trim();
+      if (!q) {
+        props.setDocHits(DESK_SEARCH_EMPTY_DOCS);
+        return;
+      }
+      zodula
+        .action("zodula.core.search", { data: { q, docsOnly: true } })
+        .then((r) => {
+          if (r && typeof r === "object" && Array.isArray((r as DeskSearchPayload).docs)) {
+            props.setDocHits((r as DeskSearchPayload).docs);
+          }
+        })
+        .catch(() => {
+          props.setDocHits(DESK_SEARCH_EMPTY_DOCS);
+        });
+    }, debounceMs);
+    return () => clearTimeout(id);
+  }, [props.searchTerm, props.setDocHits]);
+
+  return (
+    <div ref={props.searchOverlayRef} className="zd:w-full zd:max-w-xl zd:px-4">
+      <Select
+        className="zd:w-full"
+        value={props.searchTerm}
+        onChange={(value) => props.setSearchTerm(value)}
+        searchable
+        serverFiltered
+        validate
+        allowFreeText
+        options={options}
+        displayMode="label"
+        placeholder={t("Search doctypes and pages...")}
+        onSelect={(option) => {
+          props.onClose();
+          router.push(option.value);
+        }}
+      />
+    </div>
+  );
+}
+
 export const DeskNavbar = ({ children, panelToggle }: DeskNavbarProps) => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState<string>("");
+  const [docHits, setDocHits] = useState<DeskSearchPayload["docs"]>(DESK_SEARCH_EMPTY_DOCS);
   const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
-  const { fullWidth, toggleFullWidth, leftSidebarOpen, toggleLeftSidebar } = useNavbar();
+  const {
+    fullWidth,
+    toggleFullWidth,
+    leftSidebarOpenDesktop,
+    leftSidebarOpenMobile,
+    toggleLeftSidebarDesktop,
+    toggleLeftSidebarMobile,
+  } = useNavbar();
+  const isTabletOrUp = useIsTabletOrUp();
+  const leftSidebarOpen = isTabletOrUp ? leftSidebarOpenDesktop : leftSidebarOpenMobile;
+  const toggleLeftSidebar = isTabletOrUp ? toggleLeftSidebarDesktop : toggleLeftSidebarMobile;
   const { t } = useTranslation();
-
-  // Fetch all doctypes and pages with persistent caching, then filter client-side
-  const { docs: allDoctypes } = useDocListAll({
-    doctype: "Doctype"
-  });
-
-  const { docs: allPages } = useDocListAll({
-    doctype: "Page"
-  });
-
-  // Filter doctypes and sort
-  const doctypeResults = useMemo(() => ({
-    docs: allDoctypes
-      .filter((doc) => doc.is_child_doctype === 0)
-      .sort((a, b) => (a.label || a.name || "").localeCompare(b.label || b.name || ""))
-  }), [allDoctypes]);
-
-  // Sort pages
-  const pageResults = useMemo(() => ({
-    docs: allPages
-      .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
-  }), [allPages]);
-
-  // Function to calculate relevance score for sorting
-  const calculateRelevance = (
-    option: SelectOption,
-    searchTerm: string
-  ): number => {
-    if (!searchTerm) return 0;
-
-    const searchLower = searchTerm.toLowerCase();
-    const labelLower = option.label.toLowerCase();
-    const valueLower = option.value.toLowerCase();
-    const subtitleLower = option.subtitle?.toLowerCase() || "";
-
-    if (labelLower === searchLower || valueLower === searchLower) return 1000;
-    if (labelLower.startsWith(searchLower) || valueLower.startsWith(searchLower)) return 500;
-    if (labelLower.includes(searchLower)) return 100;
-    if (valueLower.includes(searchLower)) return 50;
-    if (subtitleLower.includes(searchLower)) return 25;
-    return 0;
-  };
-
-  // Combine and format results with translation support, sorted by relevance
-  const options = useMemo(() => {
-    const combinedOptions: SelectOption[] = [];
-
-    doctypeResults.docs.forEach((doc) => {
-      combinedOptions.push({
-        label: t(doc.label || doc.name),
-        value: `/desk/doctypes/${doc.name}/list`,
-        icon: "BookIcon",
-      });
-    });
-
-    pageResults.docs.forEach((doc) => {
-      combinedOptions.push({
-        label: t(doc.name),
-        value: doc.href,
-        icon: "FileIcon",
-      });
-    });
-
-    if (searchTerm) {
-      combinedOptions.sort((a, b) => {
-        const scoreA = calculateRelevance(a, searchTerm);
-        const scoreB = calculateRelevance(b, searchTerm);
-        if (scoreB !== scoreA) return scoreB - scoreA;
-        return a.label.localeCompare(b.label);
-      });
-    }
-
-    return combinedOptions;
-  }, [doctypeResults.docs, pageResults.docs, t, searchTerm]);
 
   // Close overlay on Escape
   useEffect(() => {
@@ -117,6 +426,7 @@ export const DeskNavbar = ({ children, panelToggle }: DeskNavbarProps) => {
       if (e.key === "Escape") {
         setSearchOpen(false);
         setSearchTerm("");
+        setDocHits(DESK_SEARCH_EMPTY_DOCS);
       }
     };
     document.addEventListener("keydown", handler);
@@ -158,6 +468,29 @@ export const DeskNavbar = ({ children, panelToggle }: DeskNavbarProps) => {
   const closeSearch = () => {
     setSearchOpen(false);
     setSearchTerm("");
+    setDocHits(DESK_SEARCH_EMPTY_DOCS);
+  };
+
+  const openDeskScanner = async () => {
+    if (!isAuthenticated) return;
+    const result = await popup(ScannerDialog, {
+      title: t("Scan QR / Barcode"),
+      maxWidth: "720px",
+      width: "90vw",
+    });
+    const q = String(result ?? "").trim();
+    if (!q) return;
+    setSearchOpen(true);
+    setSearchTerm(q);
+    setDocHits(DESK_SEARCH_EMPTY_DOCS);
+    try {
+      const r = await zodula.action("zodula.core.search", { data: { q, docsOnly: true } });
+      if (r && typeof r === "object" && Array.isArray((r as DeskSearchPayload).docs)) {
+        setDocHits((r as DeskSearchPayload).docs);
+      }
+    } catch {
+      setDocHits(DESK_SEARCH_EMPTY_DOCS);
+    }
   };
 
   return (
@@ -190,6 +523,18 @@ export const DeskNavbar = ({ children, panelToggle }: DeskNavbarProps) => {
           >
             <Search className="zd:w-4 zd:h-4 zd:text-muted-foreground" />
           </Button>
+          {isAuthenticated ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="zd:h-8 zd:w-8 zd:p-0! zd:shrink-0"
+              title={t("Scan QR / Barcode")}
+              aria-label={t("Scan QR / Barcode")}
+              onClick={openDeskScanner}
+            >
+              <ScanLine className="zd:w-4 zd:h-4 zd:text-muted-foreground" />
+            </Button>
+          ) : null}
 
           {/* Language */}
           <LanguageSelection />
@@ -271,24 +616,35 @@ export const DeskNavbar = ({ children, panelToggle }: DeskNavbarProps) => {
             <X className="zd:w-5 zd:h-5" />
           </button>
 
-          {/* Search input box */}
-          <div ref={searchOverlayRef} className="zd:w-full zd:max-w-xl zd:px-4">
-            <Select
-              className="zd:w-full"
-              value={searchTerm}
-              onChange={(value) => setSearchTerm(value)}
-              searchable
-              validate
-              allowFreeText
-              options={options}
-              displayMode="label"
-              placeholder={t("Search doctypes and pages...")}
-              onSelect={(option) => {
-                closeSearch();
-                router.push(option.value);
-              }}
+          {isAuthenticated ? (
+            <DeskSearchOmnibox
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              docHits={docHits}
+              setDocHits={setDocHits}
+              onClose={closeSearch}
+              searchOverlayRef={searchOverlayRef}
             />
-          </div>
+          ) : (
+            <div ref={searchOverlayRef} className="zd:w-full zd:max-w-xl zd:px-4">
+              <Select
+                className="zd:w-full"
+                value={searchTerm}
+                onChange={(value) => setSearchTerm(value)}
+                searchable
+                serverFiltered
+                validate
+                allowFreeText
+                options={[]}
+                displayMode="label"
+                placeholder={t("Search doctypes and pages...")}
+                onSelect={(option) => {
+                  closeSearch();
+                  router.push(option.value);
+                }}
+              />
+            </div>
+          )}
         </div>
       )}
     </>

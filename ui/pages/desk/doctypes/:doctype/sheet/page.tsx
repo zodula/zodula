@@ -5,18 +5,10 @@ import { useListParams } from "@/zodula/ui/hooks/use-list-params";
 import { useDocList } from "@/zodula/ui/hooks/use-doc-list";
 import { useDocListAll } from "@/zodula/ui/hooks/use-doc-list-all";
 import { useDocAll } from "@/zodula/ui/hooks/use-doc-all";
-import { Plus, Printer, Download, X, Trash2, RefreshCw, List, Grid3x3, ChevronDown } from "lucide-react";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/zodula/ui/components/ui/dropdown-menu";
+import { Plus, Download, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { confirm, popup, prompt } from "@/zodula/ui/components/ui/popit";
+import { prompt } from "@/zodula/ui/components/ui/popit";
 import { zodula } from "@/zodula/client";
-import { useAuth } from "@/zodula/ui/hooks/use-auth";
-import { FixtureDialog } from "@/zodula/ui/components/dialogs/fixture-dialog";
 import { toast } from "@/zodula/ui/components/ui/toast";
 import type { SheetViewExportHandle } from "@/zodula/ui/components/list/SheetView";
 import { useTranslation } from "@/zodula/ui/hooks/use-translation";
@@ -29,11 +21,29 @@ import {
     type FieldLike,
 } from "@/zodula/ui/components/view-selector";
 import { Select } from "@/zodula/ui/components/ui/select";
+import {
+    isSheetColumnKeyValid,
+    labelForSheetColumnKey,
+} from "@/zodula/ui/components/list/sheet-field-utils";
+import {
+    sheetColumnFiltersToIFilters,
+    type SheetColumnFilterState,
+} from "@/zodula/ui/components/list/sheet-column-filters-to-ifilters";
+import { useColumnSettingsStore } from "@/zodula/ui/hooks/use-column-settings";
+import { useSheetViewStore } from "@/zodula/ui/hooks/use-sheet-view";
+
+function downloadCsvBlob(blobPart: BlobPart, filename: string) {
+    const blob = new Blob([blobPart], { type: "text/csv" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+}
 
 export default function DoctypeSheetPage() {
     const { params, push, replace, search, location } = useRouter()
     const doctype = params.doctype as Zodula.DoctypeName
-    const { roles } = useAuth()
     const { t } = useTranslation()
     const [isRefreshing, setIsRefreshing] = useState(false)
     const sheetViewRef = useRef<SheetViewExportHandle | null>(null);
@@ -56,6 +66,12 @@ export default function DoctypeSheetPage() {
     } = useListParams();
 
     const selectedReportId = typeof search.report === "string" ? search.report : "";
+    const sheetColumnSettingsKey = selectedReportId
+        ? `${doctype}::${selectedReportId}`
+        : doctype;
+    const hasCustomSheetColumns = useColumnSettingsStore(
+        (s) => s.hasCustomColumns[sheetColumnSettingsKey] ?? false
+    );
     const [rows, setRows] = useState<any[]>([]);
     const [columns, setColumns] = useState<any[]>([]);
     const [count, setCount] = useState(0);
@@ -95,6 +111,24 @@ export default function DoctypeSheetPage() {
         columns: string[];
     } | null>(null);
     const [sheetVisibleColumns, setSheetVisibleColumns] = useState<string[]>([]);
+    const [sheetColumnFilters, setSheetColumnFilters] = useState<SheetColumnFilterState>({});
+    const [debouncedSheetColumnFilters, setDebouncedSheetColumnFilters] =
+        useState<SheetColumnFilterState>({});
+
+    useEffect(() => {
+        const id = setTimeout(() => setDebouncedSheetColumnFilters(sheetColumnFilters), 400);
+        return () => clearTimeout(id);
+    }, [sheetColumnFilters]);
+
+    useEffect(() => {
+        setSheetColumnFilters({});
+        setDebouncedSheetColumnFilters({});
+    }, [doctype, selectedReportId]);
+
+    const mergedReportFilters = useMemo(() => {
+        const extra = sheetColumnFiltersToIFilters(debouncedSheetColumnFilters);
+        return [...(filters || []), ...extra];
+    }, [filters, debouncedSheetColumnFilters]);
 
     useEffect(() => {
         if (!selectedReportId || !selectedReport || selectedReport.is_script === 1) {
@@ -102,8 +136,6 @@ export default function DoctypeSheetPage() {
             return;
         }
 
-        // Only initialize baseline when report changes (or first load),
-        // so edits to filters/sort/order/columns can be detected correctly.
         if (reportEditBaseline?.reportId === selectedReportId) {
             return;
         }
@@ -143,7 +175,7 @@ export default function DoctypeSheetPage() {
                     sort: sort || undefined,
                     order: order || undefined,
                     q: q || "",
-                    filters: filters || [],
+                    filters: mergedReportFilters,
                 },
             })
             .then((res) => {
@@ -166,21 +198,18 @@ export default function DoctypeSheetPage() {
         return () => {
             cancelled = true;
         };
-    }, [doctype, selectedReportId, limit, sort, order, q, filters, reloadToken]);
+    }, [doctype, selectedReportId, limit, sort, order, q, mergedReportFilters, reloadToken]);
 
-    // Fetch all fields with persistent caching, then filter client-side
     const { docs: allFields, reload: reloadFields } = useDocListAll({
         doctype: "Field"
     });
 
-    // Filter fields by doctype and sort by idx
     const fields = useMemo(() => {
         return allFields
             .filter((field) => field.doctype === doctype)
             .sort((a, b) => (a.idx || 0) - (b.idx || 0));
     }, [allFields, doctype]);
 
-    // Get doctype metadata to check if it's submittable
     const { doc: doctypeDoc, reload: reloadDoctype } = useDocAll({
         doctype: "Doctype",
         id: doctype
@@ -197,8 +226,6 @@ export default function DoctypeSheetPage() {
         reloadDoctype();
         setReloadToken((prev) => prev + 1);
     }, [doctype, search]);
-
-    const isSubmittable = doctypeDoc?.is_submittable === 1;
 
     const handleCreate = () => {
         push(`/desk/doctypes/${doctype}/form`, {
@@ -218,78 +245,76 @@ export default function DoctypeSheetPage() {
         setIsRefreshing(false);
     };
 
-    const handleExportCSV = () => {
-        if (selected.size === 0) return;
-        sheetViewRef.current?.exportCSV();
-    };
-
-    const handleCancel = async () => {
-        if (selected.size === 0) {
-            return;
-        }
-        const con = await confirm({
-            title: "Cancel",
-            message: `Are you sure you want to cancel ${selected.size} item(s)?`,
-            variant: "destructive"
-        });
-        if (con) {
-            // TODO: Implement cancel functionality for submittable doctypes
-            for (const id of Array.from(selected)) {
-                await zodula.doc.cancel_doc(doctype, id).catch((error) => { })
-            }
-            setSelected(new Set());
-            setReloadToken((prev) => prev + 1);
-        }
-    };
-
-    const handleExportFixtures = async () => {
-        const result = await popup(FixtureDialog, {
-            title: `Export Fixtures for ${doctype}`,
-            description: `Selected ${selected.size} item(s)`
-        }, {
-            doctype,
-            selected: Array.from(selected)
-        }) || {}
-        const { app: selectedApp, app_field: selectedAppField, fields: selectedFields } = result as { app: string, app_field: string, fields: string[] }
-        if (selectedFields && (selectedApp || selectedAppField)) {
-            await zodula.action("zodula.fixtures.exports", {
-                data: {
-                    ...(selectedApp ? { app: selectedApp } : {}),
-                    ...(selectedAppField ? { app_field: selectedAppField } : {}),
-                    doctype,
-                    ids: Array.from(selected),
-                    fields: selectedFields
-                }
-            })
-            const exportTarget = selectedAppField ? `app field "${selectedAppField}"` : selectedApp
-            toast.success(`Fixtures exported to ${exportTarget}`)
-        }
-    };
-
-    const handleDelete = async () => {
-        if (selected.size === 0) {
-            return;
-        }
-        const con = await confirm({
-            title: "Delete",
-            message: `Are you sure you want to delete ${selected.size} item(s)?`,
-            variant: "destructive"
-        });
-        if (con) {
-            await zodula.doc.delete_docs(doctype, Array.from(selected));
-            setSelected(new Set());
-        }
-
-        setReloadToken((prev) => prev + 1);
-    };
-
-    const handleSwitchToListView = () => {
-        push(`/desk/doctypes/${doctype}/list${location.search}`);
-    };
-
     const isScriptReport = selectedReport?.is_script === 1;
     const isQueryReport = !!selectedReport && !isScriptReport;
     const isReadonlySheet = isScriptReport;
+
+    const handleExportCSV = async () => {
+        const payload = sheetViewRef.current?.getCsvExportPayload?.();
+        if (!payload) {
+            toast.error(t("No columns to export"));
+            return;
+        }
+        if (payload.kind === "query") {
+            if (payload.ids.length === 0) {
+                toast.error(t("Select rows to export"));
+                return;
+            }
+            const res = await zodula.action("zodula.exports.csv", {
+                data: {
+                    doctype,
+                    ids: payload.ids,
+                    fields: payload.fields,
+                    headers: payload.headers,
+                },
+            });
+            downloadCsvBlob(res as BlobPart, `${doctype}.csv`);
+        } else {
+            if (payload.rows.length === 0) {
+                toast.error(t("No rows to export"));
+                return;
+            }
+            const res = await zodula.action("zodula.exports.csv_raw", {
+                data: {
+                    columns: payload.columns,
+                    rows: payload.rows,
+                    filename: doctype,
+                },
+            });
+            downloadCsvBlob(res as BlobPart, `${doctype}.csv`);
+        }
+        toast.success(t("CSV exported"));
+    };
+
+    const canResetDefaultSheet =
+        !selectedReportId &&
+        ((filters?.length ?? 0) > 0 ||
+            String(q ?? "").trim().length > 0 ||
+            (sort ?? "updated_at") !== "updated_at" ||
+            (order ?? "desc") !== "desc" ||
+            (limit != null && limit !== 20) ||
+            Object.keys(sheetColumnFilters).length > 0 ||
+            hasCustomSheetColumns);
+
+    const handleResetDefaultSheet = () => {
+        updateSearchParams({
+            q: null,
+            filters: null,
+            sort: "updated_at",
+            order: "desc",
+            limit: null,
+        });
+        setSheetColumnFilters({});
+        setDebouncedSheetColumnFilters({});
+        sheetViewRef.current?.resetVisibleColumns();
+        useSheetViewStore.getState().resetColumnConfigs(sheetColumnSettingsKey);
+        useSheetViewStore.getState().resetAggregationConfig(sheetColumnSettingsKey);
+        setSelected(new Set());
+        toast.success(t("Sheet reset"));
+    };
+
+    const showExportCsvAction = isScriptReport ? rows.length > 0 : selected.size > 0;
+
     const hasQueryReportChanges = useMemo(() => {
         if (!isQueryReport || !reportEditBaseline || reportEditBaseline.reportId !== selectedReportId) {
             return false;
@@ -325,7 +350,7 @@ export default function DoctypeSheetPage() {
         }
     ];
 
-    const actions: ActionItem[] = [
+    const exportCsvActions: ActionItem[] = [
         {
             id: "export-csv",
             label: t("Export CSV"),
@@ -333,34 +358,6 @@ export default function DoctypeSheetPage() {
             onClick: handleExportCSV
         }
     ];
-
-    // Add cancel action if doctype is submittable
-    if (isSubmittable) {
-        actions.push({
-            id: "cancel",
-            label: t("Cancel"),
-            icon: <X className="zd:h-4 zd:w-4" />,
-            onClick: handleCancel
-        });
-    }
-
-    if (roles.includes("System Admin")) {
-        actions.push({
-            id: "export-fixtures",
-            label: t("Export Fixtures"),
-            icon: <Download className="zd:h-4 zd:w-4" />,
-            onClick: handleExportFixtures
-        });
-    }
-
-    // Add delete action
-    actions.push({
-        id: "delete",
-        label: t("Delete"),
-        icon: <Trash2 className="zd:h-4 zd:w-4" />,
-        onClick: handleDelete,
-        variant: "destructive"
-    });
 
     if (!doctypeDoc?.id) {
         return <ErrorView message="Doctype not found" status={404} />
@@ -380,9 +377,9 @@ export default function DoctypeSheetPage() {
 
     return <DeskNavbarLayout
         title={t(`${doctypeDoc?.label || doctype}`)}
-        defaultOpen={false}
+        defaultRightOpen={false}
         primaryAction={primaryActions}
-        actions={selected.size > 0 && !isReadonlySheet ? actions : []}
+        actions={showExportCsvAction ? exportCsvActions : []}
         rightSidebar={
                 <div className="zd:flex zd:flex-col zd:gap-3">
                     <div>
@@ -415,17 +412,27 @@ export default function DoctypeSheetPage() {
                                         : (columns || []).map((col) => String(col?.key || ""))
                                 ).filter(Boolean);
                                 const reportItems = currentColumnKeys
-                                    .filter((fieldName) => !!fields.find((field) => field.name === fieldName))
+                                    .filter((fieldName) =>
+                                        isSheetColumnKeyValid(fieldName, fields, allFields)
+                                    )
                                     .map((fieldName, idx) => {
                                         const field = fields.find((f) => f.name === fieldName);
-                                        const colFromReport = (columns || []).find((c) => String(c?.key) === fieldName);
-                                        const sortable = colFromReport
-                                            ? (colFromReport.sortable !== false ? 1 : 0)
-                                            : (field?.type !== "Reference Table" && field?.type !== "Extend" ? 1 : 0);
+                                        const colFromReport = (columns || []).find(
+                                            (c) => String(c?.key) === fieldName
+                                        );
+                                        const sortable =
+                                            colFromReport != null
+                                                ? (colFromReport.sortable !== false ? 1 : 0)
+                                                : fieldName.includes(".")
+                                                  ? 0
+                                                  : field?.type !== "Reference Table" &&
+                                                      field?.type !== "Extend"
+                                                    ? 1
+                                                    : 0;
                                         return {
                                             idx,
                                             doctype_field: fieldName,
-                                            label: field?.label || fieldName,
+                                            label: labelForSheetColumnKey(fieldName, fields, allFields),
                                             sortable,
                                         };
                                     });
@@ -449,6 +456,15 @@ export default function DoctypeSheetPage() {
                         </Button>
                     )}
                     {!selectedReport && (
+                        <>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={!canResetDefaultSheet}
+                            onClick={handleResetDefaultSheet}
+                        >
+                            {t("Reset")}
+                        </Button>
                         <Button
                             variant="outline"
                             onClick={async () => {
@@ -467,17 +483,27 @@ export default function DoctypeSheetPage() {
                                         : (columns || []).map((col) => String(col?.key || ""))
                                 ).filter(Boolean);
                                 const reportItems = currentColumnKeys
-                                    .filter((fieldName) => !!fields.find((field) => field.name === fieldName))
+                                    .filter((fieldName) =>
+                                        isSheetColumnKeyValid(fieldName, fields, allFields)
+                                    )
                                     .map((fieldName, idx) => {
                                         const field = fields.find((f) => f.name === fieldName);
-                                        const colFromReport = (columns || []).find((c) => String(c?.key) === fieldName);
-                                        const sortable = colFromReport
-                                            ? (colFromReport.sortable !== false ? 1 : 0)
-                                            : (field?.type !== "Reference Table" && field?.type !== "Extend" ? 1 : 0);
+                                        const colFromReport = (columns || []).find(
+                                            (c) => String(c?.key) === fieldName
+                                        );
+                                        const sortable =
+                                            colFromReport != null
+                                                ? (colFromReport.sortable !== false ? 1 : 0)
+                                                : fieldName.includes(".")
+                                                  ? 0
+                                                  : field?.type !== "Reference Table" &&
+                                                      field?.type !== "Extend"
+                                                    ? 1
+                                                    : 0;
                                         return {
                                             idx,
                                             doctype_field: fieldName,
-                                            label: field?.label || fieldName,
+                                            label: labelForSheetColumnKey(fieldName, fields, allFields),
                                             sortable,
                                         };
                                     });
@@ -501,6 +527,7 @@ export default function DoctypeSheetPage() {
                         >
                             {t("Save as Report")}
                         </Button>
+                        </>
                     )}
                     {selectedReport && selectedReport.is_script !== 1 && (
                         <Button
@@ -569,7 +596,8 @@ export default function DoctypeSheetPage() {
                 strictColumns={isScriptReport}
                 stateKey={selectedReportId ? `${doctype}::${selectedReportId}` : doctype}
                 onVisibleColumnsChange={setSheetVisibleColumns}
+                columnFilters={sheetColumnFilters}
+                onColumnFiltersChange={setSheetColumnFilters}
             />
     </DeskNavbarLayout>
 }
-

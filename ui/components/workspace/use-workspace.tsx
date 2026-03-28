@@ -5,6 +5,7 @@ import {
   useDocListAll,
   useDocListAllStore,
 } from "@/zodula/ui/hooks/use-doc-list-all";
+import { useAuth } from "@/zodula/ui/hooks/use-auth";
 
 // Kept for backward compatibility; no longer used in workspace hierarchy
 export interface WorkspaceItem {
@@ -33,6 +34,7 @@ export interface WorkspaceWithChildren {
   app: string | null;
   is_system?: number | null;
   url?: string | null;
+  workspace_roles?: Array<{ role?: string | null }>;
   children: WorkspaceWithChildren[];
 }
 
@@ -273,7 +275,7 @@ export const useWorkspaceEdit = create<
         }
       });
 
-      const result = await zodula.action("zodula.core.workspace.apply", {
+      const result = await zodula.action("zodula.workspace.apply", {
         data: { workspaces: workspacesToApply },
       });
 
@@ -522,6 +524,7 @@ export const useWorkspaceEdit = create<
 
 export const useWorkspace = () => {
   const { selectedWorkspace, setSelectedWorkspace } = useWorkspaceStore();
+  const { roles, isInitialized } = useAuth()
 
   const {
     docs: allWorkspaces,
@@ -533,8 +536,38 @@ export const useWorkspace = () => {
   });
 
   const workspaces = useMemo(() => {
-    return [...allWorkspaces].sort((a, b) => (a.idx || 0) - (b.idx || 0));
-  }, [allWorkspaces]);
+    const sorted = [...allWorkspaces].sort((a, b) => (a.idx || 0) - (b.idx || 0));
+    const isSystemAdmin = roles.includes("System Admin")
+    if (isSystemAdmin || !isInitialized) return sorted
+
+    const byParent = new Map<string | null, any[]>()
+    for (const ws of sorted) {
+      const parentId = ws.workspace_parent || null
+      if (!byParent.has(parentId)) byParent.set(parentId, [])
+      byParent.get(parentId)!.push(ws)
+    }
+
+    const allowByRoles = (workspace: any): boolean => {
+      const assignedRoles = Array.isArray(workspace.workspace_roles)
+        ? workspace.workspace_roles.map((row: any) => row?.role).filter(Boolean)
+        : []
+      if (assignedRoles.length === 0) return true
+      return assignedRoles.some((role: string) => roles.includes(role))
+    }
+
+    const hasVisibleDescendant = (workspaceId: string): boolean => {
+      const children = byParent.get(workspaceId) || []
+      for (const child of children) {
+        if (allowByRoles(child) || hasVisibleDescendant(child.id)) return true
+      }
+      return false
+    }
+
+    return sorted.filter((workspace) => {
+      if (allowByRoles(workspace)) return true
+      return hasVisibleDescendant(workspace.id)
+    })
+  }, [allWorkspaces, roles, isInitialized]);
 
   const isLoading = workspacesLoading;
   const error = workspacesError;

@@ -39,7 +39,7 @@ export type ListScriptEvent =
 /** Top-level field names or nested paths: "table.0.child_field" (reference table) or "extend.child_field" (extend). */
 export type FormFieldPath<DN extends Zodula.DoctypeName> =
   | keyof Zodula.SelectDoctype<DN>
-  | `${string}.${number}.${string}` // e.g. delivery_note_items.0.product_name
+  | `${string}.${number}.${string}` // e.g. delivery_note_items.0.item_name
   | `${string}.${string}`;          // e.g. extend_field.child_field
 
 /** Value type for a given field path: typed for top-level keys, any for nested paths. */
@@ -57,11 +57,11 @@ export interface FormScriptContext<DN extends Zodula.DoctypeName> {
   doctype: DN;
   doc: Zodula.SelectDoctype<DN> | null;
   id?: string | null;
-  /** Get by top-level field or dotted path (e.g. "delivery_note_items.0.product_name"). */
+  /** Get by top-level field or dotted path (e.g. "delivery_note_items.0.item_name"). */
   get_value: <K extends FormFieldPath<DN>>(field: K) => FormFieldValue<DN, K>;
   /** Set by top-level field or dotted path. Value type is inferred for top-level keys. */
   set_value: {
-    /** Nested table row field with child doctype + field name (e.g. delivery_note_items.0.product_name). */
+    /** Nested table row field with child doctype + field name (e.g. delivery_note_items.0.item_name). */
     <ChildDN extends Zodula.DoctypeName, ChildField extends keyof Zodula.SelectDoctype<ChildDN> & string>(
       field: `${string}.${number}.${ChildField}`,
       value: Zodula.SelectDoctype<ChildDN>[ChildField]

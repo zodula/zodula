@@ -30,17 +30,54 @@ export interface TranslationFile {
 // CSV parser (same rules as the original apply-translation.ts)
 // ---------------------------------------------------------------------------
 
+function parseCSVRow(line: string): string[] {
+    const values: string[] = [];
+    let current = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        const next = line[i + 1];
+
+        if (ch === '"') {
+            if (inQuotes && next === '"') {
+                current += '"';
+                i++;
+                continue;
+            }
+            inQuotes = !inQuotes;
+            continue;
+        }
+
+        if (ch === "," && !inQuotes) {
+            values.push(current);
+            current = "";
+            continue;
+        }
+
+        current += ch;
+    }
+
+    values.push(current);
+    return values;
+}
+
 function parseCSV(content: string): TranslationEntry[] {
-    const lines = content.trim().split("\n");
+    const lines = content
+        .replace(/^\uFEFF/, "")
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+
     const entries: TranslationEntry[] = [];
 
     for (const line of lines) {
-        if (line.trim() === "") continue;
-
-        const match = line.match(/^"([^"]*)"\s*,\s*"([^"]*)"$/);
-        if (match) {
-            entries.push({ key: match[1] || "", translation: match[2] || "" });
-        }
+        const row = parseCSVRow(line);
+        if (row.length < 2) continue;
+        entries.push({
+            key: row[0] || "",
+            translation: row[1] || "",
+        });
     }
 
     return entries;

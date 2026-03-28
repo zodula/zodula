@@ -103,7 +103,7 @@ async function scaffoldApp() {
   logger.info(`Creating app: ${appName}`);
 
   // Create app directory structure
-  await $`mkdir -p ${appDir}/doctypes/core`;
+  await $`mkdir -p ${appDir}/doctypes/system`;
   await $`mkdir -p ${appDir}/scripts/core`;
   await $`mkdir -p ${appDir}/actions`;
   await $`mkdir -p ${appDir}/migrations`;
@@ -172,7 +172,7 @@ node_modules/
 .pnp
 .pnp.js
 
-# Production builds
+# Itemion builds
 dist/
 build/
 out/
@@ -182,7 +182,7 @@ out/
 .env.local
 .env.development.local
 .env.test.local
-.env.production.local
+.env.itemion.local
 
 # Logs
 logs
@@ -329,7 +329,7 @@ nailgun generate
 # Apply migrations
 nailgun migrate
 
-# Build for production
+# Build for itemion
 nailgun build
 \`\`\`
 
@@ -374,7 +374,7 @@ async function scaffoldDoctype() {
       {
         type: "input",
         name: "doctypeName",
-        message: "Doctype name (e.g., Customer, Product):",
+        message: "Doctype name (e.g., Customer, Item):",
         validate: (input: string) => {
           if (!input.trim()) return "Doctype name is required";
           if (!/^[A-Z][a-zA-Z0-9]*$/.test(input)) {
@@ -387,7 +387,7 @@ async function scaffoldDoctype() {
         type: "input",
         name: "domain",
         message: "Domain (folder name):",
-        default: "core",
+        default: "system",
         validate: (input: string) => {
           if (!input.trim()) return "Domain is required";
           if (!/^[a-z][a-z0-9_-]*$/.test(input)) {

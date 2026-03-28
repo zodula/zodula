@@ -6,37 +6,71 @@
  */
 import { create } from "zustand";
 
-// ─── Right-sidebar (panel) open/close — keyed by pathname ────────────────────
+// ─── Right-sidebar (panel) open/close — desktop vs mobile, keyed by pathname ─
 
 interface SidebarStore {
-  sidebarOpenByPath: Record<string, boolean>;
-  setSidebarOpen: (pathname: string, open: boolean) => void;
-  toggleSidebar: (pathname: string) => void;
+  sidebarDesktopByPath: Record<string, boolean>;
+  sidebarMobileByPath: Record<string, boolean>;
+  setSidebarOpen: (
+    pathname: string,
+    variant: "desktop" | "mobile",
+    open: boolean
+  ) => void;
 }
 
 export const useSidebarStoreBase = create<SidebarStore>()((set) => ({
-  sidebarOpenByPath: {},
-  setSidebarOpen: (pathname, open) =>
-    set((state) => ({
-      sidebarOpenByPath: { ...state.sidebarOpenByPath, [pathname]: open },
-    })),
-  toggleSidebar: (pathname) =>
-    set((state) => ({
-      sidebarOpenByPath: {
-        ...state.sidebarOpenByPath,
-        [pathname]: !(state.sidebarOpenByPath[pathname] ?? false),
-      },
-    })),
+  sidebarDesktopByPath: {},
+  sidebarMobileByPath: {},
+  setSidebarOpen: (pathname, variant, open) =>
+    set((state) =>
+      variant === "desktop"
+        ? {
+            sidebarDesktopByPath: {
+              ...state.sidebarDesktopByPath,
+              [pathname]: open,
+            },
+          }
+        : {
+            sidebarMobileByPath: {
+              ...state.sidebarMobileByPath,
+              [pathname]: open,
+            },
+          }
+    ),
 }));
 
-export function useSidebarStore(pathname: string, defaultOpen = false) {
-  const { sidebarOpenByPath, setSidebarOpen, toggleSidebar } =
+export type SidebarStoreDefaults = {
+  /** Right panel on tablet/desktop; default true */
+  defaultDesktopOpen?: boolean;
+  /** Right drawer on phone; default false */
+  defaultMobileOpen?: boolean;
+};
+
+export function useSidebarStore(
+  pathname: string,
+  defaults: SidebarStoreDefaults = {}
+) {
+  const defaultDesktop = defaults.defaultDesktopOpen ?? true;
+  const defaultMobile = defaults.defaultMobileOpen ?? false;
+
+  const { sidebarDesktopByPath, sidebarMobileByPath, setSidebarOpen } =
     useSidebarStoreBase();
-  const sidebarOpen = sidebarOpenByPath[pathname] ?? defaultOpen;
+
+  const desktopOpen =
+    sidebarDesktopByPath[pathname] ?? defaultDesktop;
+  const mobileOpen = sidebarMobileByPath[pathname] ?? defaultMobile;
+
   return {
-    sidebarOpen,
-    setSidebarOpen: (open: boolean) => setSidebarOpen(pathname, open),
-    toggleSidebar: () => toggleSidebar(pathname),
+    desktopOpen,
+    mobileOpen,
+    setDesktopOpen: (open: boolean) =>
+      setSidebarOpen(pathname, "desktop", open),
+    setMobileOpen: (open: boolean) =>
+      setSidebarOpen(pathname, "mobile", open),
+    toggleDesktop: () =>
+      setSidebarOpen(pathname, "desktop", !desktopOpen),
+    toggleMobile: () =>
+      setSidebarOpen(pathname, "mobile", !mobileOpen),
   };
 }
 
@@ -57,12 +91,18 @@ export const usePagePanelStore = create<PagePanelStore>()((set) => ({
 }));
 
 /** Used by DeskNavbar to render the panel toggle button. */
-export function usePagePanel(pathname: string) {
+export function usePagePanel(
+  pathname: string,
+  defaults?: SidebarStoreDefaults
+) {
   const { panelByPath } = usePagePanelStore();
-  const { sidebarOpen, toggleSidebar } = useSidebarStore(pathname);
+  const { desktopOpen, mobileOpen, toggleDesktop, toggleMobile } =
+    useSidebarStore(pathname, defaults);
   return {
     hasPanel: panelByPath[pathname] ?? false,
-    panelOpen: sidebarOpen,
-    togglePanel: toggleSidebar,
+    panelOpenDesktop: desktopOpen,
+    panelOpenMobile: mobileOpen,
+    togglePanelDesktop: toggleDesktop,
+    togglePanelMobile: toggleMobile,
   };
 }

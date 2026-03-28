@@ -167,8 +167,10 @@ export function ListTable<TDoc extends Record<string, any>>({
                 {/* Data columns */}
                 {columns.map((col, index) => {
                   const isDisplayField = index === 0;
-                  const Render = col.render as any;
-                  const isUndefined = doc[col.key] === undefined;
+                  const renderCell = col.render as
+                    | ((doc: TDoc) => React.ReactNode)
+                    | undefined;
+                  const isUndefined = doc[col.key as keyof TDoc] === undefined;
                   return (
                     <td
                       key={String(col.key)}
@@ -177,10 +179,10 @@ export function ListTable<TDoc extends Record<string, any>>({
                         !isDisplayField ? "zd:text-ellipsis zd:max-w-[240px]" : ""
                       )}
                     >
-                      {(isUndefined || !Render) ? (
-                        <span className="zd:text-muted-foreground zd:italic">{!Render ? "" : "Hidden"}</span>
+                      {(isUndefined || !renderCell) ? (
+                        <span className="zd:text-muted-foreground zd:italic">{!renderCell ? "" : "Hidden"}</span>
                       ) : (
-                        <Render {...doc} />
+                        renderCell(doc)
                       )}
                     </td>
                   );

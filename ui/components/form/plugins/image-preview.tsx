@@ -9,7 +9,7 @@ export const ImagePreviewPlugin = new FormPlugin({
     render: (props) => {
         const width = props.fieldOptions.width || 250;
         const rawValue = props.value || "";
-        const imageUrl =  props.value
+        const imageUrl = props.value
 
         return (
             <div className="zd:space-y-2">
@@ -42,6 +42,32 @@ export const ImagePreviewPlugin = new FormPlugin({
                 )}
             </div>
         );
-    }
+    },
+    cellRender({ fieldOptions, value, doc, docId }) {
+        const rawValue = value || "";
+        const imageUrl = rawValue
+            ? (rawValue.startsWith('http')
+                ? rawValue
+                : `${BASE_URL}${rawValue.startsWith('/') ? rawValue : `/${rawValue}`}`)
+            : null;
+        return (
+            <div className="zd:flex zd:flex-col zd:items-start zd:gap-1">
+                {imageUrl && (
+                    <button
+                        type="button"
+                        className="zd:inline-flex zd:flex-col zd:items-start zd:gap-1 zd:group no-print"
+                        onClick={() => previewFile(rawValue)}
+                    >
+                        <img
+                            src={imageUrl}
+                            alt={fieldOptions.label || "Image Preview"}
+                            style={{ maxWidth: `100px`, maxHeight: '100px', height: 'auto' }}
+                            className="zd:rounded zd:border zd:border-border zd:transition-transform zd:group-hover:scale-[1.02]"
+                        />
+                    </button>
+                )}
+            </div>
+        );
+    },
 });
 

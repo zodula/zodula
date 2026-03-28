@@ -5,9 +5,12 @@ export interface NavbarStore {
     fullWidth: boolean;
     setFullWidth: (fullWidth: boolean) => void;
     toggleFullWidth: () => void;
-    leftSidebarOpen: boolean;
-    setLeftSidebarOpen: (open: boolean) => void;
-    toggleLeftSidebar: () => void;
+    leftSidebarOpenDesktop: boolean;
+    leftSidebarOpenMobile: boolean;
+    setLeftSidebarOpenDesktop: (open: boolean) => void;
+    setLeftSidebarOpenMobile: (open: boolean) => void;
+    toggleLeftSidebarDesktop: () => void;
+    toggleLeftSidebarMobile: () => void;
 }
 
 export const useNavbar = create<NavbarStore>()(
@@ -16,9 +19,12 @@ export const useNavbar = create<NavbarStore>()(
             fullWidth: false,
             setFullWidth: (fullWidth: boolean) => set({ fullWidth }),
             toggleFullWidth: () => set((state) => ({ fullWidth: !state.fullWidth })),
-            leftSidebarOpen: true,
-            setLeftSidebarOpen: (open: boolean) => set({ leftSidebarOpen: open }),
-            toggleLeftSidebar: () => set((state) => ({ leftSidebarOpen: !state.leftSidebarOpen })),
+            leftSidebarOpenDesktop: true,
+            leftSidebarOpenMobile: false,
+            setLeftSidebarOpenDesktop: (open: boolean) => set({ leftSidebarOpenDesktop: open }),
+            setLeftSidebarOpenMobile: (open: boolean) => set({ leftSidebarOpenMobile: open }),
+            toggleLeftSidebarDesktop: () => set((state) => ({ leftSidebarOpenDesktop: !state.leftSidebarOpenDesktop })),
+            toggleLeftSidebarMobile: () => set((state) => ({ leftSidebarOpenMobile: !state.leftSidebarOpenMobile })),
         }),
         {
             name: "zodula-navbar-storage",
