@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar, ChevronLeft, Clock } from 'lucide-react';
 import { Button } from '@/zodula/ui/components/ui/button';
@@ -28,6 +28,8 @@ interface DatePickerPopoverProps {
     usePortal?: boolean;
     style?: React.CSSProperties;
     popoverRef?: React.RefObject<HTMLDivElement | null>;
+    /** Visual transform origin for open animation */
+    placement?: 'above' | 'below';
 }
 
 const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
@@ -36,7 +38,8 @@ const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
     children,
     usePortal = false,
     style,
-    popoverRef
+    popoverRef,
+    placement = 'below',
 }) => {
     const [shouldRender, setShouldRender] = useState(open);
 
@@ -65,7 +68,10 @@ const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
             style={style}
             className={cn(
                 usePortal
-                    ? 'zd:fixed zd:z-[1000] zd:origin-top-left zd:rounded-md zd:border zd:bg-popover zd:text-popover-foreground zd:shadow-md'
+                    ? cn(
+                        'zd:fixed zd:z-[1000] zd:rounded-md zd:border zd:bg-popover zd:text-popover-foreground zd:shadow-md',
+                        placement === 'above' ? 'zd:origin-bottom' : 'zd:origin-top',
+                    )
                     : 'zd:absolute zd:left-0 zd:top-full zd:z-50 zd:mt-1 zd:origin-top-left zd:rounded-md zd:border zd:bg-popover zd:text-popover-foreground zd:shadow-md',
                 'zd:transition-all zd:duration-150 zd:ease-out',
                 open ? 'zd:translate-y-0 zd:scale-100 zd:opacity-100' : 'zd:-translate-y-1 zd:scale-95 zd:opacity-0',
@@ -108,6 +114,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
     const [showYearPicker, setShowYearPicker] = useState(false);
     const [hasUserInteracted, setHasUserInteracted] = useState(false);
     const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
+    const [mainPopoverPlacement, setMainPopoverPlacement] = useState<'above' | 'below'>('below');
     const inputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const popoverRef = useRef<HTMLDivElement>(null);
@@ -120,21 +127,51 @@ const DatePicker: React.FC<DatePickerProps> = ({
         }
 
         const rect = container.getBoundingClientRect();
-        const viewportWidth = window.innerWidth;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
         const margin = 8;
-        const estimatedWidth = Math.max(rect.width, 280);
+        const gap = 4;
+        const popoverWidth = Math.max(rect.width, 1);
+
         let left = rect.left;
-        if (left + estimatedWidth > viewportWidth - margin) {
-            left = Math.max(margin, viewportWidth - estimatedWidth - margin);
+        if (left + popoverWidth > vw - margin) {
+            left = Math.max(margin, vw - popoverWidth - margin);
+        }
+
+        const fallbackH = type === 'DateTime' || type === 'Time' ? 420 : 340;
+        const measuredH = popoverRef.current?.offsetHeight;
+        const popoverH =
+            measuredH && measuredH > 0 ? measuredH : fallbackH;
+
+        const spaceBelow = vh - rect.bottom - margin;
+        const spaceAbove = rect.top - margin;
+        const openAbove =
+            spaceBelow < popoverH && spaceAbove >= spaceBelow;
+
+        setMainPopoverPlacement(openAbove ? 'above' : 'below');
+
+        let top: number;
+        if (openAbove) {
+            top = rect.top - popoverH - gap;
+            if (top < margin) {
+                top = margin;
+            }
+        } else {
+            top = rect.bottom + gap;
+            if (top + popoverH > vh - margin) {
+                top = Math.max(margin, vh - popoverH - margin);
+            }
         }
 
         setPopoverStyle({
-            top: rect.bottom + 4,
+            top,
             left,
-            minWidth: Math.max(rect.width, 280),
+            width: popoverWidth,
+            minWidth: 280,
             maxWidth: 280,
+            boxSizing: 'border-box',
         });
-    }, []);
+    }, [type]);
 
     // Initialize default time for DateTime type on mount
     useEffect(() => {
@@ -203,6 +240,17 @@ const DatePicker: React.FC<DatePickerProps> = ({
             window.removeEventListener('scroll', handleReposition, true);
         };
     }, [isOpen, readOnly, updatePopoverPosition]);
+
+    useLayoutEffect(() => {
+        if (!isOpen || readOnly) {
+            return;
+        }
+        updatePopoverPosition();
+        const id = requestAnimationFrame(() => {
+            updatePopoverPosition();
+        });
+        return () => cancelAnimationFrame(id);
+    }, [isOpen, readOnly, updatePopoverPosition, currentDate, showMonthPicker, showYearPicker, type, range]);
 
     // Parse the current value
     useEffect(() => {
@@ -833,10 +881,11 @@ const DatePicker: React.FC<DatePickerProps> = ({
                 />
                 <DatePickerPopover
                     open={isOpen && !readOnly}
-                    className="zd:min-w-[280px] zd:p-0"
+                    className="zd:p-0 zd:max-h-[min(420px,calc(100vh-16px))] zd:overflow-y-auto"
                     usePortal
                     style={popoverStyle}
                     popoverRef={popoverRef}
+                    placement={mainPopoverPlacement}
                 >
                     <div className="zd:p-3">
                                     {type !== "Time" && (

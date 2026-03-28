@@ -57,7 +57,7 @@ export default $doctype({
         type: "Check",
         label: "Is Setup",
         default: "0",
-        hidden: 1,
+        readonly: 1,
         description: "Internal flag to indicate organization setup is completed.",
     },
     facebook_url: {

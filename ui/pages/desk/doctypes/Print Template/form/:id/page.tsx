@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useNavigate } from "react-router";
 import { useDoc } from "@/zodula/ui/hooks/use-doc";
 import { zodula } from "@/zodula/client";
+import { loadPrintTemplateItemsFromDoctypeTabs } from "@/zodula/client/tabs-to-print-template-items";
 import { ZodulaHtmlBuilder } from "@/zodula/ui/components/custom/zodula-html-builder";
 import { PrintTemplateBuilder } from "@/zodula/ui/components/custom/print-template-builder";
 import type { PrintTemplateBuilderItem } from "@/zodula/ui/components/custom/print-template-builder/types";
@@ -11,7 +12,7 @@ import { Input } from "@/zodula/ui/components/ui/input";
 import { FormControl } from "@/zodula/ui/components/ui/form-control";
 import { Select } from "@/zodula/ui/components/ui/select";
 import { Checkbox } from "@/zodula/ui/components/ui/checkbox";
-import { popup } from "@/zodula/ui/components/ui/popit";
+import { popup, confirm } from "@/zodula/ui/components/ui/popit";
 import { toast } from "@/zodula/ui/components/ui/toast";
 import { Settings } from "lucide-react";
 
@@ -276,6 +277,11 @@ export default function PrintTemplateFormPage() {
     doctype: PRINT_TEMPLATE_DOCTYPE,
     id: id || "",
   });
+  const linkedDoctypeRef = (doc as any)?.doctype ?? "";
+  const { doc: linkedDoctypeDoc, loading: linkedDoctypeLoading } = useDoc(
+    { doctype: "Doctype", id: linkedDoctypeRef || "" },
+    [linkedDoctypeRef]
+  );
   const [items, setItems] = useState<PrintTemplateBuilderItem[]>([]);
   const [itemsLoaded, setItemsLoaded] = useState(false);
   const [html, setHtml] = useState("");
@@ -296,14 +302,12 @@ export default function PrintTemplateFormPage() {
   const [isDefault, setIsDefault] = useState(false);
   const [defaultLetterHead, setDefaultLetterHead] = useState("");
   const [showIdQrCode, setShowIdQrCodeState] = useState(true);
+  const [prefillLoading, setPrefillLoading] = useState(false);
 
   // Fetched items snapshot for dirty check (non-HTML mode); updated when items load or after save
   const fetchedItemsJsonRef = useRef<string>("[]");
 
-  // Sync form state from doc when doc loads or changes
-  useEffect(() => {
-    if (!doc) return;
-    const d = doc as any;
+  const applyDocToForm = useCallback((d: any) => {
     setIsHtml(d.is_html === 1 || d.is_html === true);
     setHtml(d.html_content ?? "");
     setCss(d.css_content ?? "");
@@ -322,12 +326,31 @@ export default function PrintTemplateFormPage() {
     setDefaultLetterHead(d.default_letter_head ?? "");
     setShowIdQrCodeState(d.show_id_qrcode === 0 ? false : true);
     const tableItems = Array.isArray(d.print_template_items) ? d.print_template_items : [];
-    setItems(tableItems.map(docToItem));
-    fetchedItemsJsonRef.current = JSON.stringify(tableItems.map(docToItem));
+    const mapped = tableItems.map(docToItem);
+    setItems(mapped);
+    fetchedItemsJsonRef.current = JSON.stringify(mapped);
     setItemsLoaded(true);
-  }, [
-    doc,
-  ]);
+  }, []);
+
+  // Sync form state from doc when doc loads or changes
+  useEffect(() => {
+    if (!doc) return;
+    applyDocToForm(doc as any);
+  }, [doc, applyDocToForm]);
+
+  const handleReset = useCallback(async () => {
+    if (!doc) return;
+    const ok = await confirm({
+      title: "Reset template",
+      message: "Discard unsaved changes and restore the last saved version?",
+      confirmText: "Reset",
+      cancelText: "Cancel",
+      variant: "warning",
+    });
+    if (!ok) return;
+    applyDocToForm(doc as any);
+    toast.success("Reverted to last saved");
+  }, [doc, applyDocToForm]);
 
   const handleSave = useCallback(async () => {
     if (!id || !doc) return;
@@ -371,7 +394,36 @@ export default function PrintTemplateFormPage() {
     }
   }, [id, doc, isHtml, name, heading, docNameExpr, format, customWidth, customHeight, marginTop, marginRight, marginBottom, marginLeft, isDefault, defaultLetterHead, html, css, js, items, reload, navigate, showIdQrCode]);
 
-  const doctypeForPalette = useMemo(() => (doc as any)?.doctype ?? "", [(doc as any)?.doctype]);
+  const paletteDoctypeName = linkedDoctypeDoc?.name ?? "";
+
+  const handleGetFromDoctypeTemplate = useCallback(async () => {
+    if (!linkedDoctypeDoc?.name || isHtml) return;
+    const ok = await confirm({
+      title: "Generate from Doctype template",
+      message:
+        "Replace the current canvas with fields from the linked Doctype tab layout? Unsaved edits will be overwritten in the builder until you Save.",
+      confirmText: "Generate",
+      cancelText: "Cancel",
+      variant: "warning",
+    });
+    if (!ok) return;
+    setPrefillLoading(true);
+    try {
+      const result = await loadPrintTemplateItemsFromDoctypeTabs(zodula, linkedDoctypeDoc as { name: string; tabs?: unknown; label?: string | null; display_field?: string | null });
+      if (!result) {
+        toast.error("No tab layout on this Doctype, or no printable fields in the layout.");
+        return;
+      }
+      setItems(result.items);
+      setHeading(result.sectionTitle);
+      setDocNameExpr(result.docNameExpression);
+      toast.success("Prefilled from Doctype tab layout");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to load from Doctype");
+    } finally {
+      setPrefillLoading(false);
+    }
+  }, [linkedDoctypeDoc, isHtml]);
 
   // Compare current form state to fetched print template doc (and items when not HTML)
   const isDirty = useMemo(() => {
@@ -417,7 +469,7 @@ export default function PrintTemplateFormPage() {
       showIdQrCode !== fetched.showIdQrCode;
     if (isHtml) return docDirty;
     return docDirty || JSON.stringify(items) !== fetchedItemsJsonRef.current;
-  }, [doc, isHtml, name, html, css, js, heading, docNameExpr, format, customWidth, customHeight, marginTop, marginRight, marginBottom, marginLeft, isDefault, defaultLetterHead, items]);
+  }, [doc, isHtml, name, html, css, js, heading, docNameExpr, format, customWidth, customHeight, marginTop, marginRight, marginBottom, marginLeft, isDefault, defaultLetterHead, showIdQrCode, items]);
 
   const openSettingsPopup = useCallback(() => {
     popup(
@@ -466,6 +518,30 @@ export default function PrintTemplateFormPage() {
         onCheckedChange={(checked) => setIsHtml(checked === true)}
         className="zd:flex zd:items-center zd:gap-2"
       />
+      {!isHtml && itemsLoaded && linkedDoctypeRef ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="zd:h-8"
+          disabled={prefillLoading || linkedDoctypeLoading || !linkedDoctypeDoc?.name}
+          onClick={handleGetFromDoctypeTemplate}
+          title="Generate canvas from the linked Doctype tab layout (same rules as server default print)"
+        >
+          {prefillLoading ? "Loading…" : "Generate from Doctype template"}
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="zd:h-8"
+        disabled={!isDirty}
+        onClick={handleReset}
+        title="Discard unsaved changes and restore last saved template"
+      >
+        Reset
+      </Button>
       <Button variant="ghost" size="sm" className="zd:h-8 zd:w-8 zd:p-0" onClick={openSettingsPopup} title="Print template settings (margin, page size)">
         <Settings className="zd:h-4 zd:w-4" />
       </Button>
@@ -522,7 +598,7 @@ export default function PrintTemplateFormPage() {
         />
       ) : itemsLoaded ? (
         <PrintTemplateBuilder
-          doctype={doctypeForPalette}
+          doctype={paletteDoctypeName}
           items={items}
           // @ts-ignore - PrintTemplateBuilder uses PrintTemplateBuilderItem; generated types may reference PrintTemplateElement
           onChange={setItems}
