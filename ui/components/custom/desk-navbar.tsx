@@ -22,6 +22,7 @@ import { Breadcrumb } from "./breadcrumb";
 import { useIsTabletOrUp } from "../../hooks/use-media-query";
 import { ScannerDialog } from "../form/plugins/scanner";
 import { useDocListAll } from "../../hooks/use-doc-list-all";
+import { toast } from "../ui/toast";
 
 export interface DeskNavbarProps {
   children?: React.ReactNode;
@@ -480,16 +481,29 @@ export const DeskNavbar = ({ children, panelToggle }: DeskNavbarProps) => {
     });
     const q = String(result ?? "").trim();
     if (!q) return;
-    setSearchOpen(true);
-    setSearchTerm(q);
-    setDocHits(DESK_SEARCH_EMPTY_DOCS);
     try {
       const r = await zodula.action("zodula.core.search", { data: { q, docsOnly: true } });
-      if (r && typeof r === "object" && Array.isArray((r as DeskSearchPayload).docs)) {
-        setDocHits((r as DeskSearchPayload).docs);
+      const docs =
+        r && typeof r === "object" && Array.isArray((r as DeskSearchPayload).docs)
+          ? (r as DeskSearchPayload).docs
+          : [];
+      if (docs.length === 0) {
+        toast.error(t("No matching document"));
+        return;
       }
+      if (docs.length === 1) {
+        const only = docs[0];
+        if (only) router.push(only.formHref);
+        return;
+      }
+      const exact = docs.find((d) => d.name === q);
+      if (exact) {
+        router.push(exact.formHref);
+        return;
+      }
+      toast.error(t("Multiple documents match; try a more specific code"));
     } catch {
-      setDocHits(DESK_SEARCH_EMPTY_DOCS);
+      toast.error(t("Search failed"));
     }
   };
 
