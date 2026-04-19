@@ -140,7 +140,10 @@ export type IconName =
   | "Dice4"
   | "Dice5"
   | "Dice6"
-
+  | "Truck"
+  | "Archive"
+  | "ListChecks"
+  // add more icons here
 // Create a mapping of icon names to their corresponding Lucide components
 const iconMap: Record<IconName, React.ComponentType<{ className?: string }>> = {
   Folder: LucideIcons.Folder,
@@ -279,6 +282,9 @@ const iconMap: Record<IconName, React.ComponentType<{ className?: string }>> = {
   Dice4: LucideIcons.Dice4,
   Dice5: LucideIcons.Dice5,
   Dice6: LucideIcons.Dice6,
+  Truck: LucideIcons.Truck,
+  Archive: LucideIcons.Archive,
+  ListChecks: LucideIcons.ListChecks,
 }
 
 interface DynamicIconProps {

@@ -35,96 +35,110 @@ export default $doctype({
         default: "0",
         label: "Can Get",
         required: 1,
+        in_list_view: 1
     },
     can_update: {
         type: "Check",
         label: "Can Update",
         required: 1,
         default: "0",
+        in_list_view: 1
     },
     can_select: {
         type: "Check",
         label: "Can Select",
         required: 1,
         default: "0",
-        depends_on: "doc.perm_level == 0"
+        depends_on: "doc.perm_level == 0",
+        in_list_view: 1
     },
     can_create: {
         type: "Check",
         label: "Can Create",
         required: 1,
         default: "0",
-        depends_on: "doc.perm_level == 0"
+        depends_on: "doc.perm_level == 0",
+        in_list_view: 1
     },
     can_delete: {
         type: "Check",
         label: "Can Delete",
         required: 1,
         default: "0",
-        depends_on: "doc.perm_level == 0"
+        depends_on: "doc.perm_level == 0",
+        in_list_view: 1
     },
     can_submit: {
         type: "Check",
         label: "Can Submit",
         required: 1,
         default: "0",
-        depends_on: "doc.perm_level == 0"
+        depends_on: "doc.perm_level == 0",
+        in_list_view: 1
     },
     can_cancel: {
         type: "Check",
         label: "Can Cancel",
         required: 1,
         default: "0",
-        depends_on: "doc.perm_level == 0"
+        depends_on: "doc.perm_level == 0",
+        in_list_view: 1
     },
     can_own_get: {
         type: "Check",
         label: "Can Own Get",
         required: 1,
         default: "0",
-        depends_on: "doc.perm_level == 0"
+        depends_on: "doc.perm_level == 0",
+        in_list_view: 1
     },
     can_own_select: {
         type: "Check",
         label: "Can Own Select",
         required: 1,
         default: "0",
-        depends_on: "doc.perm_level == 0"
+        depends_on: "doc.perm_level == 0",
+        in_list_view: 1
     },
     can_own_create: {
         type: "Check",
         label: "Can Own Create",
         required: 1,
         default: "0",
-        depends_on: "doc.perm_level == 0"
+        depends_on: "doc.perm_level == 0",
+        in_list_view: 1
     },
     can_own_update: {
         type: "Check",
         label: "Can Own Update",
         required: 1,
         default: "0",
-        depends_on: "doc.perm_level == 0"
+        depends_on: "doc.perm_level == 0",
+        in_list_view: 1
     },
     can_own_delete: {
         type: "Check",
         label: "Can Own Delete",
         required: 1,
         default: "0",
-        depends_on: "doc.perm_level == 0"
+        depends_on: "doc.perm_level == 0",
+        in_list_view: 1
     },
     can_own_submit: {
         type: "Check",
         label: "Can Own Submit",
         required: 1,
         default: "0",
-        depends_on: "doc.perm_level == 0"
+        depends_on: "doc.perm_level == 0",
+        in_list_view: 1
     },
     can_own_cancel: {
         type: "Check",
         label: "Can Own Cancel",
         required: 1,
         default: "0",
-        depends_on: "doc.perm_level == 0"
+        depends_on: "doc.perm_level == 0",
+        in_list_view: 1
     },
     app: {
         type: "Reference",

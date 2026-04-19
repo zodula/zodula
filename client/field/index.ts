@@ -81,6 +81,14 @@ export const standardFields = {
         allow_on_submit: 1,
         no_print: 1,
     },
+    _branch: {
+        type: "Reference",
+        reference: "Branch",
+        label: "Branch",
+        default: "",
+        allow_on_submit: 1,
+        no_print: 1,
+    },
     vector: {
         type: "Text",
         label: "Vector",

@@ -16,7 +16,9 @@ export interface FileUploadProps {
     min?: number;
     className?: string;
     placeholder?: string;
-    urlPrefix?: string
+    urlPrefix?: string;
+    /** Dense layout for reference table cells and tight layouts */
+    compact?: boolean;
 }
 
 
@@ -37,6 +39,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     className = "",
     placeholder = "Choose a file or drag it here",
     urlPrefix,
+    compact = false,
 }) => {
     const [dragActive, setDragActive] = useState(false);
 
@@ -159,8 +162,44 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         };
     }, [previewUrl, isFile]);
 
-    // Render upload area
     const renderUploadArea = () => {
+        if (compact) {
+            return (
+                <div
+                    className={cn(
+                        "zd:flex zd:items-center zd:gap-2 zd:min-h-8 zd:px-2 zd:py-1 zd:rounded zd:border zd:border-dashed zd:cursor-pointer zd:transition-colors zd:max-w-full",
+                        dragActive ? "zd:border-primary zd:bg-primary/5" : "zd:border-border zd:hover:border-primary/50",
+                        readOnly ? "zd:cursor-not-allowed zd:opacity-50" : "",
+                        "no-print"
+                    )}
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onClick={handleClick}
+                    title={placeholder}
+                >
+                    <Upload className="zd:h-4 zd:w-4 zd:shrink-0 zd:text-muted-foreground" />
+                    <span className="zd:text-xs zd:text-muted-foreground zd:truncate zd:flex-1 zd:text-left">
+                        {readOnly ? "—" : "Upload"}
+                    </span>
+                    {!readOnly && (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="zd:h-7 zd:px-2 zd:text-xs zd:shrink-0"
+                            disabled={readOnly}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleClick();
+                            }}
+                        >
+                            File
+                        </Button>
+                    )}
+                </div>
+            );
+        }
         return (
             <div
                 className={cn(
@@ -188,8 +227,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     };
 
     return (
-        <div className={cn("zd:space-y-2", className)}>
-            {/* File Input (hidden) */}
+        <div className={cn(compact ? "zd:space-y-1" : "zd:space-y-2", className)}>
             <input
                 ref={fileInputRef}
                 type="file"
@@ -199,70 +237,87 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                 disabled={readOnly}
             />
 
-            {/* Upload Area */}
             {(!value || value === "") ? renderUploadArea() : null}
 
-            {/* File Preview */}
             {value && (
-                <div className="zd:border zd:rounded zd:p-2 zd:print:p-0 zd:print:border-none">
-                    <div className="zd:flex zd:items-center zd:space-x-3">
-                        {/* File Icon/Preview */}
+                <div
+                    className={cn(
+                        "zd:rounded zd:print:p-0 zd:print:border-none",
+                        compact ? "zd:border-0 zd:p-0" : "zd:border zd:p-2"
+                    )}
+                >
+                    <div className={cn("zd:flex zd:items-center", compact ? "zd:gap-1.5" : "zd:space-x-3")}>
                         <FileThumbnail
                             fileName={fileName}
                             mimeType={isFile ? value.type : undefined}
                             previewUrl={previewUrl}
-                            size="xxl"
+                            size={compact ? "sm" : "xxl"}
                             onClick={() => previewFile(value)}
                         />
 
-                        {/* File Info */}
                         <div className="zd:flex-1 zd:min-w-0 no-print">
-                            <div className="zd:flex zd:items-center zd:gap-2 zd:mb-1 zd:truncate">
+                            <div className="zd:flex zd:items-center zd:gap-1 zd:truncate">
                                 {isFile ? (
-                                    <p className="zd:text-sm zd:font-medium zd:truncate zd:cursor-pointer zd:hover:underline" onClick={() => {
-                                        previewFile(value);
-                                    }}>{fileName}</p>
+                                    <p
+                                        className={cn(
+                                            "zd:font-medium zd:truncate zd:cursor-pointer zd:hover:underline",
+                                            compact ? "zd:text-xs" : "zd:text-sm"
+                                        )}
+                                        onClick={() => {
+                                            previewFile(value);
+                                        }}
+                                    >
+                                        {fileName}
+                                    </p>
                                 ) : (
-                                    <a href={!value.startsWith("http") ? `${BASE_URL}${value}` : value} target="_blank" rel="noopener noreferrer" className="hover:underline truncate">
-                                        <p className="zd:text-sm zd:font-medium zd:truncate">{value}</p>
+                                    <a
+                                        href={!value.startsWith("http") ? `${BASE_URL}${value}` : value}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="hover:underline truncate block"
+                                    >
+                                        <p className={cn("zd:font-medium zd:truncate", compact ? "zd:text-xs" : "zd:text-sm")}>{fileName}</p>
                                     </a>
                                 )}
                             </div>
-                            {fileSize && (
+                            {!compact && fileSize && (
                                 <p className="zd:text-muted-foreground">{fileSize}</p>
                             )}
-                            <div className="zd:flex zd:items-center zd:gap-2">
-                                {fileTypeCategory !== 'other' && (
-                                    <p className="zd:text-muted-foreground zd:capitalize">
-                                        {fileTypeCategory} file
-                                    </p>
-                                )}
-                                {isFile && (
-                                    <Badge variant="warning" size="sm">
-                                        upload
-                                    </Badge>
-                                )}
-                            </div>
+                            {!compact && (
+                                <div className="zd:flex zd:items-center zd:gap-2">
+                                    {fileTypeCategory !== "other" && (
+                                        <p className="zd:text-muted-foreground zd:capitalize">
+                                            {fileTypeCategory} file
+                                        </p>
+                                    )}
+                                    {isFile && (
+                                        <Badge variant="warning" size="sm">
+                                            upload
+                                        </Badge>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
-                        {/* Action Buttons */}
-                        <div className="zd:flex zd:items-center zd:space-x-1">
-                            {/* Remove Button */}
+                        <div className="zd:flex zd:items-center zd:shrink-0">
                             {!readOnly && (
                                 <Button
                                     variant="ghost"
+                                    size={compact ? "sm" : "default"}
                                     onClick={handleRemove}
-                                    className="zd:text-muted-foreground zd:hover:text-destructive"
+                                    className={cn(
+                                        "zd:text-muted-foreground zd:hover:text-destructive",
+                                        compact && "zd:h-7 zd:w-7 zd:p-0"
+                                    )}
                                     title="Remove file"
                                 >
-                                    <X className="zd:h-4 zd:w-4" />
+                                    <X className={compact ? "zd:h-3.5 zd:w-3.5" : "zd:h-4 zd:w-4"} />
                                 </Button>
                             )}
                         </div>
                     </div>
 
-                    {/* Video/Audio Preview */}
-                    {fileTypeCategory === 'video' && previewUrl && (
+                    {!compact && fileTypeCategory === "video" && previewUrl && (
                         <div className="mt-3">
                             <video
                                 src={previewUrl}
@@ -272,7 +327,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                         </div>
                     )}
 
-                    {fileTypeCategory === 'audio' && previewUrl && (
+                    {!compact && fileTypeCategory === "audio" && previewUrl && (
                         <div className="mt-3">
                             <audio
                                 src={previewUrl}
@@ -283,8 +338,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                     )}
                 </div>
             )}
-
-
         </div>
     );
 };

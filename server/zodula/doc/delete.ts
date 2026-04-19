@@ -40,10 +40,6 @@ export class ZodulaDoctypeDeleter<TN extends Zodula.DoctypeName = Zodula.Doctype
             } catch {
                 return
             }
-            const files = await fs.readdir(dir)
-            for (const file of files) {
-                await fs.unlink(path.join(dir, file))
-            }
             await fs.rmdir(dir, { recursive: true })
 
         } catch (error) {

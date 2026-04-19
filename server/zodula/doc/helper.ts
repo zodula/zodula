@@ -73,7 +73,7 @@ export class ZodulaDoctypeHelper {
             if (!config) continue
             let value = doc[fieldName as keyof typeof doc] as any
 
-            if(config.type === "File") {
+            if (config.type === "File") {
                 value = value
                 continue
             }
@@ -236,7 +236,15 @@ export class ZodulaDoctypeHelper {
             return true
         }
         const permissions = await db.select("*").from("Doctype Permission" as Zodula.DoctypeName).where("doctype", "=", doctype).where("role", "IN", _roles).where("perm_level", "=", 0).execute()
-        const permission = permissions[0]
+        // merge permissions if the permission is 1 then replace and if 0 then do not replace
+        const permission = permissions.reduce((acc, curr) => {
+            for (const [key, value] of Object.entries(curr)) {
+                if (value === 1) {
+                    acc[key] = value
+                }
+            }
+            return acc
+        }, {} as Zodula.SelectDoctype<"Doctype Permission">)
         if (!permission) {
             return false
         }

@@ -1,6 +1,7 @@
 import { startup } from "./startup"
 import { logger } from "./logger";
 import BXO from "bxo";
+import { installServerErrorHandling } from "./serve/error-handling";
 import { openapi } from "bxo/plugins";
 import { extendDoctype } from "./serve/extend/doctype";
 import { loader } from "./loader"
@@ -16,6 +17,7 @@ import { extendTranslation } from "./serve/extend/translation";
 
 
 export async function startServer() {
+    installServerErrorHandling()
     await startup()
     const server = new BXO({
         serve: {

@@ -38,6 +38,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       onKeyDown,
       autocomplete = "off",
       wrapperStyle,
+      onWheel,
     },
     ref
   ) => {
@@ -117,6 +118,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck="false"
+          onWheel={onWheel}
         />
 
         {suffix && (

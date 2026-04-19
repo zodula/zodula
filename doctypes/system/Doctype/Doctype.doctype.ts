@@ -85,6 +85,11 @@ export default $doctype(
       type: "Check",
       label: "Default Show ID QR Code",
     },
+
+    is_branch_doctype: {
+      type: "Check",
+      label: "Is Branch Doctype",
+    },
   },
   {
     label: "Doctype",

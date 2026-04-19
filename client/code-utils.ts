@@ -134,6 +134,13 @@ export function tabsToTemplateItem(
       const rowId = `row_${rowIndex}`;
       rowIndex += 1;
       let rowHasPrintable = false;
+      const deferredEmpties: TemplateItemForPrint[] = [];
+      function pushDeferredEmpties() {
+        for (const e of deferredEmpties) {
+          items.push(e);
+        }
+        deferredEmpties.length = 0;
+      }
       function visitCell(node: unknown) {
         if (Array.isArray(node)) {
           for (const n of node) visitCell(n);
@@ -141,8 +148,7 @@ export function tabsToTemplateItem(
         }
         const obj = node as Record<string, unknown>;
         if (obj?.type === "empty") {
-          rowHasPrintable = true;
-          items.push({
+          deferredEmpties.push({
             id: `empty_${idx}`,
             idx,
             type: "empty",
@@ -159,11 +165,15 @@ export function tabsToTemplateItem(
           if (fieldDef?.no_print === 1) return;
           const label = (schemaFields[val]?.label as string) ?? "";
           const countBefore = items.length;
+          pushDeferredEmpties();
           collectField(val, label, rowId);
           if (items.length > countBefore) rowHasPrintable = true;
         }
       }
       for (const cell of row) visitCell(cell);
+      if (rowHasPrintable) {
+        pushDeferredEmpties();
+      }
       if (!rowHasPrintable) {
         rowIndex -= 1;
       }
@@ -405,8 +415,12 @@ async function renderCellContent(
         `<div class="print-cell-inner print-cell-label-${labelPosition}" style="text-align:${align}">${order}</div>`
       );
     }
-    const isImageHtml = (field?.type === "File" && field?.accept?.includes("image/*")) || field?.type === "Signature";
-    const safeValue = isImageHtml ? escapedValue : escapeHtml(escapedValue || "");
+    const isRawHtmlField =
+      (field?.type === "File" && field?.accept?.includes("image/*")) ||
+      field?.type === "Signature" ||
+      field?.type === "Reference Table" ||
+      field?.type === "Check";
+    const safeValue = isRawHtmlField ? escapedValue : escapeHtml(escapedValue || "");
     return Promise.resolve(
       `${label !== "" ? `<span class="print-label">${escapeHtml(label)}</span>` : ""}
       <span class="print-value" style="text-align:${align}">${safeValue}</span>`
@@ -478,13 +492,17 @@ export async function templateItemToHtml(
     const cellResults = await Promise.all(cellPromises);
 
     const cells: string[] = [];
+    let rowHasNonEmptyCell = false;
     for (let i = 0; i < cellResults.length; i++) {
       const content = cellResults[i];
       if (content != null) {
         cells.push(`<div class="print-cell">${content}</div>`);
+        if (rowItems[i]?.type !== "empty") rowHasNonEmptyCell = true;
       }
     }
-    if (cells.length) rowHtml.push(`<div class="print-row">${cells.join("")}</div>`);
+    // Layout-only "empty" cells still render placeholder HTML; rows that are *only* empties
+    // (e.g. skipped no_print row) must not become a full .print-row or PDFs show huge vertical gaps.
+    if (cells.length && rowHasNonEmptyCell) rowHtml.push(`<div class="print-row">${cells.join("")}</div>`);
   }
 
 
@@ -513,7 +531,8 @@ export function generatePrintItemCss(items: TemplateItemForPrint[]): string {
     flex: 1;
     }
     .print-cell-empty {
-    min-height: 1em;
+    min-height: 0;
+    line-height: 0;
     }
     .print-cell-inner {
     display: flex;

@@ -10,7 +10,7 @@ export default $doctype<"Organization Additional Menu">({
         label: "URL",
         required: 1,
         in_list_view: 1,
-        description: "App path (e.g. /contact, /org/track) or full URL (https://…).",
+        description: "App path (e.g. /contact, /track) or full URL (https://…).",
     },
 }, {
     label: "Organization Additional Menu",

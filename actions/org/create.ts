@@ -40,15 +40,33 @@ export default $action(async (ctx) => {
         payloadGlobal.currency = String(currency).trim();
     }
 
+    const roles = await $zodula.session.roles();
+    const isSystemAdmin = roles.includes("System Admin");
+    const currentUser = await $zodula.session.user(true);
+    const userBranch = String((currentUser as any)?.branch ?? "").trim();
+    const withBranchIfRequired = async (doctypeName: Zodula.DoctypeName, payload: Record<string, any>) => {
+        if (isSystemAdmin || !userBranch) return payload;
+        const doctypeDoc = await $zodula
+            .doctype("Doctype")
+            .get(doctypeName as any)
+            .fields(["is_branch_doctype"] as any)
+            .bypass(true);
+        if (Number((doctypeDoc as any)?.is_branch_doctype ?? 0) !== 1) return payload;
+        return { ...payload, _branch: userBranch };
+    };
+
+    const orgPayloadWithBranch = await withBranchIfRequired("Organization", payloadOrg as any);
+    const globalPayloadWithBranch = await withBranchIfRequired("Global Setting", payloadGlobal as any);
+
     const updatedOrg = await $zodula
         .doctype("Organization")
-        .update("Organization", payloadOrg)
+        .update("Organization", orgPayloadWithBranch as any)
         .bypass(true);
 
-    if (payloadGlobal && Object.keys(payloadGlobal).length > 0) {
+    if (globalPayloadWithBranch && Object.keys(globalPayloadWithBranch).length > 0) {
         await $zodula
             .doctype("Global Setting")
-            .update("Global Setting", payloadGlobal)
+            .update("Global Setting", globalPayloadWithBranch as any)
             .bypass(true);
     }
 

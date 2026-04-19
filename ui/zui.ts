@@ -80,6 +80,8 @@ export interface FormScriptContext<DN extends Zodula.DoctypeName> {
   clear_table?: (tableFieldName: string) => void;
 }
 
+export type ZuiFormContext<DN extends Zodula.DoctypeName> = FormScriptContext<DN>;
+
 export interface ListFormatBadgeConfig {
   variant?: BadgeVariant;
   size?: string;
@@ -99,6 +101,8 @@ export interface ListScriptContext<DN extends Zodula.DoctypeName> {
   /** Reload the list data. Available when context is from list view. */
   reload?: () => Promise<void>;
 }
+
+export type ZuiListContext<DN extends Zodula.DoctypeName> = ListScriptContext<DN>;
 
 // ---------------------------------------------------------------------------
 // Script handlers and script entries

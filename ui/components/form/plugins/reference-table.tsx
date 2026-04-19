@@ -64,6 +64,7 @@ const InlineFieldEditor = ({ field, value, onChange, formData, docId, readonly, 
     return (
         <>
             <FormControl
+                compact={true}
                 showDescription={false}
                 docId={docId}
                 field={field}
@@ -93,7 +94,9 @@ export const ReferenceTablePlugin = new FormPlugin({
         // Use props.value directly for table data
         const tableData = useMemo(() => {
             if (!props.value || !Array.isArray(props.value)) return [];
-            return props.value?.sort((a: any, b: any) => a.idx - b.idx);
+            return [...props.value].sort(
+                (a: any, b: any) => (a?.idx ?? 0) - (b?.idx ?? 0)
+            );
         }, [props.value]);
 
         const handleAddRow = async () => {
@@ -289,7 +292,7 @@ export const ReferenceTablePlugin = new FormPlugin({
                                                     </div>
                                                 )}
                                             </td>
-                                            <td className="zd:p-0.5">{row.idx + 1}</td>
+                                            <td className="zd:p-0.5">{(row.idx ?? index) + 1}</td>
                                             {/* <td className="zd:px-2 zd:py-2 no-print">
                                             <FormControl
                                                 field={idField}
@@ -303,7 +306,7 @@ export const ReferenceTablePlugin = new FormPlugin({
                                         </td> */}
                                             {displayFields.map((field) => {
                                                 const setPropertyFields = props.referenceTableIndexFields?.[props?.fieldKey || ""]?.find((record: any) => record?.idx === index && record?.fields?.find((f: any) => f.name === field.name) !== undefined);
-                                                const setPropertyField = setPropertyFields?.fields[0];
+                                                const setPropertyField = setPropertyFields?.fields?.find((f: any) => f.name === field.name);
                                                 const mergeField = { ...field, ...setPropertyField };
                                                 return (
                                                     <td key={field.name} className="zd:p-0.5">
@@ -313,7 +316,7 @@ export const ReferenceTablePlugin = new FormPlugin({
                                                             value={row[field.name as string]}
                                                             onChange={(fieldPath: string, value: any) => props.onChange?.(fieldPath, value)}
                                                             formData={{ ...props.formData, ...row }} // Merge parent and row data so dynamic references can resolve from row fields first, then parent fields
-                                                            readonly={field.readonly === 1 || props.readonly}
+                                                            readonly={mergeField.readonly === 1 || props.readonly}
                                                             doctype={props.fieldOptions.doctype as string}
                                                             onRowUpdate={(fieldName, newValue) => handleRowFieldUpdate(index, fieldName, newValue)}
                                                             fieldPath={`${props.fieldKey}.${index}.${field.name}`} // Pass the nested field path
@@ -424,41 +427,41 @@ export const ReferenceTablePlugin = new FormPlugin({
                                 </div>
                                 {editingRowIndex !== null && editingRowIndex >= 0 && editingRowIndex < tableData.length && (
                                     <div className="zd:space-y-4">
-                                    {editFields.map((field) => {
-                                        const setPropertyFields = props.referenceTableIndexFields?.[props.fieldKey ?? ""]?.find(
-                                            (record: any) =>
-                                                record.idx === editingRowIndex &&
-                                                record.fields?.find((f: any) => f.name === field.name) !== undefined
-                                        );
-                                        const setPropertyField = setPropertyFields?.fields?.[0];
-                                        const mergeField = { ...field, ...setPropertyField };
-                                        const fieldPath = `${props.fieldKey}.${editingRowIndex}.${field.name}`;
-                                        const row = tableData[editingRowIndex];
-                                        return (
-                                            <FormControl
-                                                key={field.name}
-                                                label={t((mergeField.label || mergeField.name) as string)}
-                                                showDescription={true}
-                                                docId={props.docId}
-                                                field={mergeField}
-                                                fieldKey={fieldPath}
-                                                value={row?.[field.name as string]}
-                                                onChange={(_path, value) => props.onChange?.(fieldPath, value)}
-                                                formData={{ ...props.formData, ...row }}
-                                                required={field.required === 1}
-                                                readonly={field.readonly === 1 || props.readonly}
-                                                fieldPath={fieldPath}
-                                                referenceTableFields={props.referenceTableFields}
-                                                extendFields={props.extendFields}
-                                                referenceTableIndexFields={props.referenceTableIndexFields}
-                                            />
-                                        );
-                                    })}
-                                    <div className="zd:flex zd:justify-end zd:pt-2">
-                                        <Button size="sm" onClick={handleCloseEditRow}>
-                                            {t("Done")}
-                                        </Button>
-                                    </div>
+                                        {editFields.map((field) => {
+                                            const setPropertyFields = props.referenceTableIndexFields?.[props.fieldKey ?? ""]?.find(
+                                                (record: any) =>
+                                                    record.idx === editingRowIndex &&
+                                                    record.fields?.find((f: any) => f.name === field.name) !== undefined
+                                            );
+                                            const setPropertyField = setPropertyFields?.fields?.find((f: any) => f.name === field.name);
+                                            const mergeField = { ...field, ...setPropertyField };
+                                            const fieldPath = `${props.fieldKey}.${editingRowIndex}.${field.name}`;
+                                            const row = tableData[editingRowIndex];
+                                            return (
+                                                <FormControl
+                                                    key={field.name}
+                                                    label={t((mergeField.label || mergeField.name) as string)}
+                                                    showDescription={true}
+                                                    docId={props.docId}
+                                                    field={mergeField}
+                                                    fieldKey={fieldPath}
+                                                    value={row?.[field.name as string]}
+                                                    onChange={(_path, value) => props.onChange?.(fieldPath, value)}
+                                                    formData={{ ...props.formData, ...row }}
+                                                    required={field.required === 1}
+                                                    readonly={mergeField.readonly === 1 || props.readonly}
+                                                    fieldPath={fieldPath}
+                                                    referenceTableFields={props.referenceTableFields}
+                                                    extendFields={props.extendFields}
+                                                    referenceTableIndexFields={props.referenceTableIndexFields}
+                                                />
+                                            );
+                                        })}
+                                        <div className="zd:flex zd:justify-end zd:pt-2">
+                                            <Button size="sm" onClick={handleCloseEditRow}>
+                                                {t("Done")}
+                                            </Button>
+                                        </div>
                                     </div>
                                 )}
                             </div>

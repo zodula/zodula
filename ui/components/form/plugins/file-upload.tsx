@@ -15,8 +15,9 @@ export const FileUploadPlugin = new FormPlugin({
                     onChange={(value: File | string) => {
                         props.onChange?.(props.fieldPath || "", value);
                     }}
+                    compact={!!props.compact}
                 />
-                {props.fieldOptions.accept && (
+                {props.fieldOptions.accept && !props.compact && (
                     <div className="zd:text-xs zd:text-muted-foreground zd:mt-2 no-print">
                         {props.fieldOptions.accept}
                     </div>

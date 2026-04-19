@@ -169,6 +169,13 @@ export function tabsLayoutToPrintTemplateBuilderItems(
       const rowId = `row_${rowIndex}`;
       rowIndex += 1;
       let rowHasPrintable = false;
+      const deferredEmpties: PrintTemplateBuilderItem[] = [];
+      function pushDeferredEmpties() {
+        for (const e of deferredEmpties) {
+          items.push(e);
+        }
+        deferredEmpties.length = 0;
+      }
       function visitCell(node: unknown) {
         if (Array.isArray(node)) {
           for (const n of node) visitCell(n);
@@ -176,8 +183,7 @@ export function tabsLayoutToPrintTemplateBuilderItems(
         }
         const obj = node as Record<string, unknown>;
         if (obj?.type === "empty") {
-          rowHasPrintable = true;
-          items.push(
+          deferredEmpties.push(
             toPrintTemplateBuilderItem({
               id: `empty_${idx}`,
               idx,
@@ -196,11 +202,15 @@ export function tabsLayoutToPrintTemplateBuilderItems(
           if (fd?.no_print === 1) return;
           const lbl = (schemaFields[val]?.label as string) ?? "";
           const countBefore = items.length;
+          pushDeferredEmpties();
           collectField(val, lbl, rowId);
           if (items.length > countBefore) rowHasPrintable = true;
         }
       }
       for (const cell of row) visitCell(cell);
+      if (rowHasPrintable) {
+        pushDeferredEmpties();
+      }
       if (!rowHasPrintable) {
         rowIndex -= 1;
       }

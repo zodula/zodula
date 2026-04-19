@@ -106,6 +106,7 @@ export const TextInputPlugin = new FormPlugin({
         onFocus={handleFocus}
         autocomplete={(props.fieldOptions as { autocomplete?: string }).autocomplete ?? "off"}
         suffix={passwordToggleSuffix}
+        onWheel={(e: React.WheelEvent<HTMLInputElement>) => e.currentTarget.blur()}
       />
     );
   },

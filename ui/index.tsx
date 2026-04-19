@@ -20,6 +20,7 @@ export type { Metadata }
 export { useAuth } from "./hooks/use-auth";
 export { useForm }
 export { useZui } from "./zui";
+export type { ZuiFormContext, ZuiListContext } from "./zui";
 // components
 export { ToastPortal } from "./components/ui/toast";
 export { toast } from "./components/ui/toast";

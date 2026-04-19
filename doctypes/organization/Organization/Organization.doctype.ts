@@ -86,7 +86,7 @@ export default $doctype<"Organization">({
         label: "Additional Menu",
         reference: "Organization Additional Menu",
         required: 0,
-        description: "Extra links in the public site navbar (e.g. Track delivery → /org/track).",
+        description: "Extra links in the public site navbar (e.g. Track delivery → /track).",
     },
 }, {
     label: "Organization",

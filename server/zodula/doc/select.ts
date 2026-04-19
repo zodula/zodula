@@ -340,6 +340,17 @@ export class ZodulaDoctypeSelector<
       }
     }
 
+    const isBranchDoctype = Number((doctype.config as any)?.is_branch_doctype ?? 0) === 1;
+    const userBranch = String((user as any)?.branch ?? "").trim();
+    if (
+      isBranchDoctype &&
+      !this.options.bypass &&
+      !roles.includes("System Admin") &&
+      userBranch
+    ) {
+      whereConditions.push(`"${doctype.name}"."_branch" = ${sqlStringLiteral(userBranch)}`);
+    }
+
 
     const result =
       whereConditions.length > 0
@@ -350,164 +361,159 @@ export class ZodulaDoctypeSelector<
   }
 
   async _select() {
-    try {
-      const db = Database("main");
-      const doctype = loader.from("doctype").get(this.doctypeName);
-      const session = new ZodulaSession();
-      const user = await session.user(true);
-      const roles = await session.roles();
-      const { can } = await ZodulaDoctypeHelper.checkPermission(
-        this.doctypeName,
-        "can_select",
-        {} as any,
-        { bypass: this.options.bypass, doctype }
+    const db = Database("main");
+    const doctype = loader.from("doctype").get(this.doctypeName);
+    const session = new ZodulaSession();
+    const user = await session.user(true);
+    const roles = await session.roles();
+    const { can } = await ZodulaDoctypeHelper.checkPermission(
+      this.doctypeName,
+      "can_select",
+      {} as any,
+      { bypass: this.options.bypass, doctype }
+    );
+    if (
+      !can &&
+      !this.options.bypass
+    ) {
+      throw new ErrorWithCode(
+        `You do not have permission to select ${this.doctypeName}`,
+        {
+          status: 403,
+        }
       );
-      if (
-        !can &&
-        !this.options.bypass
-      ) {
-        throw new ErrorWithCode(
-          `You do not have permission to select ${this.doctypeName}`,
-          {
-            status: 403,
-          }
-        );
-      }
+    }
 
-      const { limit = -1, page = 1 } = this.options || {};
-      const children = doctype.children;
+    const { limit = -1, page = 1 } = this.options || {};
+    const children = doctype.children;
 
-      // Find child field aliases from children (Reference Table and Extend fields)
-      const childFieldAliases = new Set<string>();
-      for (const child of children) {
-        childFieldAliases.add(child.parentFieldName);
-      }
+    // Find child field aliases from children (Reference Table and Extend fields)
+    const childFieldAliases = new Set<string>();
+    for (const child of children) {
+      childFieldAliases.add(child.parentFieldName);
+    }
 
-      const requestedFields =
-        this.options.fields.length > 0
-          ? this.options.fields
-            ?.map((field) => String(field))
-            ?.filter((field) => !childFieldAliases.has(field)) ?? []
-          : ["*"];
+    const requestedFields =
+      this.options.fields.length > 0
+        ? this.options.fields
+          ?.map((field) => String(field))
+          ?.filter((field) => !childFieldAliases.has(field)) ?? []
+        : ["*"];
 
-      // Build JOINs for reference table filters
-      const { joins, joinAliases } = this.buildJoinsForFilters(
-        doctype,
-        this.options.filters
-      );
+    // Build JOINs for reference table filters
+    const { joins, joinAliases } = this.buildJoinsForFilters(
+      doctype,
+      this.options.filters
+    );
 
-      // Build SELECT clause with specified fields
-      let selectFields: string;
-      if (requestedFields.includes("*") || requestedFields.length === 0) {
-        // Select all fields
-        selectFields = `"${doctype?.name}".*`;
-      } else {
-        // Ensure "id" is always included (needed for relationships and joins)
-        const fieldsToSelect = [...new Set(["id", ...requestedFields])];
-        selectFields = fieldsToSelect
-          .map((field) => `"${doctype?.name}"."${field}"`)
-          .join(", ");
-      }
+    // Build SELECT clause with specified fields
+    let selectFields: string;
+    if (requestedFields.includes("*") || requestedFields.length === 0) {
+      // Select all fields
+      selectFields = `"${doctype?.name}".*`;
+    } else {
+      // Ensure "id" is always included (needed for relationships and joins)
+      const fieldsToSelect = [...new Set(["id", ...requestedFields])];
+      selectFields = fieldsToSelect
+        .map((field) => `"${doctype?.name}"."${field}"`)
+        .join(", ");
+    }
 
-      // Build the main query with JOINs
-      const selectClause = `SELECT DISTINCT ${selectFields} FROM "${doctype?.name}"`;
-      const joinClause = joins.length > 0 ? joins.join(" ") : "";
-      const permissions = await ZodulaDoctypeHelper.getPermissions(
-        this.doctypeName,
-        roles
-      );
-      const whereClause = this.buildWhereClause({
-        doctype,
-        roles,
-        permissions,
-        user,
-        joinAliases
-      });
-      const orderClause = this.options.sort
-        ? `ORDER BY "${doctype?.name}"."${this.options.sort as string}" ${this.options.order}`
-        : "";
-      // If limit is -1, fetch all records (no LIMIT/OFFSET clause)
-      const limitClause = limit === -1 ? "" : `LIMIT ${limit} OFFSET ${(page - 1) * limit}`;
+    // Build the main query with JOINs
+    const selectClause = `SELECT DISTINCT ${selectFields} FROM "${doctype?.name}"`;
+    const joinClause = joins.length > 0 ? joins.join(" ") : "";
+    const permissions = await ZodulaDoctypeHelper.getPermissions(
+      this.doctypeName,
+      roles
+    );
+    const whereClause = this.buildWhereClause({
+      doctype,
+      roles,
+      permissions,
+      user,
+      joinAliases
+    });
+    const orderClause = this.options.sort
+      ? `ORDER BY "${doctype?.name}"."${this.options.sort as string}" ${this.options.order}`
+      : "";
+    // If limit is -1, fetch all records (no LIMIT/OFFSET clause)
+    const limitClause = limit === -1 ? "" : `LIMIT ${limit} OFFSET ${(page - 1) * limit}`;
 
-      // Combine all clauses
-      const queryParts = [
-        selectClause,
-        joinClause,
-        whereClause,
-        orderClause,
-        limitClause,
-      ].filter(Boolean);
-      const stmt = queryParts.join(" ");
-      // Execute query
-      const result = (await db.all(
-        stmt
-      )) as unknown as Zodula.SelectDoctype<TN>[];
+    // Combine all clauses
+    const queryParts = [
+      selectClause,
+      joinClause,
+      whereClause,
+      orderClause,
+      limitClause,
+    ].filter(Boolean);
+    const stmt = queryParts.join(" ");
+    // Execute query
+    const result = (await db.all(
+      stmt
+    )) as unknown as Zodula.SelectDoctype<TN>[];
 
-      // Build count query for pagination (with DISTINCT if there are JOINs)
-      const countSelect = joins.length > 0
-        ? `SELECT COUNT(DISTINCT "${doctype?.name}"."id") as count FROM "${doctype?.name}"`
-        : `SELECT COUNT(*) as count FROM "${doctype?.name}"`;
-      const countQueryParts = [
-        countSelect,
-        joinClause,
-        whereClause,
-      ].filter(Boolean);
-      const countStmt = countQueryParts.join(" ");
-      const count = +(await db.get(countStmt))?.count as number;
+    // Build count query for pagination (with DISTINCT if there are JOINs)
+    const countSelect = joins.length > 0
+      ? `SELECT COUNT(DISTINCT "${doctype?.name}"."id") as count FROM "${doctype?.name}"`
+      : `SELECT COUNT(*) as count FROM "${doctype?.name}"`;
+    const countQueryParts = [
+      countSelect,
+      joinClause,
+      whereClause,
+    ].filter(Boolean);
+    const countStmt = countQueryParts.join(" ");
+    const count = +(await db.get(countStmt))?.count as number;
 
-      let results = [] as Zodula.SelectDoctype<TN>[];
+    let results = [] as Zodula.SelectDoctype<TN>[];
 
-      results = await Promise.all(
-        result.map(async (doc) => {
-          // Apply permission level permissions to filter fields
-          if (!this.options.bypass && !roles.includes("System Admin")) {
-            const isOwn = doc.owner === user.id;
-            doc = await ZodulaDoctypeHelper.applyPermLevelPermission(
-              this.doctypeName,
-              doc,
-              roles,
-              this.options.bypass,
-              isOwn
-            );
-          }
+    results = await Promise.all(
+      result.map(async (doc) => {
+        // Apply permission level permissions to filter fields
+        if (!this.options.bypass && !roles.includes("System Admin")) {
+          const isOwn = doc.owner === user.id;
+          doc = await ZodulaDoctypeHelper.applyPermLevelPermission(
+            this.doctypeName,
+            doc,
+            roles,
+            this.options.bypass,
+            isOwn
+          );
+        }
 
-          // Fetch and attach child records (Extend and Reference Table fields)
-          if (children.length > 0) {
-            for (const child of children) {
-              const childRecords = await ZodulaDoctypeHelper.getChildRecords(
-                doc.id,
-                child,
-                {
-                  fields: [],
-                  bypass: this.options.bypass,
-                  override: this.options.override,
-                  unsafe: this.options.unsafe,
-                }
-              );
-
-              if (childRecords !== undefined) {
-                doc[child.parentFieldName as keyof Zodula.SelectDoctype<TN>] = childRecords as any;
+        // Fetch and attach child records (Extend and Reference Table fields)
+        if (children.length > 0) {
+          for (const child of children) {
+            const childRecords = await ZodulaDoctypeHelper.getChildRecords(
+              doc.id,
+              child,
+              {
+                fields: [],
+                bypass: this.options.bypass,
+                override: this.options.override,
+                unsafe: this.options.unsafe,
               }
+            );
+
+            if (childRecords !== undefined) {
+              doc[child.parentFieldName as keyof Zodula.SelectDoctype<TN>] = childRecords as any;
             }
           }
+        }
 
-          // Non-unsafe: safe() → formatDocResult (File paths as stored)
-          return this.options.unsafe
-            ? doc
-            : zodula.utils.safe(this.doctypeName, doc);
-        })
-      ) as Zodula.SelectDoctype<TN>[];
+        // Non-unsafe: safe() → formatDocResult (File paths as stored)
+        return this.options.unsafe
+          ? doc
+          : zodula.utils.safe(this.doctypeName, doc);
+      })
+    ) as Zodula.SelectDoctype<TN>[];
 
-      return {
-        docs: results,
-        limit: limit,
-        page: page,
-        count: count as number,
-      };
-    } catch (error) {
-      console.error(error);
-      throw error;
-    }
+    return {
+      docs: results,
+      limit: limit,
+      page: page,
+      count: count as number,
+    };
   }
 
   // thenable

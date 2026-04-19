@@ -217,7 +217,7 @@ export const extendDoctype = () => {
             ctx.query.fields = [ctx.query.fields || "*"];
           }
 
-          return await db.transaction(async (trx) => {
+          const result = await db.transaction(async (trx) => {
             dbcontext.enterWith({
               trx: trx,
             });
@@ -253,6 +253,8 @@ export const extendDoctype = () => {
             }
             return ctx.json(result);
           });
+
+          return result;
         } catch (error: any) {
           return ctx.json(
             error?.message || "Internal server error",

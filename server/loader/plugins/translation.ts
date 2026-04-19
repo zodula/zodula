@@ -286,11 +286,6 @@ export class TranslationLoader {
 
             const content = fs.readFileSync(absPath, "utf-8");
             const entries = parseCSV(content);
-
-            logger.info(
-                `Loaded ${entries.length} translations [${language}] ${appName}/${domain}`
-            );
-
             return { filePath: absPath, language, app: appName, domain, entries };
         } catch (error) {
             logger.error(`Failed to load translation file ${absPath}:`, error);

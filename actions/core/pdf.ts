@@ -1,6 +1,7 @@
 import { generatePrintItemCss, PAGE_FORMATS, tabsToTemplateItem, templateItemToHtml, type TemplateItemForPrint } from "@/zodula/client/code-utils";
+import { existsSync } from "node:fs";
 import { z } from "bxo";
-import puppeteer, { Browser } from "puppeteer";
+import puppeteer, { type Browser } from "puppeteer";
 import { JSDOM } from "jsdom"
 // @ts-ignore - binba may not have type definitions
 import { Template } from "binba"
@@ -53,8 +54,62 @@ function guessImageMimeFromUrl(u: string): string {
 
 /** Match QR image pixel size in PDF (also min height for title row when QR is on). */
 const PDF_QR_SIZE_PX = 56;
-/** Space below the header band so QR/title never touch the letterhead rule (Chromium PDF body starts flush). */
-const PDF_BODY_TOP_GAP_PX = 20;
+/** Space below the header margin and the body content (keep small — letter-head already has Print Template margin_top padding). */
+const PDF_BODY_TOP_GAP_PX = 4;
+
+/** Bare-metal PDF: system Chromium/Chrome only (no bundled browser; Docker should use PUPPETEER_BROWSER_WS_ENDPOINT). */
+const SYSTEM_CHROMIUM_CANDIDATES = [
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/google-chrome",
+    "/snap/bin/chromium",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+] as const;
+
+function resolveSystemChromiumExecutable(): string {
+    const fromEnv =
+        process.env.PUPPETEER_EXECUTABLE_PATH?.trim() || process.env.CHROME_BIN?.trim();
+    if (fromEnv) return fromEnv;
+    for (const p of SYSTEM_CHROMIUM_CANDIDATES) {
+        if (existsSync(p)) return p;
+    }
+    throw new ErrorWithCode(
+        "No Chromium/Chrome found. On bare metal install Chromium or set CHROME_BIN (or PUPPETEER_EXECUTABLE_PATH). In Docker use PUPPETEER_BROWSER_WS_ENDPOINT (Browserless) — the image does not bundle Chromium.",
+        { status: 500 }
+    );
+}
+
+async function getPdfBrowser(): Promise<Browser> {
+    const ws =
+        process.env.PUPPETEER_BROWSER_WS_ENDPOINT?.trim() ||
+        process.env.BROWSER_WS_ENDPOINT?.trim();
+    if (ws) {
+        return puppeteer.connect({ browserWSEndpoint: ws }).catch(() => {
+            throw new ErrorWithCode("Failed to connect to browser (Browserless WebSocket)", {
+                status: 500,
+            });
+        });
+    }
+    const executablePath = resolveSystemChromiumExecutable();
+    return puppeteer
+        .launch({
+            headless: true,
+            executablePath,
+            args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+            ],
+        })
+        .catch(() => {
+            throw new ErrorWithCode("Failed to launch Chromium", {
+                status: 500,
+            });
+        });
+}
 
 /**
  * Place QR beside `.print-doc-heading` in a flex row so its height matches the title block
@@ -92,15 +147,28 @@ function embedQrInPrintHeadingRow(html: string, qrDataUrl: string): { html: stri
     }
 }
 
+/**
+ * Some custom HTML print templates output escaped markup (`&lt;table...&gt;`)
+ * from template expressions. Decode once so Puppeteer renders real elements.
+ */
+function normalizeRenderedHtml(html: string): string {
+    const rendered = String(html ?? "");
+    if (!rendered.includes("&lt;")) return rendered;
+    if (!/&lt;\/?(?:table|thead|tbody|tr|th|td|div|span|p|h[1-6]|img)\b/i.test(rendered)) {
+        return rendered;
+    }
+    try {
+        const dom = new JSDOM("");
+        const textarea = dom.window.document.createElement("textarea");
+        textarea.innerHTML = rendered;
+        return textarea.value;
+    } catch {
+        return rendered;
+    }
+}
+
 export default $action(async ctx => {
-    const browser = await puppeteer.launch({
-        headless: true,
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    }).catch(e => {
-        throw new ErrorWithCode("Failed to launch browser", {
-            status: 500,
-        });
-    });
+    const browser = await getPdfBrowser();
     try {
         const { doctype, print_template, ids: idsString, lang, letter_head } = ctx.query;
         const ids = idsString ? JSON.parse(idsString) : [];
@@ -128,9 +196,6 @@ export default $action(async ctx => {
             320,
             Math.floor(printTemplateWidthpx - pdfMarginLeftPx - pdfMarginRightPx)
         );
-
-        const hasLetterHeadBody =
-            letterHeadDoc != null && String(letterHeadDoc.html_content ?? "").trim() !== "";
 
         const publicAppBase = (process.env.ZODULA_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
         /** Preload so letter head templates do not rely on binba chaining get().bypass(); File URLs from formatDocResult. */
@@ -169,8 +234,8 @@ export default $action(async ctx => {
             let title = "";
             let subtitle = "";
             if (!print_template) {
-                // Tab layout → print HTML via tabsToTemplateItem / templateItemToHtml in code-utils
-                // (empty cells render as visible placeholders; hide_no_value omits a field only when set and value is empty).
+                // Tab layout → print HTML via tabsToTemplateItem / templateItemToHtml in code-utils.
+                // Layout `empty` cells are omitted unless the row has at least one printable (non–no_print) field, so no_print-only rows do not create blank gaps.
                 if (doctypeDoc.config.tabs) {
                     items = tabsToTemplateItem(doctypeDoc);
                 }
@@ -178,7 +243,8 @@ export default $action(async ctx => {
                 subtitle = id ?? "";
             } else {
                 if (printTemplateDoc?.is_html === 1) {
-                    html = await Template.render(printTemplateDoc?.html_content ?? "", { doc, zodula: newZodula, env: process.env });
+                    const renderedHtml = await Template.render(printTemplateDoc?.html_content ?? "", { doc, zodula: newZodula, env: process.env });
+                    html = normalizeRenderedHtml(renderedHtml);
                 } else {
                     // Template items may include nested_table_field and nested_table_field_doctype for nested table columns (manual override when schema cannot be loaded).
                     items = (printTemplateDoc?.print_template_items as any) || [];
@@ -218,8 +284,8 @@ export default $action(async ctx => {
                         box-sizing: border-box;
                         width: ${pdfContentWidthPx}px;
                         margin-left: ${pdfMarginLeftPx}px;
-                        padding-top: ${(printTemplateDoc?.margin_top ?? DEFAULT_PDF_MARGIN_MM)}mm;
-                        ${hasLetterHeadBody ? `margin-bottom: ${DEFAULT_PDF_MARGIN_MM}mm;` : ""}
+                        margin-bottom: 0;
+                        padding-top: ${printTemplateDoc?.margin_top ?? DEFAULT_PDF_MARGIN_MM}mm;
                         font-family: Arial, sans-serif;
                     }
                 </style>
@@ -304,6 +370,10 @@ export default $action(async ctx => {
                         position: relative;
                         box-sizing: border-box;
                         width: 100%;
+                    }
+                    /* Tighter than generatePrintItemCss .print-row (10px) — avoids stacked vertical gaps in PDF. */
+                    .doc-print-root .print-body .print-row {
+                        margin-bottom: 6px;
                     }
                     .doc-print-root--qr-row {
                         padding-top: ${PDF_BODY_TOP_GAP_PX}px;
@@ -450,8 +520,6 @@ export default $action(async ctx => {
 
         const mergedPdfBuffer = await mergedPdf.save();
 
-
-        await browser.close();
         return new Response(mergedPdfBuffer as any, {
             headers: {
                 "Content-Type": "application/pdf",
@@ -462,8 +530,7 @@ export default $action(async ctx => {
         throw new ErrorWithCode(e?.message ?? "Failed to generate PDF", {
             status: 500,
         });
-    }
-    finally {
+    } finally {
         await browser.close();
     }
 }, {

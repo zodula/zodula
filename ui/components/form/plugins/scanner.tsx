@@ -1,9 +1,15 @@
 import React, { useEffect, useRef, useState } from "react";
+import type { IScannerControls } from "@zxing/browser";
 import { ScanLine } from "lucide-react";
 import { FormPlugin } from "../plugin";
 import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
 import { popup } from "../../ui/popit";
+
+const VIDEO_CONSTRAINTS: MediaStreamConstraints = {
+  video: { facingMode: { ideal: "environment" } },
+  audio: false,
+};
 
 export function ScannerDialog({
   isOpen,
@@ -15,41 +21,50 @@ export function ScannerDialog({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const detectorRef = useRef<any>(null);
+  const detectorRef = useRef<{ detect: (v: HTMLVideoElement) => Promise<{ rawValue?: string }[]> } | null>(null);
   const timerRef = useRef<number | null>(null);
+  const zxingControlsRef = useRef<IScannerControls | null>(null);
   const [error, setError] = useState<string>("");
 
   useEffect(() => {
     if (!isOpen) return;
 
     let cancelled = false;
-    const supports = typeof window !== "undefined" && "BarcodeDetector" in window;
-    if (!supports) {
-      setError("Barcode scanner is not supported in this browser.");
-      return;
-    }
+    const hasBarcodeDetector = typeof window !== "undefined" && "BarcodeDetector" in window;
 
-    const start = async () => {
+    const cleanupNative = () => {
+      if (timerRef.current) window.clearInterval(timerRef.current);
+      timerRef.current = null;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      detectorRef.current = null;
+    };
+
+    const cleanupZxing = () => {
+      zxingControlsRef.current?.stop();
+      zxingControlsRef.current = null;
+    };
+
+    const startNative = async () => {
       try {
-        const BarcodeDetectorCtor = (window as any).BarcodeDetector;
+        const BarcodeDetectorCtor = (window as unknown as { BarcodeDetector: new (o: { formats: string[] }) => { detect: (v: HTMLVideoElement) => Promise<{ rawValue?: string }[]> } }).BarcodeDetector;
         detectorRef.current = new BarcodeDetectorCtor({
           formats: ["qr_code", "code_128", "code_39", "ean_13", "ean_8", "upc_a", "upc_e", "itf", "codabar"],
         });
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false,
-        });
+        const stream = await navigator.mediaDevices.getUserMedia(VIDEO_CONSTRAINTS);
         if (cancelled) return;
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play().catch(() => { });
+        const video = videoRef.current;
+        if (video) {
+          video.srcObject = stream;
+          await video.play().catch(() => {});
         }
         timerRef.current = window.setInterval(async () => {
           try {
-            const video = videoRef.current;
-            if (!video || !detectorRef.current || video.readyState < 2) return;
-            const codes = await detectorRef.current.detect(video);
+            const v = videoRef.current;
+            const det = detectorRef.current;
+            if (!v || !det || v.readyState < 2) return;
+            const codes = await det.detect(v);
             if (!codes || codes.length === 0) return;
             const value = String(codes[0]?.rawValue ?? "").trim();
             if (!value) return;
@@ -58,20 +73,65 @@ export function ScannerDialog({
             // ignore per-frame detect errors
           }
         }, 250);
-      } catch (e: any) {
-        setError(e?.message || "Cannot access camera.");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Cannot access camera.";
+        setError(msg);
       }
     };
 
-    start();
+    const startZxing = async () => {
+      try {
+        const [{ BrowserMultiFormatReader }, { BarcodeFormat }] = await Promise.all([
+          import("@zxing/browser"),
+          import("@zxing/library"),
+        ]);
+        if (cancelled) return;
+        const reader = new BrowserMultiFormatReader(undefined, {
+          delayBetweenScanAttempts: 200,
+          delayBetweenScanSuccess: 200,
+        });
+        reader.possibleFormats = [
+          BarcodeFormat.QR_CODE,
+          BarcodeFormat.CODE_128,
+          BarcodeFormat.CODE_39,
+          BarcodeFormat.EAN_13,
+          BarcodeFormat.EAN_8,
+          BarcodeFormat.UPC_A,
+          BarcodeFormat.UPC_E,
+          BarcodeFormat.ITF,
+          BarcodeFormat.CODABAR,
+        ];
+        const video = videoRef.current;
+        if (!video) {
+          setError("Camera preview is not ready.");
+          return;
+        }
+        const controls = await reader.decodeFromConstraints(VIDEO_CONSTRAINTS, video, (result, _err, ctrl) => {
+          if (cancelled) return;
+          if (!result) return;
+          const value = String(result.getText() ?? "").trim();
+          if (!value) return;
+          ctrl.stop();
+          onClose(value);
+        });
+        if (cancelled) {
+          controls.stop();
+          return;
+        }
+        zxingControlsRef.current = controls;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Cannot access camera.";
+        setError(msg);
+      }
+    };
+
+    if (hasBarcodeDetector) void startNative();
+    else void startZxing();
+
     return () => {
       cancelled = true;
-      if (timerRef.current) {
-        window.clearInterval(timerRef.current);
-      }
-      timerRef.current = null;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
+      cleanupNative();
+      cleanupZxing();
     };
   }, [isOpen, onClose]);
 

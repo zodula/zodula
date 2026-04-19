@@ -50,6 +50,8 @@ export class ZodulaDoctypeGetter<
       const doctype = loader.from("doctype").get(this.doctypeName);
       const children = doctype.children;
       const session = new ZodulaSession();
+      const roles = await session.roles(true);
+      const user = await session.user(true);
       let old = (await db.get(
         `SELECT * FROM "${doctype?.name}" WHERE "id" = '${this.id}'`
       )) as any;
@@ -59,6 +61,22 @@ export class ZodulaDoctypeGetter<
         }).bypass(true) as any
       }
       if (!this.options.bypass) {
+        const isBranchDoctype = Number((doctype?.config as any)?.is_branch_doctype ?? 0) === 1;
+        const userBranch = String((user as any)?.branch ?? "").trim();
+        if (
+          isBranchDoctype &&
+          !roles.includes("System Admin") &&
+          userBranch &&
+          old &&
+          String((old as any)?._branch ?? "").trim() !== userBranch
+        ) {
+          throw new ErrorWithCode(
+            `You do not have permission to get ${this.doctypeName}/${this.id}`,
+            {
+              status: 403,
+            }
+          );
+        }
 
         const { can } =
           await ZodulaDoctypeHelper.checkPermission(
@@ -114,8 +132,6 @@ export class ZodulaDoctypeGetter<
 
       // Apply permission level permissions to filter fields
       if (!this.options.bypass && result) {
-        const roles = await zodula.session.roles();
-        const user = await session.user(true);
         const isOwn = result.owner === user.id;
         result = await ZodulaDoctypeHelper.applyPermLevelPermission(
           this.doctypeName,

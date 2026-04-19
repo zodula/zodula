@@ -39,6 +39,7 @@ export interface FormControlProps {
   referenceTableIndexFields?: Record<string, { idx: number, fields: Zodula.SelectDoctype<"Field">[]}[]>;
   /** Buttons to render next to the field label (e.g. "Select Price"). */
   fieldButtons?: { label: string; run: () => void | Promise<void> }[];
+  compact?: boolean;
 }
 
 const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
@@ -71,6 +72,7 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
       doctype,
       placeholder,
       fieldButtons,
+      compact,
     },
     ref
   ) => {
@@ -104,6 +106,7 @@ const FormControl = React.forwardRef<HTMLDivElement, FormControlProps>(
               value={value}
               multiple={multiple}
               fieldKey={fieldKey}
+              compact={compact}
               onChange={(fieldPath: string, newValue: any) => {
                 // Don't allow changes if field is readonly
                 if (!readonly && onChange && fieldKey) {

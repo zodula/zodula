@@ -41,6 +41,12 @@ export default $doctype<"User">({
         reference: "Role Profile",
         perm_level: "1",
     },
+    branch: {
+        type: "Reference",
+        label: "Branch",
+        reference: "Branch",
+        perm_level: "1",
+    },
     roles: {
         type: "Reference Table",
         label: "Roles",
@@ -78,3 +84,9 @@ export default $doctype<"User">({
             doc.roles = profileRoles as any;
         }
     })
+    .on("before_delete", async ({ doc }) => {
+        // if user is System Admin throw
+        if (doc.roles?.some((role: any) => role.role === "System Admin")) {
+            throw new Error("System Admin user cannot be deleted");
+        }
+    });

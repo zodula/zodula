@@ -98,6 +98,43 @@ function removeAndReorderRows<T extends { idx: number }>(
     .map((row, i) => ({ ...row, idx: i }));
 }
 
+function referenceTableNamesFromFormFields(formFieldsOverride: Record<string, any>): Set<string> {
+  const s = new Set<string>();
+  for (const f of Object.values(formFieldsOverride) as any[]) {
+    if (f?.type === "Reference Table" && f?.name) s.add(f.name);
+  }
+  return s;
+}
+
+/**
+ * Ensures each child-table row has `idx` (array position if missing). Call on every form state write.
+ * Uses Reference Table field names when known; otherwise rows with `parentfield === fieldName`.
+ */
+function ensureChildTableIdxOnDoc(
+  data: Record<string, any>,
+  referenceTableKeys?: Set<string>
+): Record<string, any> {
+  const out = { ...data };
+  for (const key of Object.keys(out)) {
+    const val = out[key];
+    if (!Array.isArray(val) || val.length === 0) continue;
+    const first = val[0];
+    if (!first || typeof first !== "object" || Array.isArray(first)) continue;
+
+    const byParentField = first.parentfield === key;
+    const byFormDef = referenceTableKeys != null && referenceTableKeys.has(key);
+    if (!byParentField && !byFormDef) continue;
+
+    out[key] = val.map((row: any, i: number) => {
+      if (!row || typeof row !== "object" || Array.isArray(row)) return row;
+      if (row.idx === -1) return row;
+      const hasIdx = row.idx !== undefined && row.idx !== null && row.idx !== "";
+      return { ...row, idx: hasIdx ? row.idx : i };
+    });
+  }
+  return out;
+}
+
 /** Get value from doc by field path: "field" or "table.0.child" or "extend.child". */
 function getNestedFormValue(data: Record<string, any> | null, field: string): any {
   if (!data || !field) return undefined;
@@ -375,7 +412,21 @@ export function DocFormView({
   const [referenceTableIndexFields, setReferenceTableIndexFields] = useState<Record<string, { idx: number; fields: Zodula.SelectDoctype<"Field">[] }[]>>({});
   const [extendFields, setExtendFields] = useState<Record<string, Zodula.SelectDoctype<"Field">[]>>({});
 
-  const [formData, setFormData] = useState<Record<string, any>>(() => formDataCache[formId] ?? {});
+  const [formData, setFormData] = useState<Record<string, any>>(() =>
+    ensureChildTableIdxOnDoc(formDataCache[formId] ?? {}, undefined)
+  );
+
+  const commitFormData = useCallback(
+    (next: Record<string, any>, fieldsOverride?: Record<string, any>) => {
+      const keys = referenceTableNamesFromFormFields(fieldsOverride ?? formFields);
+      const n = ensureChildTableIdxOnDoc(next, keys.size > 0 ? keys : undefined);
+      formDataCache[formId] = n;
+      setFormData(n);
+      return n;
+    },
+    [formId, formFields]
+  );
+
   // Refs to keep handleFieldChange stable and avoid running scripts on every keystroke
   const formDataRef = useRef<Record<string, any>>(formData);
   const scriptDebounceRef = useRef<{ timer: ReturnType<typeof setTimeout> | null; fieldPath: string }>({ timer: null, fieldPath: "" });
@@ -426,8 +477,7 @@ export function DocFormView({
         }
         newFields[fieldName][index][childFieldName] = value;
         newFields[fieldName] = removeAndReorderRows(newFields[fieldName], -1);
-        formDataCache[formId] = newFields;
-        setFormData(newFields);
+        commitFormData(newFields);
 
         if (childFieldName === "idx") {
           setReferenceTableIndexFields(prev => {
@@ -467,13 +517,11 @@ export function DocFormView({
           ...data,
           [parentFieldName]: { ...(data[parentFieldName] || {}), [childFieldName]: value },
         };
-        formDataCache[formId] = next;
-        setFormData(next);
+        commitFormData(next);
       } else {
         if (typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value instanceof File) {
           const next = { ...data, [fieldPath]: value };
-          formDataCache[formId] = next;
-          setFormData(next);
+          commitFormData(next);
           const doc = formDataCache[formId] ?? formDataRef.current;
           const ctx = buildFormContextRef.current({
             doc,
@@ -519,8 +567,7 @@ export function DocFormView({
             }
           }
           newFields[fieldPath] = newTableRows;
-          formDataCache[formId] = newFields;
-          setFormData(newFields);
+          commitFormData(newFields);
         }
       }
 
@@ -574,6 +621,7 @@ export function DocFormView({
       doctype,
       zui,
       saveFormValues,
+      commitFormData,
     ]
   );
 
@@ -641,16 +689,30 @@ export function DocFormView({
     }
   }
 
-  const getFormValue = useCallback((field: string) => getNestedFormValue(formData, field), [formData]);
+  // ===== EVENT HANDLERS =====
+  const handleReload = async () => {
+    const d = await reload();
+    if (d) {
+      // Update base doc + form data cache
+      setDoc(d);
+      setIsUserHasType(false);
+      commitFormData(d);
+
+      // Re‑apply field permissions so submitted docs become readonly as needed
+      const computed = applyFieldPermissions(fields, d);
+      if (computed) {
+        setFormFields(computed.formFields);
+        setReferenceTableFields(computed.referenceTableFields);
+        setExtendFields(computed.extendFields);
+      }
+    }
+  };
 
   const clearTable = useCallback((tableFieldName: string) => {
-    setFormData((prev) => {
-      const next = { ...prev, [tableFieldName]: [] };
-      formDataCache[formId] = next;
-      return next;
-    });
-    setReferenceTableIndexFields((prev) => ({ ...prev, [tableFieldName]: [] }));
-  }, [formId]);
+    const prev = formDataCache[formId] ?? {};
+    commitFormData({ ...prev, [tableFieldName]: [] });
+    setReferenceTableIndexFields((p) => ({ ...p, [tableFieldName]: [] }));
+  }, [formId, commitFormData]);
 
   const buildFormContext = useCallback((overrides: {
     doctype?: any;
@@ -671,15 +733,15 @@ export function DocFormView({
     set_value: overrides.set_value ?? ((field: string, value: any) => handleFieldChange(field, value)),
     set_df_property: overrides.set_df_property ?? handleSetDfProperty,
     get_df_property: overrides.get_df_property ?? handleGetDfProperty,
-    reload,
+    reload: handleReload,
     clear_table: overrides.clear_table ?? clearTable,
-  }), [doctype, id, handleFieldChange, handleSetDfProperty, handleGetDfProperty, reload, clearTable]);
+  }), [doctype, id, handleFieldChange, handleSetDfProperty, handleGetDfProperty, handleReload, clearTable]);
   buildFormContextRef.current = buildFormContext;
 
   const secondaryButtons = useMemo(() => {
     const allDoctypeButtons = zui?._?.state?.ui_form_secondary_buttons?.filter((b) => b.doctype === doctype) || [];
     return allDoctypeButtons.filter((b) => !b.options?.condition || b.options.condition(buildFormContext() as any));
-  }, [doctype, buildFormContext]);
+  }, [doctype, buildFormContext, formData, zui]);
 
   const fieldButtonsByField = useMemo(() => {
     const raw = zui?._?.state?.ui_form_field_buttons ?? [];
@@ -704,13 +766,15 @@ export function DocFormView({
     formFieldsOverride: Record<string, any>
   ): Promise<Record<string, any>> {
     const hasPrefill = prefill && typeof prefill === "object" && Object.keys(prefill).length > 0;
-    if (hasPrefill) {
-      // reset the form
-      setFormData({});
-      formDataCache[formId] = {};
+    let cached = formDataCache[formId];
+    let cacheHasContent = cached != null && Object.keys(cached).length > 0;
+    // Only reset to {} before prefill when there is no draft yet. Clearing always (old behavior)
+    // wiped the form when returning from a child create (cbUrl): only fromField was re-applied.
+    if (hasPrefill && !cacheHasContent) {
+      commitFormData({}, formFieldsOverride);
+      cached = formDataCache[formId];
+      cacheHasContent = false;
     }
-    const cached = formDataCache[formId];
-    const cacheHasContent = cached != null && Object.keys(cached).length > 0;
     let nextFormData: Record<string, any> = {};
 
     async function applyPrefillToCache() {
@@ -720,31 +784,26 @@ export function DocFormView({
       const latest = formDataCache[formId];
       if (latest && typeof latest === "object") {
         nextFormData = latest;
-        setFormData(nextFormData);
       }
     }
 
     if (mode === "create" && hasPrefill) {
       await applyPrefillToCache();
+    } else if (mode === "edit" && id && docOverride?.id === id) {
+      // Prefer fetched doc over formDataCache so child rows keep server fields (e.g. idx)
+      nextFormData = { ...(docOverride as Record<string, any>) };
     } else if (formId in formDataCache && (mode === "create" || cacheHasContent)) {
       nextFormData = cached ?? {};
-      setFormData(nextFormData);
     } else if (mode === "edit" && id) {
       const docToUse = docOverride ?? doc;
       if (docToUse?.id === id) {
         nextFormData = docToUse as Record<string, any>;
-        setFormData(nextFormData);
-        formDataCache[formId] = nextFormData;
       } else {
         const fetched = await zodula.doc.get_doc(doctype as any, id as any);
         nextFormData = fetched as Record<string, any>;
-        setFormData(nextFormData);
-        formDataCache[formId] = nextFormData;
       }
     } else if (mode === "create") {
       nextFormData = {};
-      setFormData(nextFormData);
-      formDataCache[formId] = nextFormData;
     } else {
       nextFormData = formDataCache[formId] ?? {};
     }
@@ -769,18 +828,6 @@ export function DocFormView({
     }
 
     if (mode === "create" && formFieldsOverride) {
-      setFormData((prev) => {
-        const next = { ...prev };
-        for (const f of Object.values(formFieldsOverride) as any[]) {
-          if (f?.type === "Reference Table" || f?.type === "Extend") continue;
-          const current = next[f.name];
-          if (current !== undefined && current !== null) continue;
-          const def = zodula.utils.getDefaultValue(f);
-          if (def !== undefined) next[f.name] = def;
-        }
-        formDataCache[formId] = next;
-        return next;
-      });
       nextFormData = { ...nextFormData };
       for (const f of Object.values(formFieldsOverride) as any[]) {
         if (f?.type === "Reference Table" || f?.type === "Extend") continue;
@@ -790,7 +837,7 @@ export function DocFormView({
         }
       }
     }
-    return nextFormData;
+    return commitFormData(nextFormData, formFieldsOverride);
   }
 
   async function runAfterInitializeForm(
@@ -901,8 +948,9 @@ export function DocFormView({
       if (mode === "edit" && effectiveDocId) {
         docForForm = await fetchFormDoc(doctype as Zodula.DoctypeName, effectiveDocId);
         if (!formDataCache[formId]) {
-          formDataCache[formId] = docForForm ?? {};
-          setFormData(formDataCache[formId] ?? docForForm ?? {});
+          const seeded = ensureChildTableIdxOnDoc(docForForm ?? {}, undefined);
+          formDataCache[formId] = seeded;
+          setFormData(seeded);
         }
         if (cancelled) return;
       }
@@ -911,7 +959,6 @@ export function DocFormView({
       setFormFields(computed.formFields);
       setReferenceTableFields(computed.referenceTableFields);
       setExtendFields(computed.extendFields);
-      setFormData(formDataCache[formId] ?? docForForm ?? {});
       const formDataResult = await runInitializeForm(docForForm ?? doc, computed.formFields);
       if (cancelled) return;
       afterInitializeRef.current = {
@@ -969,26 +1016,6 @@ export function DocFormView({
       afterInitializeRanRef.current = true;
     })();
   }, [formFields, prefill, handleFieldChange, runAfterInitializeForm]);
-
-  // ===== EVENT HANDLERS =====
-  const handleReload = async () => {
-    const d = await reload();
-    if (d) {
-      // Update base doc + form data cache
-      setDoc(d);
-      setFormData(d);
-      setIsUserHasType(false);
-      formDataCache[formId] = d;
-
-      // Re‑apply field permissions so submitted docs become readonly as needed
-      const computed = applyFieldPermissions(fields, d);
-      if (computed) {
-        setFormFields(computed.formFields);
-        setReferenceTableFields(computed.referenceTableFields);
-        setExtendFields(computed.extendFields);
-      }
-    }
-  };
 
   const duplicatePrefill = useCallback(() => {
     const primaryFields = fields.filter((f) => f.type !== "Reference Table" && f.type !== "Extend" && f.no_copy !== 1);
@@ -1080,7 +1107,13 @@ export function DocFormView({
         variant: "destructive",
       });
       if (con) {
-        await zodula.doc.cancel_doc(doctype, id || "")
+        await zodula.doc.cancel_doc(doctype, id || "").catch((error: any) => {
+          alert({
+            variant: "destructive",
+            message: error?.message,
+          });
+          return null;
+        });
         handleReload();
       }
     } catch (error) {
@@ -1106,7 +1139,6 @@ export function DocFormView({
 
     return normalized;
   }, [formFields]);
-
   // Helper function to get all field values for update/save
   const getUpdatePayload = useCallback(() => {
     // Always get the latest form data directly from the store
@@ -1278,6 +1310,9 @@ export function DocFormView({
     }
   };
 
+  console.log("formData", formData);
+  console.log("doc", doc);
+
   const handleDelete = async () => {
     if (!id) return;
 
@@ -1292,7 +1327,13 @@ export function DocFormView({
     if (confirmed) {
       setIsLoading(true);
       try {
-        await zodula.doc.delete_doc(doctype, id);
+        await zodula.doc.delete_doc(doctype, id).catch((error: any) => {
+          alert({
+            variant: "destructive",
+            message: error?.message,
+          });
+          return null;
+        });
         formDataCache[formId] = undefined;
         back();
       } catch (error) {
@@ -1576,8 +1617,8 @@ export function DocFormView({
           {mode === "create"
             ? `${t("New")} ${t(doctypeLabel)}`
             : isSingle
-              ? doctypeLabel
-              : doc?.id || "New Doc"}
+              ? `${t(doctypeLabel)}`
+              : doc?.id || `${t("New")} ${t(doctypeLabel)}`}
           <span className="zd:flex zd:gap-2 zd:items-center no-print">
             {doctypeDoc?.is_submittable === 1 && mode === "edit" && (() => {
               const badgeConfig = badgeConfigs.current["doc_status"];
@@ -1629,8 +1670,25 @@ export function DocFormView({
             {(mode === "edit" || secondaryButtons.length > 0) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost">
+                  <Button
+                    variant="ghost"
+                    className="zd:relative zd:shrink-0"
+                    title="More actions"
+                    aria-label={
+                      secondaryButtons.length > 0
+                        ? `More actions, ${secondaryButtons.length} extra`
+                        : "More actions"
+                    }
+                  >
                     <MoreHorizontal className="zd:w-4 zd:h-4" />
+                    {secondaryButtons.length > 0 ? (
+                      <span
+                        className="zd:absolute zd:-top-0.5 zd:-right-0.5 zd:flex zd:h-4 zd:min-w-4 zd:items-center zd:justify-center zd:rounded-full zd:bg-primary zd:px-1 zd:text-[10px] zd:font-semibold zd:leading-none zd:text-primary-foreground"
+                        aria-hidden
+                      >
+                        {secondaryButtons.length}
+                      </span>
+                    ) : null}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">

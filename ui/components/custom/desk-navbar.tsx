@@ -408,8 +408,6 @@ export const DeskNavbar = ({ children, panelToggle }: DeskNavbarProps) => {
   const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
   const {
-    fullWidth,
-    toggleFullWidth,
     leftSidebarOpenDesktop,
     leftSidebarOpenMobile,
     toggleLeftSidebarDesktop,
@@ -587,9 +585,6 @@ export const DeskNavbar = ({ children, panelToggle }: DeskNavbarProps) => {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={zodula.theme.toggleTheme}>
                   {t("Toggle Theme")}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={toggleFullWidth}>
-                  {t("Toggle Full Width")}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleAboutZodula}>
                   {t("About")}
